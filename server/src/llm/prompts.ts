@@ -411,6 +411,31 @@ const ACTION_SCHEMAS: Partial<Record<ActionCode, ActionSchema>> = {
     description: '[ELITE PRIVILEGE ONLY] Deploy enforcement to penalise a specific citizen.',
     params: '{ "target": string }',
   },
+  // Banking Foundation actions
+  DEPOSIT: {
+    description: 'Move cash from your wallet into your bank deposit account for safe-keeping.',
+    params: '{ "amount": number }',
+  },
+  WITHDRAW: {
+    description: 'Move fiat from your bank deposit account back into your cash wallet.',
+    params: '{ "amount": number }',
+  },
+  TAKE_LOAN: {
+    description: 'Borrow fiat from the bank. Creates a deposit in your name (M1 expansion). Requires collateral.',
+    params: '{ "principal": number }',
+  },
+  REPAY_LOAN: {
+    description: 'Make a repayment on your outstanding loan. Reduces M1.',
+    params: '{ "loan_id": string, "amount": number }',
+  },
+  ISSUE_LOAN: {
+    description: '[BANK ONLY] Issue a loan to a requesting citizen. Must maintain reserve requirement.',
+    params: '{ "borrower_id": string, "principal": number }',
+  },
+  SET_INTEREST_RATE: {
+    description: '[BANK ONLY] Adjust the lending interest rate for new loans.',
+    params: '{ "rate": number }',
+  },
   NONE: {
     description: 'Do nothing useful this week (-1 Health, +2 Cortisol penalty).',
     params: '{}',
@@ -472,6 +497,50 @@ export interface PersonalStatusBoard {
   enterprise_role?: 'owner' | 'employee' | null;
   /** Current agent wealth — used for entrepreneurial opportunity alert. */
   agentWealth?: number;
+}
+
+/** Banking context injected into citizen agent prompts when bankingEnabled is true. */
+export interface CitizenBankingContext {
+  depositBalance: number;
+  bankName: string;
+  outstandingLoans: Array<{ remainingBalance: number; dueAtIteration: number }>;
+  iterationNumber: number;
+}
+
+/** Banking context injected into bank agent prompts. */
+export interface BankOperationsContext {
+  bankReserves: number;
+  totalDeposits: number;
+  currentReserveRatio: number;
+  reserveRequirement: number;
+  activeLoans: number;
+  totalLoansOutstanding: number;
+  lendingCapacity: number;
+}
+
+function buildCitizenBankingSection(ctx?: CitizenBankingContext): string {
+  if (!ctx) return '';
+  const loanText = ctx.outstandingLoans.length > 0
+    ? ctx.outstandingLoans.map(l =>
+        `${l.remainingBalance.toFixed(1)} fiat due in ${l.dueAtIteration - ctx.iterationNumber} iterations`
+      ).join(', ')
+    : 'None';
+  return `\n\n[Banking — ${ctx.bankName}]
+- Deposit balance: ${ctx.depositBalance.toFixed(2)} fiat
+- Outstanding loans: ${loanText}
+You may: DEPOSIT (move cash to bank), WITHDRAW (move deposit to cash), TAKE_LOAN (borrow from bank), REPAY_LOAN.`;
+}
+
+function buildBankOperationsSection(ctx?: BankOperationsContext): string {
+  if (!ctx) return '';
+  return `\n\n[Bank Operations]
+- Your reserves: ${ctx.bankReserves.toFixed(2)} fiat
+- Total deposits held: ${ctx.totalDeposits.toFixed(2)} fiat
+- Reserve ratio: ${ctx.currentReserveRatio.toFixed(3)} (minimum: ${ctx.reserveRequirement})
+- Active loans: ${ctx.activeLoans} (total outstanding: ${ctx.totalLoansOutstanding.toFixed(2)} fiat)
+- Available lending capacity: ${ctx.lendingCapacity.toFixed(2)} fiat
+You may: ISSUE_LOAN (to requesting citizens), SET_INTEREST_RATE, or REST.
+Reserve requirement: You MUST maintain reserves / total_deposits >= ${ctx.reserveRequirement}.`;
 }
 
 function buildMarketBoardSection(entries?: readonly MarketBoardEntry[]): string {
@@ -560,6 +629,10 @@ export function buildNaturalIntentPrompt(
    */
   enforcementLevel?: number,
   marketIntelligenceBlock?: string,
+  /** Banking Foundation: citizen deposit/loan context (shown when bankingEnabled). */
+  citizenBankingContext?: CitizenBankingContext,
+  /** Banking Foundation: bank agent operations context (shown when agent.type === 'bank'). */
+  bankOperationsContext?: BankOperationsContext,
 ): LLMMessage[] {
   // Static prefix: identical across all agent calls in an iteration → cacheable
   const staticPrefix = `You are a citizen living in a simulated society based on: "${session.idea}"
@@ -749,6 +822,10 @@ Next step: ${cognitiveContext.currentPlanStep}`;
   // Build role-specific action dictionary (Task 1: full parameter schemas injected)
   const actionDictionary = buildActionDictionary(allowedActions);
 
+  // Banking Foundation: build banking context blocks
+  const citizenBankingBlock = buildCitizenBankingSection(citizenBankingContext);
+  const bankOperationsBlock = buildBankOperationsSection(bankOperationsContext);
+
   // Personality traits — injected as a character influence, not a hard rule
   const traitsBlock = agent.personalityTraits && agent.personalityTraits.length > 0
     ? `\nPersonality: ${agent.personalityTraits.join(', ')}. These are deep-seated tendencies that colour your decisions — a risk-tolerant agent may attempt daring moves; an empathetic agent might help others at personal cost. You are not bound rigidly by these traits, but they influence how you weigh choices.`
@@ -762,7 +839,7 @@ Your current situation:
 - Health: ${agent.currentStats.health}/100
 - Happiness: ${agent.currentStats.happiness}/100
 - Cortisol (stress): ${cortisol}/100  ${cortisol > 80 ? '— extreme; survival instincts dominant' : cortisol > 60 ? '— elevated; risk tolerance impaired' : cortisol > 40 ? '— moderate tension' : '— calm'}
-- Dopamine (drive):  ${dopamine}/100  ${dopamine > 70 ? '— energized, ambitious' : dopamine > 40 ? '— baseline motivation' : '— low drive, prone to conservative choices'}${economyBlock}${cognitiveBlock}${marketKnowledgeBlock}${agentNamesBlock}
+- Dopamine (drive):  ${dopamine}/100  ${dopamine > 70 ? '— energized, ambitious' : dopamine > 40 ? '— baseline motivation' : '— low drive, prone to conservative choices'}${economyBlock}${cognitiveBlock}${marketKnowledgeBlock}${agentNamesBlock}${citizenBankingBlock}${bankOperationsBlock}
 
 ${iterationContext}${capitalistIdentityBlock}${biologicalSubconscious}${stressModifier}${actionResultsBlock}
 ${marketIntelligenceBlock ?? ''}

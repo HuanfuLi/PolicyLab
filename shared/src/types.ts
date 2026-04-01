@@ -300,6 +300,12 @@ export interface SessionExport {
   }>;
   /** Deterministic physics telemetry — one snapshot per completed iteration */
   telemetryLogs?: TelemetryLog[];
+  /** Banking Foundation: deposit accounts (optional for backward compat with pre-banking exports) */
+  depositAccounts?: DepositAccount[];
+  /** Banking Foundation: loan contracts (optional for backward compat with pre-banking exports) */
+  loanContracts?: LoanContract[];
+  /** Banking Foundation: bank balance sheet snapshots (optional for backward compat) */
+  bankBalanceSheets?: BankBalanceSheet[];
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────
