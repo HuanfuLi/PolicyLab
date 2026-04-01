@@ -92,37 +92,37 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BANK-01 | — | Pending |
-| BANK-02 | — | Pending |
-| BANK-03 | — | Pending |
-| BANK-04 | — | Pending |
-| BANK-05 | — | Pending |
-| BANK-06 | — | Pending |
-| BANK-07 | — | Pending |
-| BANK-08 | — | Pending |
-| CMKT-01 | — | Pending |
-| CMKT-02 | — | Pending |
-| CMKT-03 | — | Pending |
-| CMKT-04 | — | Pending |
-| CMKT-05 | — | Pending |
-| CMKT-06 | — | Pending |
-| FISC-01 | — | Pending |
-| FISC-02 | — | Pending |
-| FISC-03 | — | Pending |
-| FISC-04 | — | Pending |
-| INFL-01 | — | Pending |
-| INFL-02 | — | Pending |
-| INFL-03 | — | Pending |
-| INFL-04 | — | Pending |
-| CONF-01 | — | Pending |
-| CONF-02 | — | Pending |
-| CONF-03 | — | Pending |
+| CONF-01 | Phase 1 | Pending |
+| CONF-02 | Phase 1 | Pending |
+| CONF-03 | Phase 1 | Pending |
+| BANK-01 | Phase 1 | Pending |
+| BANK-02 | Phase 1 | Pending |
+| BANK-03 | Phase 1 | Pending |
+| BANK-04 | Phase 1 | Pending |
+| BANK-05 | Phase 1 | Pending |
+| BANK-06 | Phase 1 | Pending |
+| BANK-08 | Phase 1 | Pending |
+| CMKT-01 | Phase 2 | Pending |
+| CMKT-02 | Phase 2 | Pending |
+| CMKT-03 | Phase 2 | Pending |
+| CMKT-04 | Phase 2 | Pending |
+| CMKT-05 | Phase 2 | Pending |
+| CMKT-06 | Phase 2 | Pending |
+| FISC-01 | Phase 3 | Pending |
+| FISC-02 | Phase 3 | Pending |
+| FISC-03 | Phase 3 | Pending |
+| FISC-04 | Phase 3 | Pending |
+| INFL-01 | Phase 4 | Pending |
+| INFL-02 | Phase 4 | Pending |
+| INFL-03 | Phase 4 | Pending |
+| INFL-04 | Phase 4 | Pending |
+| BANK-07 | Phase 4 | Pending |
 
 **Coverage:**
 - v1.0 requirements: 25 total
-- Mapped to phases: 0
-- Unmapped: 25 ⚠️
+- Mapped to phases: 25
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-01*
-*Last updated: 2026-04-01 after initial definition*
+*Last updated: 2026-04-01 after roadmap creation*
