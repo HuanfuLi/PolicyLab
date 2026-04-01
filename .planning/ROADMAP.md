@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01-PLAN.md — Types, DB schema, EconomyConfig, computeSystemFiatTotal extension
 - [x] 01-02-PLAN.md — Banking repository CRUD + banking engine (loan lifecycle, reserve enforcement, deposits)
-- [ ] 01-03-PLAN.md — Action codes, simulation wiring, SFC audit integration, prompts, export/import
+- [x] 01-03-PLAN.md — Action codes, simulation wiring, SFC audit integration, prompts, export/import
 
 ### Phase 2: Capital Markets
 **Goal**: Agents can hold enterprise equity and receive dividends, the treasury can issue government bonds that pay coupons and redeem at maturity, enterprises can issue corporate bonds, and all positions are persisted for pause/resume and export

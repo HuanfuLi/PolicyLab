@@ -14,7 +14,7 @@ Requirements for the Real Economy Engine milestone. Each maps to roadmap phases.
 - [x] **BANK-03**: LEND action creates loan contracts (principal, interest rate, term) and expands M1
 - [x] **BANK-04**: Loan repayment destroys M1 symmetrically; interest income flows to bank
 - [x] **BANK-05**: Default triggers when borrower cannot repay for K consecutive iterations; bankruptcy seizes collateral
-- [ ] **BANK-06**: M1/M2 money supply tracked per iteration in telemetry (M0 remains constant)
+- [x] **BANK-06**: M1/M2 money supply tracked per iteration in telemetry (M0 remains constant)
 - [ ] **BANK-07**: Central bank agent observes CPI and M1 growth; adjusts reserve ratio and base interest rate
 - [x] **BANK-08**: SFC audit extended to validate M0 constant + M1 = M0 + net loans outstanding
 
@@ -100,7 +100,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BANK-03 | Phase 1 | Complete |
 | BANK-04 | Phase 1 | Complete |
 | BANK-05 | Phase 1 | Complete |
-| BANK-06 | Phase 1 | Pending |
+| BANK-06 | Phase 1 | Complete |
 | BANK-08 | Phase 1 | Complete |
 | CMKT-01 | Phase 2 | Pending |
 | CMKT-02 | Phase 2 | Pending |

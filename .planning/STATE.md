@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 01-banking-foundation/01-02-PLAN.md
-last_updated: "2026-04-01T21:22:01.644Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 01-banking-foundation/01-03-PLAN.md
+last_updated: "2026-04-01T21:39:10.181Z"
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -48,6 +48,7 @@ Plan: 3 of 3
 *Updated after each plan completion*
 | Phase 01-banking-foundation P01 | 25 | 2 tasks | 7 files |
 | Phase 01-banking-foundation P02 | 4 | 2 tasks | 3 files |
+| Phase 01-banking-foundation P03 | 37 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,8 @@ Recent decisions affecting current work:
 - [Phase 01-01]: computeSystemFiatTotal new params default to 0 for backward compat; Plan 03 wires the real banking values
 - [Phase 01-02]: BankingDelta return pattern: engine functions return deltas rather than mutating DB — Plan 03 applies in batch via bankingRepo
 - [Phase 01-02]: Bank reserves modeled as bank agent.currentStats.wealth — single source of truth, avoids SFC double-counting (Pitfall 4)
+- [Phase 01-03]: Banking DB writes use sqlite.transaction() directly (not asyncLogFlusher) — once-per-iteration frequency is low enough
+- [Phase 01-03]: M0 in codebase = totalFiatSupply (includes deposits+collateral); M1 = totalFiatSupply + loansOutstanding — consistent naming throughout
 
 ### Roadmap Evolution
 
@@ -80,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T21:22:01.639Z
-Stopped at: Completed 01-banking-foundation/01-02-PLAN.md
+Last session: 2026-04-01T21:39:10.177Z
+Stopped at: Completed 01-banking-foundation/01-03-PLAN.md
 Resume file: None
