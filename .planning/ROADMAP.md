@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. All economic parameters (reserve ratio, base interest rate, loan term defaults) live in EconomyConfig at session level, not hardcoded; existing pre-v1.0 sessions run legacy mechanics unchanged
 **Plans:** 3 plans
 Plans:
-- [ ] 01-01-PLAN.md — Types, DB schema, EconomyConfig, computeSystemFiatTotal extension
+- [x] 01-01-PLAN.md — Types, DB schema, EconomyConfig, computeSystemFiatTotal extension
 - [ ] 01-02-PLAN.md — Banking repository CRUD + banking engine (loan lifecycle, reserve enforcement, deposits)
 - [ ] 01-03-PLAN.md — Action codes, simulation wiring, SFC audit integration, prompts, export/import
 

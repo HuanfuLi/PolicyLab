@@ -16,7 +16,7 @@ Requirements for the Real Economy Engine milestone. Each maps to roadmap phases.
 - [ ] **BANK-05**: Default triggers when borrower cannot repay for K consecutive iterations; bankruptcy seizes collateral
 - [ ] **BANK-06**: M1/M2 money supply tracked per iteration in telemetry (M0 remains constant)
 - [ ] **BANK-07**: Central bank agent observes CPI and M1 growth; adjusts reserve ratio and base interest rate
-- [ ] **BANK-08**: SFC audit extended to validate M0 constant + M1 = M0 + net loans outstanding
+- [x] **BANK-08**: SFC audit extended to validate M0 constant + M1 = M0 + net loans outstanding
 
 ### Capital Markets
 
@@ -43,9 +43,9 @@ Requirements for the Real Economy Engine milestone. Each maps to roadmap phases.
 
 ### Configuration
 
-- [ ] **CONF-01**: EconomyConfig type in shared types holding all tunable economic parameters
-- [ ] **CONF-02**: All economic parameters (reserve ratio, interest rates, bond coupon, budget allocation, CPI basket weights) stored as session-level config, not hardcoded
-- [ ] **CONF-03**: Backward compatibility — existing sessions run with legacy mechanics; new economy activates for new sessions
+- [x] **CONF-01**: EconomyConfig type in shared types holding all tunable economic parameters
+- [x] **CONF-02**: All economic parameters (reserve ratio, interest rates, bond coupon, budget allocation, CPI basket weights) stored as session-level config, not hardcoded
+- [x] **CONF-03**: Backward compatibility — existing sessions run with legacy mechanics; new economy activates for new sessions
 
 ## v2 Requirements
 
@@ -92,16 +92,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONF-01 | Phase 1 | Pending |
-| CONF-02 | Phase 1 | Pending |
-| CONF-03 | Phase 1 | Pending |
+| CONF-01 | Phase 1 | Complete |
+| CONF-02 | Phase 1 | Complete |
+| CONF-03 | Phase 1 | Complete |
 | BANK-01 | Phase 1 | Pending |
 | BANK-02 | Phase 1 | Pending |
 | BANK-03 | Phase 1 | Pending |
 | BANK-04 | Phase 1 | Pending |
 | BANK-05 | Phase 1 | Pending |
 | BANK-06 | Phase 1 | Pending |
-| BANK-08 | Phase 1 | Pending |
+| BANK-08 | Phase 1 | Complete |
 | CMKT-01 | Phase 2 | Pending |
 | CMKT-02 | Phase 2 | Pending |
 | CMKT-03 | Phase 2 | Pending |

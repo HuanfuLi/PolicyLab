@@ -2,16 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Phase 6 context gathered
-last_updated: "2026-04-01T20:11:07.859Z"
-last_activity: 2026-04-01 — Roadmap created; 25 v1.0 requirements mapped across 5 phases
+status: Ready to execute
+stopped_at: Completed 01-banking-foundation/01-01-PLAN.md
+last_updated: "2026-04-01T21:15:45.992Z"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
 ---
 
 # Project State
@@ -21,16 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** The deterministic economic engine must be realistic enough that simulation outcomes are meaningful for understanding real-world policy trade-offs.
-**Current focus:** Phase 1 — Banking Foundation
+**Current focus:** Phase 01 — Banking Foundation
 
 ## Current Position
 
-Phase: 1 of 6 (Banking Foundation)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-04-01 — Roadmap created; 25 v1.0 requirements mapped across 5 phases
-
-Progress: [░░░░░░░░░░] 0%
+Phase: 01 (Banking Foundation) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -52,6 +46,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 01-banking-foundation P01 | 25 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -63,6 +58,8 @@ Recent decisions affecting current work:
 - Roadmap init: CONF-* requirements assigned to Phase 1 as foundation; EconomyConfig type and backward compatibility established before any financial instrument code
 - Roadmap init: BANK-07 (central bank policy agent) assigned to Phase 4 — it observes CPI which is a Phase 4 output
 - Roadmap init: Phase 5 is UI-only with no dedicated REQUIREMENTS.md entries; all data it surfaces is produced by Phases 1-4
+- [Phase 01-01]: EconomyConfig returns bankingEnabled:false for legacy sessions (null or missing economyConfig key) — ensures zero behavioral change for existing sessions
+- [Phase 01-01]: computeSystemFiatTotal new params default to 0 for backward compat; Plan 03 wires the real banking values
 
 ### Roadmap Evolution
 
@@ -80,6 +77,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T20:11:07.855Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-scenario-entry-policymakers-configure-economic-parameters-and-initial-conditions-at-session-design-time/06-CONTEXT.md
+Last session: 2026-04-01T21:15:45.987Z
+Stopped at: Completed 01-banking-foundation/01-01-PLAN.md
+Resume file: None
