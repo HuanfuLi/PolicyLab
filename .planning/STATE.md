@@ -9,7 +9,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 
 ## Current Position
 
-Phase: 1 of 5 (Banking Foundation)
+Phase: 1 of 6 (Banking Foundation)
 Plan: 0 of TBD in current phase
 Status: Ready to plan
 Last activity: 2026-04-01 — Roadmap created; 25 v1.0 requirements mapped across 5 phases
@@ -45,6 +45,10 @@ Recent decisions affecting current work:
 - Roadmap init: CONF-* requirements assigned to Phase 1 as foundation; EconomyConfig type and backward compatibility established before any financial instrument code
 - Roadmap init: BANK-07 (central bank policy agent) assigned to Phase 4 — it observes CPI which is a Phase 4 output
 - Roadmap init: Phase 5 is UI-only with no dedicated REQUIREMENTS.md entries; all data it surfaces is produced by Phases 1-4
+
+### Roadmap Evolution
+
+- Phase 6 added: Scenario Entry — policymakers configure economic parameters and initial conditions at session design time
 
 ### Pending Todos
 

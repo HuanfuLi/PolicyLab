@@ -96,3 +96,13 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 3. Fiscal Policy | 0/TBD | Not started | - |
 | 4. Inflation Loop | 0/TBD | Not started | - |
 | 5. Economic Dashboard | 0/TBD | Not started | - |
+
+### Phase 6: Scenario Entry — policymakers configure economic parameters and initial conditions at session design time
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 5
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 6 to break down)
