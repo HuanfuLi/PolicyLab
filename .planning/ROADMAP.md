@@ -30,7 +30,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. When a borrower misses K consecutive repayments, the system marks the contract as defaulted, seizes configurable collateral, and the bank's balance sheet reflects the write-down
   4. The SFC audit passes every iteration asserting M0 constant and M1 = M0 + net loans outstanding; any drift throws a simulation error
   5. All economic parameters (reserve ratio, base interest rate, loan term defaults) live in EconomyConfig at session level, not hardcoded; existing pre-v1.0 sessions run legacy mechanics unchanged
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 01-01-PLAN.md — Types, DB schema, EconomyConfig, computeSystemFiatTotal extension
+- [ ] 01-02-PLAN.md — Banking repository CRUD + banking engine (loan lifecycle, reserve enforcement, deposits)
+- [ ] 01-03-PLAN.md — Action codes, simulation wiring, SFC audit integration, prompts, export/import
 
 ### Phase 2: Capital Markets
 **Goal**: Agents can hold enterprise equity and receive dividends, the treasury can issue government bonds that pay coupons and redeem at maturity, enterprises can issue corporate bonds, and all positions are persisted for pause/resume and export
@@ -87,7 +91,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Banking Foundation | 0/TBD | Not started | - |
+| 1. Banking Foundation | 0/3 | Planning complete | - |
 | 2. Capital Markets | 0/TBD | Not started | - |
 | 3. Fiscal Policy | 0/TBD | Not started | - |
 | 4. Inflation Loop | 0/TBD | Not started | - |
