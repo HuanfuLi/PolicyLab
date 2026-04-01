@@ -1,0 +1,47 @@
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output and caches
+dist/
+dist-ssr/
+build/
+coverage/
+**/dist/
+**/.vite/
+*.tsbuildinfo
+
+# Local environment overrides
+.env
+.env.*
+*.local
+
+# Local agent/tool state
+.claude/
+.gemini/
+.codex/
+openspec/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Simulation results
+SimulationResult/

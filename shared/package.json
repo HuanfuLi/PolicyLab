@@ -1,0 +1,13 @@
+{
+  "name": "@policylab/shared",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "main": "./src/types.ts",
+  "exports": {
+    ".": "./src/types.ts",
+    "./economy": "./src/economyTypes.ts"
+  }
+}

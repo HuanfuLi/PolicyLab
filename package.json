@@ -1,0 +1,16 @@
+{
+  "name": "policylab",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "workspaces": ["web", "server", "shared"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w server\" \"npm run dev -w web\"",
+    "dev:server": "npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "build": "npm run build -w shared && npm run build -w server && npm run build -w web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
