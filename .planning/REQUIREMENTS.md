@@ -1,0 +1,128 @@
+# Requirements: PolicyLab
+
+**Defined:** 2026-04-01
+**Core Value:** The deterministic economic engine must be realistic enough that simulation outcomes are meaningful for understanding real-world policy trade-offs.
+
+## v1.0 Requirements
+
+Requirements for the Real Economy Engine milestone. Each maps to roadmap phases.
+
+### Banking
+
+- [ ] **BANK-01**: Bank agent role with deposit accounts that track individual agent balances
+- [ ] **BANK-02**: Reserve requirement enforcement — configurable ratio constrains lending capacity
+- [ ] **BANK-03**: LEND action creates loan contracts (principal, interest rate, term) and expands M1
+- [ ] **BANK-04**: Loan repayment destroys M1 symmetrically; interest income flows to bank
+- [ ] **BANK-05**: Default triggers when borrower cannot repay for K consecutive iterations; bankruptcy seizes collateral
+- [ ] **BANK-06**: M1/M2 money supply tracked per iteration in telemetry (M0 remains constant)
+- [ ] **BANK-07**: Central bank agent observes CPI and M1 growth; adjusts reserve ratio and base interest rate
+- [ ] **BANK-08**: SFC audit extended to validate M0 constant + M1 = M0 + net loans outstanding
+
+### Capital Markets
+
+- [ ] **CMKT-01**: Enterprise equity — share issuance at founding or capital raise, ownership table persisted
+- [ ] **CMKT-02**: Dividend distribution — enterprise profits distributed pro-rata to shareholders
+- [ ] **CMKT-03**: Government bonds — treasury issues debt with configurable coupon rate and maturity
+- [ ] **CMKT-04**: Bond coupon payments from treasury to holders each cycle; maturity redeems principal
+- [ ] **CMKT-05**: Corporate bonds — enterprises issue debt; reuses government bond instrument schema
+- [ ] **CMKT-06**: Bond/equity holder ledger persisted to DB for pause/resume and export
+
+### Fiscal Policy
+
+- [ ] **FISC-01**: Budget categories (infrastructure, education, defense, welfare) configurable at session design time
+- [ ] **FISC-02**: Spending multipliers — each category affects specific simulation stats (e.g., education → skill gain rate)
+- [ ] **FISC-03**: Public goods quality scores [0–100] that increase with spending (diminishing returns) and decay without it
+- [ ] **FISC-04**: Budget allocation stored in session config and applied each iteration
+
+### Inflation
+
+- [ ] **INFL-01**: CPI calculated per iteration from AMM/market price data using weighted basket
+- [ ] **INFL-02**: M1 growth rate feeds back into price levels via AMM reserve scaling
+- [ ] **INFL-03**: Inflation expectations injected into agent cognition prompts with CPI trend data
+- [ ] **INFL-04**: Agents adapt behavior in response to inflation (hoarding, wage demands, saving shifts)
+
+### Configuration
+
+- [ ] **CONF-01**: EconomyConfig type in shared types holding all tunable economic parameters
+- [ ] **CONF-02**: All economic parameters (reserve ratio, interest rates, bond coupon, budget allocation, CPI basket weights) stored as session-level config, not hardcoded
+- [ ] **CONF-03**: Backward compatibility — existing sessions run with legacy mechanics; new economy activates for new sessions
+
+## v2 Requirements
+
+Deferred to future milestones. Tracked but not in current roadmap.
+
+### Governance Enhancement
+
+- **GOV-01**: Budget allocation voted on via governance cycle (currently design-time only)
+- **GOV-02**: Separation of powers (executive, legislative, judicial)
+- **GOV-03**: Constitutional enforcement with mechanical rule checking
+- **GOV-04**: Rule of law — courts and due process replacing SUPPRESS
+
+### Policymaker Tools
+
+- **PLCY-01**: Distributional analysis (deciles, Lorenz curves, Gini in comparison UI)
+- **PLCY-02**: Policy-linked A/B scenario comparison
+- **PLCY-03**: Structured report export (PDF/markdown policy briefs)
+- **PLCY-04**: Role-based outcome breakdown in comparison
+- **PLCY-05**: Scenario builder UI for policymaker-friendly parameter entry
+
+### Advanced Economics
+
+- **ECON-01**: Savings accounts with term deposits (M2 distinction)
+- **ECON-02**: Bank run mechanics via social network/trust layer
+- **ECON-03**: Wage-price spiral telemetry detection
+
+## Out of Scope
+
+Explicitly excluded. Documented to prevent scope creep.
+
+| Feature | Reason |
+|---------|--------|
+| Derivatives market (options, futures, swaps) | Incompatible with discrete-iteration ABM ticks; ~5x complexity of bonds for marginal insight at 20–150 agent scale |
+| Interbank lending market | Meaningless dynamics with 1–2 bank agents; model central bank discount window instead |
+| Per-agent credit scores | Wealth history is a sufficient proxy at this simulation scale |
+| Hyperinflation caps | Clamping destroys experiment value; let inflation run naturally |
+| Full double-entry bookkeeping UI | Frontend scope, not simulation scope; expose data in telemetry JSON instead |
+| Dynamic reserve ratio per bank | Leads to regulatory race-to-bottom requiring shadow banking enforcement |
+| Stochastic inflation shocks | AMM already has supply/demand volatility; exogenous shocks make inflation unattributable |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| BANK-01 | — | Pending |
+| BANK-02 | — | Pending |
+| BANK-03 | — | Pending |
+| BANK-04 | — | Pending |
+| BANK-05 | — | Pending |
+| BANK-06 | — | Pending |
+| BANK-07 | — | Pending |
+| BANK-08 | — | Pending |
+| CMKT-01 | — | Pending |
+| CMKT-02 | — | Pending |
+| CMKT-03 | — | Pending |
+| CMKT-04 | — | Pending |
+| CMKT-05 | — | Pending |
+| CMKT-06 | — | Pending |
+| FISC-01 | — | Pending |
+| FISC-02 | — | Pending |
+| FISC-03 | — | Pending |
+| FISC-04 | — | Pending |
+| INFL-01 | — | Pending |
+| INFL-02 | — | Pending |
+| INFL-03 | — | Pending |
+| INFL-04 | — | Pending |
+| CONF-01 | — | Pending |
+| CONF-02 | — | Pending |
+| CONF-03 | — | Pending |
+
+**Coverage:**
+- v1.0 requirements: 25 total
+- Mapped to phases: 0
+- Unmapped: 25 ⚠️
+
+---
+*Requirements defined: 2026-04-01*
+*Last updated: 2026-04-01 after initial definition*
