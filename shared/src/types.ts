@@ -256,6 +256,12 @@ export interface TelemetryLog {
   averageCortisol?: number;
   /** Population mean dopamine (0–100) */
   averageDopamine?: number;
+  /** Base money M0 (should be constant) */
+  m0?: number;
+  /** M1 = M0 + demand deposits created by lending */
+  m1?: number;
+  /** Total outstanding loan principals */
+  loansOutstanding?: number;
 }
 
 /** Full-fidelity export envelope */
@@ -364,6 +370,68 @@ export interface SessionConfig {
   checklist: BrainstormChecklist;
   readyForDesign: boolean;
   lockedVariables?: string[];
+}
+
+// ── v1.0 Economy Types (Phase 1: Banking Foundation) ─────────────────────
+export interface EconomyConfig {
+  bankingEnabled: boolean;
+  reserveRequirement: number;        // 0.0-1.0, e.g. 0.10
+  baseLoanInterestRate: number;      // per-iteration rate, e.g. 0.005
+  defaultLoanTermIterations: number; // e.g. 20
+  defaultThresholdIterations: number;// consecutive missed before default, e.g. 3
+  depositInterestRate: number;       // per-iteration, e.g. 0.002
+  capitalMarketsEnabled?: boolean;
+  fiscalEnabled?: boolean;
+  inflationEnabled?: boolean;
+}
+
+export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
+  bankingEnabled: true,
+  reserveRequirement: 0.10,
+  baseLoanInterestRate: 0.005,
+  defaultLoanTermIterations: 20,
+  defaultThresholdIterations: 3,
+  depositInterestRate: 0.002,
+};
+
+export interface LoanContract {
+  id: string;
+  sessionId: string;
+  borrowerAgentId: string;
+  lenderAgentId: string;
+  principal: number;
+  interestRate: number;
+  termIterations: number;
+  remainingBalance: number;
+  collateralAmount: number;
+  consecutiveMissed: number;
+  issuedAtIteration: number;
+  dueAtIteration: number;
+  status: 'active' | 'repaid' | 'defaulted';
+  createdAt: string;
+}
+
+export interface DepositAccount {
+  id: string;
+  sessionId: string;
+  ownerAgentId: string;
+  bankAgentId: string;
+  accountType: 'demand';
+  balance: number;
+  interestRate: number;
+  lastUpdated: number;
+}
+
+export interface BankBalanceSheet {
+  id: string;
+  sessionId: string;
+  agentId: string;
+  iterationNumber: number;
+  reserves: number;
+  loanAssets: number;
+  depositLiabilities: number;
+  equity: number;
+  timestamp: string;
 }
 
 /**
