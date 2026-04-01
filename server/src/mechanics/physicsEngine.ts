@@ -348,6 +348,80 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       trace.push(`  Δcortisol: +8 (stress from wielding coercive power)`);
       trace.push(`  Δdopamine: +6 (domination reward)`);
       break;
+    // ── Banking actions ─────────────────────────────────────────────────────
+    // These produce NO direct wealth delta in the physics engine.
+    // All financial effects come from bankingEngine.processIteration() in simulationRunner.
+    // The physics engine only validates, records trace, and provides emotional effects.
+    case 'DEPOSIT':
+      w = 0;
+      h = 0;
+      hap = 1;
+      cor = -2;
+      dop = 1;
+      trace.push(`  Δwealth: 0 (deposit processed by bankingEngine — M1 accounting)`);
+      trace.push(`  Δhappiness: +1 (financial security)`);
+      trace.push(`  Δcortisol: -2 (savings provide stability)`);
+      trace.push(`  Δdopamine: +1 (prudent saving reward)`);
+      trace.push(`  [BANK] ${agent.name} requested DEPOSIT`);
+      break;
+    case 'WITHDRAW':
+      w = 0;
+      h = 0;
+      hap = 0;
+      cor = 1;
+      dop = 0;
+      trace.push(`  Δwealth: 0 (withdrawal processed by bankingEngine)`);
+      trace.push(`  Δcortisol: +1 (liquidity need signal)`);
+      trace.push(`  [BANK] ${agent.name} requested WITHDRAW`);
+      break;
+    case 'TAKE_LOAN':
+      w = 0;
+      h = 0;
+      hap = 2;
+      cor = 5;
+      dop = 3;
+      trace.push(`  Δwealth: 0 (loan principal credited as deposit by bankingEngine — M1 expansion)`);
+      trace.push(`  Δhappiness: +2 (capital access)`);
+      trace.push(`  Δcortisol: +5 (debt obligation anxiety)`);
+      trace.push(`  Δdopamine: +3 (investment opportunity reward)`);
+      trace.push(`  [BANK] ${agent.name} requested TAKE_LOAN`);
+      break;
+    case 'REPAY_LOAN':
+      w = 0;
+      h = 0;
+      hap = 3;
+      cor = -3;
+      dop = 2;
+      trace.push(`  Δwealth: 0 (repayment debited from deposit by bankingEngine — M1 contraction)`);
+      trace.push(`  Δhappiness: +3 (debt reduction relief)`);
+      trace.push(`  Δcortisol: -3 (obligation decreasing)`);
+      trace.push(`  Δdopamine: +2 (progress reward)`);
+      trace.push(`  [BANK] ${agent.name} requested REPAY_LOAN`);
+      break;
+    case 'ISSUE_LOAN':
+      w = 0;
+      h = 0;
+      hap = 2;
+      cor = 3;
+      dop = 3;
+      trace.push(`  Δwealth: 0 (loan issuance handled by bankingEngine — M1 expansion)`);
+      trace.push(`  Δhappiness: +2 (banking purpose fulfillment)`);
+      trace.push(`  Δcortisol: +3 (credit risk exposure)`);
+      trace.push(`  Δdopamine: +3 (lending business reward)`);
+      trace.push(`  [BANK] ${agent.name} (bank agent) issued a loan`);
+      break;
+    case 'SET_INTEREST_RATE':
+      w = 0;
+      h = 0;
+      hap = 1;
+      cor = 2;
+      dop = 2;
+      trace.push(`  Δwealth: 0 (rate adjustment — no immediate fiat change)`);
+      trace.push(`  Δhappiness: +1 (monetary policy agency)`);
+      trace.push(`  Δcortisol: +2 (policy decision stress)`);
+      trace.push(`  Δdopamine: +2 (control reward)`);
+      trace.push(`  [BANK] ${agent.name} (bank agent) set interest rate`);
+      break;
     case 'NONE':
     default:
       w = 0;

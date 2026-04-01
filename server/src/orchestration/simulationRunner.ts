@@ -53,6 +53,10 @@ import { physicsConfig } from '../mechanics/physicsConfig.js';
 import { type ActionCode, getAllowedActions, getRoleTier } from '../mechanics/actionCodes.js';
 import { clusterByRole } from './clustering.js';
 import { retryWithHealing } from '../llm/retryWithHealing.js';
+// Banking Foundation imports (Phase 1: Banking Foundation)
+import * as bankingEngine from '../mechanics/bankingEngine.js';
+import * as bankingRepo from '../db/repos/bankingRepo.js';
+import { getEconomyConfig } from '../mechanics/economyConfigUtils.js';
 // Phase 1 Economy imports
 import { getOrderBook, clearOrderBook, restoreOrderBook, isOrderBookWarm } from '../mechanics/orderBook.js';
 import { economyRepo, type AgentEconomyState } from '../db/repos/economyRepo.js';
@@ -1235,12 +1239,24 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     }
 
     if (!sessionSFCTracking.has(sessionId)) {
+      // Include banking deposits and collateral in the baseline SFC measurement.
+      // For new sessions these are 0; for resumed sessions they may be non-zero.
+      const baselineEconomyConfig = getEconomyConfig(session.config as Record<string, unknown> | null);
+      const baselineDeposits = baselineEconomyConfig.bankingEnabled
+        ? bankingRepo.getTotalDeposits(sessionId)
+        : 0;
+      const baselineCollateral = baselineEconomyConfig.bankingEnabled
+        ? bankingRepo.getTotalCollateral(sessionId)
+        : 0;
       sessionSFCTracking.set(sessionId, {
         initialFiat: computeSystemFiatTotal(
           agents,
           sessionAMMRegistry.get(sessionId),
           sessionMultiAMMRegistry.get(sessionId),
           sessionStateTreasury.get(sessionId) ?? 0,
+          undefined,
+          baselineDeposits,
+          baselineCollateral,
         ),
       });
     }
@@ -2594,6 +2610,68 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
       }
 
+      // ── Banking tick ──────────────────────────────────────────────────────
+      // Runs after all agent action resolutions so agent wealth is settled before
+      // interest accrual and default checks. All banking DB writes are batched here.
+      const economyConfig = getEconomyConfig(session.config as Record<string, unknown> | null);
+      let bankingTotalDeposits = 0;
+      let bankingCollateralEscrow = 0;
+      let bankingLoansOutstanding = 0;
+
+      if (economyConfig.bankingEnabled) {
+        const bankAgents = agents.filter(a => a.type === 'bank' && a.isAlive);
+        const loans = bankingRepo.getActiveLoans(sessionId);
+        const deposits = bankingRepo.getDepositsBySession(sessionId);
+
+        const bankingDelta = bankingEngine.processIteration({
+          sessionId,
+          bankAgents,
+          allAgents: agents,
+          loans,
+          deposits,
+          economyConfig,
+          iterationNumber: iterNum,
+        });
+
+        // Apply all banking DB writes in a single synchronous transaction to avoid
+        // SQLITE_BUSY and ensure atomicity. Banking runs once per iteration (not per-agent)
+        // so the write volume is small and a direct transaction is safe here.
+        sqlite.transaction(() => {
+          for (const upd of bankingDelta.depositUpdates) {
+            bankingRepo.updateDepositBalance(upd.accountId, upd.newBalance, upd.iteration);
+          }
+          for (const upd of bankingDelta.loanUpdates) {
+            bankingRepo.updateLoan(upd.loanId, upd.updates);
+          }
+          for (const loan of bankingDelta.newLoans) {
+            bankingRepo.insertLoan(loan);
+          }
+          for (const dep of bankingDelta.newDeposits) {
+            bankingRepo.upsertDeposit(dep);
+          }
+          for (const sheet of bankingDelta.balanceSheetSnapshots) {
+            bankingRepo.insertBalanceSheet(sheet);
+          }
+        })();
+        // Apply wealth deltas (interest income, collateral seizure) — in-memory only,
+        // will be persisted with the rest of statUpdates below.
+        for (const [agentId, delta] of bankingDelta.wealthDeltas) {
+          const agentUpdate = statUpdates.find(u => u.id === agentId);
+          if (agentUpdate) agentUpdate.wealth += delta;
+        }
+        // Append banking traces to physics trace log
+        if (bankingDelta.trace.length > 0) {
+          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
+          sessionLastPhysicsTraces.set(sessionId,
+            existingTrace + '\n' + bankingDelta.trace.join('\n'));
+        }
+
+        // Get banking totals for SFC audit and telemetry
+        bankingTotalDeposits = bankingRepo.getTotalDeposits(sessionId);
+        bankingCollateralEscrow = bankingRepo.getTotalCollateral(sessionId);
+        bankingLoansOutstanding = bankingRepo.getTotalLoansOutstanding(sessionId);
+      }
+
       const finalStatsByAgentId = new Map(statUpdates.map(u => [u.id, u]));
 
       const cognitivePostInputs: CognitivePostInput[] = aliveAgents.map(agent => {
@@ -2683,6 +2761,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           multiAMMsForTelemetry,
           treasury,
           finalWealthByAgentId,
+          bankingTotalDeposits,
+          bankingCollateralEscrow,
         );
         const totalCaloriesBurned = [...weekStateMap.values()].reduce((sum, ws) => sum + ws.caloriesBurned, 0);
         const totalCaloriesProduced = [...weekStateMap.values()].reduce((sum, ws) => sum + ws.caloriesProduced, 0);
@@ -2738,6 +2818,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           crimeRate,
           averageCortisol,
           averageDopamine,
+          // Banking M0/M1 telemetry (zero when bankingEnabled is false)
+          m0: totalFiatSupply,  // base money — constant under SFC (includes depositBalances + collateral)
+          m1: totalFiatSupply + bankingLoansOutstanding,  // M1 = M0 + outstanding loan principals
+          loansOutstanding: bankingLoansOutstanding,
         };
         // Phase A: SFC drift check — warn if unaccounted fiat appears or disappears.
         // Keep a floor tolerance so extinction or tiny populations do not generate
@@ -2836,8 +2920,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
       // ── SFC assertion: detect unexpected fiat creation or destruction ─────
       // The economy is fully closed-loop. Every transfer must be zero-sum.
-      // If total fiat (agent wealth + all AMM reserves) drifts beyond ±0.1 from
-      // the initial baseline, log a critical warning.
+      // If total fiat (agent wealth + all AMM reserves + banking deposits + collateral)
+      // drifts beyond ±0.1 from the initial baseline, log a critical warning.
       {
         const sfcAMM = sessionAMMRegistry.get(sessionId);
         const sfcMultiAMMs = sessionMultiAMMRegistry.get(sessionId);
@@ -2846,6 +2930,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           sfcAMM,
           sfcMultiAMMs,
           sessionStateTreasury.get(sessionId) ?? 0,
+          undefined,
+          bankingTotalDeposits,
+          bankingCollateralEscrow,
         );
 
         let sfcEntry = sessionSFCTracking.get(sessionId);

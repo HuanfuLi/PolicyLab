@@ -13,6 +13,14 @@
  *  - EMBEZZLE: Skim from communal trust — high reward, high legal risk
  *  - ADJUST_TAX: Force wealth redistribution from lower classes
  *  - SUPPRESS: Deploy enforcement to penalise a specific citizen
+ *
+ * Banking Foundation additions (Phase 1 — BANK-03):
+ *  - DEPOSIT: Move cash to bank deposit account
+ *  - WITHDRAW: Move deposit balance back to cash
+ *  - TAKE_LOAN: Borrow from the bank (creates M1 deposit)
+ *  - REPAY_LOAN: Make a loan repayment
+ *  - ISSUE_LOAN: Bank agent issues a loan to a requesting citizen
+ *  - SET_INTEREST_RATE: Bank agent adjusts the lending rate
  */
 
 export type ActionCode =
@@ -38,6 +46,13 @@ export type ActionCode =
   | 'EMBEZZLE'
   | 'ADJUST_TAX'
   | 'SUPPRESS'
+  // Banking Foundation (Phase 1: Banking Foundation)
+  | 'DEPOSIT'
+  | 'WITHDRAW'
+  | 'TAKE_LOAN'
+  | 'REPAY_LOAN'
+  | 'ISSUE_LOAN'         // bank agent only
+  | 'SET_INTEREST_RATE'  // bank agent only
   | 'NONE';
 
 const VALID_ACTIONS: Set<string> = new Set([
@@ -47,6 +62,9 @@ const VALID_ACTIONS: Set<string> = new Set([
   'HIRE_EMPLOYEE', 'FIRE_EMPLOYEE', 'WORK_AT_ENTERPRISE', 'QUIT_JOB',
   'SABOTAGE',
   'EMBEZZLE', 'ADJUST_TAX', 'SUPPRESS',
+  // Banking Foundation (Phase 1: Banking Foundation)
+  'DEPOSIT', 'WITHDRAW', 'TAKE_LOAN', 'REPAY_LOAN',
+  'ISSUE_LOAN', 'SET_INTEREST_RATE',
   'NONE',
 ]);
 
@@ -105,7 +123,16 @@ const BASE_ACTIONS: readonly ActionCode[] = [
   'WORK', 'REST', 'PRODUCE_AND_SELL',
   'POST_BUY_ORDER', 'POST_SELL_ORDER',
   'APPLY_FOR_JOB', 'WORK_AT_ENTERPRISE', 'QUIT_JOB',
-  'STEAL', 'HELP', 'INVEST', 'NONE',
+  'STEAL', 'HELP', 'INVEST',
+  // Banking actions available to all citizens
+  'DEPOSIT', 'WITHDRAW', 'TAKE_LOAN', 'REPAY_LOAN',
+  'NONE',
+];
+
+/** Bank agent exclusive actions — all of BASE_ACTIONS + bank operations */
+const BANK_ACTIONS: readonly ActionCode[] = [
+  ...BASE_ACTIONS,
+  'ISSUE_LOAN', 'SET_INTEREST_RATE',
 ];
 
 /** Specialist-tier additions (organised/skilled actors) */
@@ -123,8 +150,12 @@ const ELITE_ACTIONS: readonly ActionCode[] = [
 /**
  * Return the set of ActionCodes legally available to an agent of the given role.
  * Used to construct role-specific prompts so the LLM only picks valid options.
+ *
+ * Special case: bank agents (role === 'bank') get BANK_ACTIONS which includes
+ * ISSUE_LOAN and SET_INTEREST_RATE in addition to the base citizen actions.
  */
 export function getAllowedActions(role: string): readonly ActionCode[] {
+  if (role.toLowerCase() === 'bank') return BANK_ACTIONS;
   const tier = getRoleTier(role);
   if (tier === 'elite') return ELITE_ACTIONS;
   if (tier === 'specialist') return SPECIALIST_ACTIONS;

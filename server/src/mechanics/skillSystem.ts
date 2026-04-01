@@ -65,6 +65,13 @@ const ACTION_SKILL_MAP: Record<ActionCode, { primary: SkillCategory; secondary?:
     EMBEZZLE: { primary: 'trading', secondary: 'leadership' },
     ADJUST_TAX: { primary: 'leadership', secondary: 'scholarship' },
     SUPPRESS: { primary: 'combat', secondary: 'leadership' },
+    // Banking actions (Phase 1: Banking Foundation)
+    DEPOSIT: { primary: 'trading', secondary: 'scholarship' },
+    WITHDRAW: { primary: 'trading' },
+    TAKE_LOAN: { primary: 'trading', secondary: 'scholarship' },
+    REPAY_LOAN: { primary: 'trading', secondary: 'scholarship' },
+    ISSUE_LOAN: { primary: 'management', secondary: 'trading' },
+    SET_INTEREST_RATE: { primary: 'scholarship', secondary: 'management' },
     NONE: { primary: 'scholarship' },
 };
 
