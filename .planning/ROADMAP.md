@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. When a borrower misses K consecutive repayments, the system marks the contract as defaulted, seizes configurable collateral, and the bank's balance sheet reflects the write-down
   4. The SFC audit passes every iteration asserting M0 constant and M1 = M0 + net loans outstanding; any drift throws a simulation error
   5. All economic parameters (reserve ratio, base interest rate, loan term defaults) live in EconomyConfig at session level, not hardcoded; existing pre-v1.0 sessions run legacy mechanics unchanged
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans executed
 Plans:
 - [x] 01-01-PLAN.md — Types, DB schema, EconomyConfig, computeSystemFiatTotal extension
 - [x] 01-02-PLAN.md — Banking repository CRUD + banking engine (loan lifecycle, reserve enforcement, deposits)
@@ -46,7 +46,11 @@ Plans:
   3. The treasury can issue a government bond; the buyer's cash decreases and a bond holding is recorded; coupon payments flow from treasury to holder each cycle; at maturity the principal is returned and the holding is deleted
   4. An enterprise can issue a corporate bond reusing the government bond instrument schema; coupon and maturity mechanics behave identically
   5. All equity positions and bond holdings survive session pause/resume and appear in session export
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 02-01-PLAN.md — Types, DB schema, migration, ActionCodes, skillSystem for capital markets
+- [ ] 02-02-PLAN.md — Capital market engine (pure deterministic) + repository CRUD + unit tests
+- [ ] 02-03-PLAN.md — Physics engine cases, simulationRunner wiring, prompts, export/import, SFC integration tests
 **UI hint**: yes
 
 ### Phase 3: Fiscal Policy
@@ -91,8 +95,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Banking Foundation | 2/3 | In Progress|  |
-| 2. Capital Markets | 0/TBD | Not started | - |
+| 1. Banking Foundation | 3/3 | Complete |  |
+| 2. Capital Markets | 0/3 | Not started | - |
 | 3. Fiscal Policy | 0/TBD | Not started | - |
 | 4. Inflation Loop | 0/TBD | Not started | - |
 | 5. Economic Dashboard | 0/TBD | Not started | - |
