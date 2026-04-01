@@ -245,6 +245,8 @@ function computeSystemFiatTotal(
   multiAMMs: Map<MultiAMMItemType, AutomatedMarketMaker> | undefined,
   treasury: number,
   wealthOverrides?: Map<string, number>,
+  depositBalances: number = 0,
+  collateralEscrow: number = 0,
 ): number {
   const agentFiat = agents
     .filter(agent => agent.isAlive)
@@ -255,7 +257,9 @@ function computeSystemFiatTotal(
   return agentFiat
     + (primaryAMM?.currentFiatReserve ?? 0)
     + multiAMMFiat
-    + treasury;
+    + treasury
+    + depositBalances
+    + collateralEscrow;
 }
 
 /**

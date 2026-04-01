@@ -176,3 +176,45 @@ export const orderBook = sqliteTable('order_book', {
   createdAt: text('created_at').notNull(),
 });
 
+// ── Banking Foundation (Phase 1) ────────────────────────────────────────
+
+export const depositAccounts = sqliteTable('deposit_accounts', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  ownerAgentId: text('owner_agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  bankAgentId: text('bank_agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  accountType: text('account_type').notNull().default('demand'),
+  balance: real('balance').notNull().default(0),
+  interestRate: real('interest_rate').notNull().default(0.002),
+  lastUpdated: integer('last_updated').notNull().default(0),
+});
+
+export const loanContracts = sqliteTable('loan_contracts', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  borrowerAgentId: text('borrower_agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  lenderAgentId: text('lender_agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  principal: real('principal').notNull(),
+  interestRate: real('interest_rate').notNull(),
+  termIterations: integer('term_iterations').notNull(),
+  remainingBalance: real('remaining_balance').notNull(),
+  collateralAmount: real('collateral_amount').notNull().default(0),
+  consecutiveMissed: integer('consecutive_missed').notNull().default(0),
+  issuedAtIteration: integer('issued_at_iteration').notNull(),
+  dueAtIteration: integer('due_at_iteration').notNull(),
+  status: text('status').notNull().default('active'),
+  createdAt: text('created_at').notNull(),
+});
+
+export const bankBalanceSheets = sqliteTable('bank_balance_sheets', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  agentId: text('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  iterationNumber: integer('iteration_number').notNull(),
+  reserves: real('reserves').notNull(),
+  loanAssets: real('loan_assets').notNull(),
+  depositLiabilities: real('deposit_liabilities').notNull(),
+  equity: real('equity').notNull(),
+  timestamp: text('timestamp').notNull(),
+});
+

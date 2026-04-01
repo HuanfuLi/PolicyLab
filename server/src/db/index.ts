@@ -10,7 +10,7 @@ if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
-const dbPath = path.join(dbDir, .policylab.db');
+const dbPath = path.join(dbDir, 'policylab.db');
 const sqlite = new Database(dbPath);
 
 // Enable WAL mode for better concurrency & tune for high-frequency writes

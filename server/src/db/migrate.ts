@@ -223,5 +223,56 @@ export function runMigrations() {
       ON order_book(session_id, status);
   `);
 
+  // Banking Foundation (Phase 1): deposit accounts, loan contracts, bank balance sheets
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS deposit_accounts (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      owner_agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      bank_agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      account_type TEXT NOT NULL DEFAULT 'demand',
+      balance REAL NOT NULL DEFAULT 0,
+      interest_rate REAL NOT NULL DEFAULT 0.002,
+      last_updated INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_deposit_accounts_session ON deposit_accounts(session_id);
+    CREATE INDEX IF NOT EXISTS idx_deposit_accounts_owner ON deposit_accounts(owner_agent_id);
+
+    CREATE TABLE IF NOT EXISTS loan_contracts (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      borrower_agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      lender_agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      principal REAL NOT NULL,
+      interest_rate REAL NOT NULL,
+      term_iterations INTEGER NOT NULL,
+      remaining_balance REAL NOT NULL,
+      collateral_amount REAL NOT NULL DEFAULT 0,
+      consecutive_missed INTEGER NOT NULL DEFAULT 0,
+      issued_at_iteration INTEGER NOT NULL,
+      due_at_iteration INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_loan_contracts_session ON loan_contracts(session_id);
+    CREATE INDEX IF NOT EXISTS idx_loan_contracts_borrower ON loan_contracts(borrower_agent_id);
+
+    CREATE TABLE IF NOT EXISTS bank_balance_sheets (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      iteration_number INTEGER NOT NULL,
+      reserves REAL NOT NULL,
+      loan_assets REAL NOT NULL,
+      deposit_liabilities REAL NOT NULL,
+      equity REAL NOT NULL,
+      timestamp TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_bank_balance_sheets_session ON bank_balance_sheets(session_id);
+  `);
+
   console.log('Database migrations applied.');
 }
