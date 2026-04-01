@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 01-banking-foundation/01-01-PLAN.md
-last_updated: "2026-04-01T21:15:45.992Z"
+stopped_at: Completed 01-banking-foundation/01-02-PLAN.md
+last_updated: "2026-04-01T21:22:01.644Z"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 01 (Banking Foundation) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -47,6 +47,7 @@ Plan: 2 of 3
 
 *Updated after each plan completion*
 | Phase 01-banking-foundation P01 | 25 | 2 tasks | 7 files |
+| Phase 01-banking-foundation P02 | 4 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -60,6 +61,8 @@ Recent decisions affecting current work:
 - Roadmap init: Phase 5 is UI-only with no dedicated REQUIREMENTS.md entries; all data it surfaces is produced by Phases 1-4
 - [Phase 01-01]: EconomyConfig returns bankingEnabled:false for legacy sessions (null or missing economyConfig key) — ensures zero behavioral change for existing sessions
 - [Phase 01-01]: computeSystemFiatTotal new params default to 0 for backward compat; Plan 03 wires the real banking values
+- [Phase 01-02]: BankingDelta return pattern: engine functions return deltas rather than mutating DB — Plan 03 applies in batch via bankingRepo
+- [Phase 01-02]: Bank reserves modeled as bank agent.currentStats.wealth — single source of truth, avoids SFC double-counting (Pitfall 4)
 
 ### Roadmap Evolution
 
@@ -77,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T21:15:45.987Z
-Stopped at: Completed 01-banking-foundation/01-01-PLAN.md
+Last session: 2026-04-01T21:22:01.639Z
+Stopped at: Completed 01-banking-foundation/01-02-PLAN.md
 Resume file: None
