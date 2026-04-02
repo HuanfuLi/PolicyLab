@@ -68,7 +68,7 @@ Plans:
 - [x] 03-02-PLAN.md — Fiscal engine (pure deterministic) with budget execution, public goods quality, multiplier effects + unit tests
 - [x] 03-03-PLAN.md — Physics engine multipliers, simulationRunner wiring, prompts, export/import, SFC integration tests
 - [ ] 03-04-PLAN.md — Gap closure: design-time budget configurability (server endpoint + DesignReview sliders)
-- [ ] 03-05-PLAN.md — Gap closure: public goods quality fields in TelemetryLog + SSE telemetry population
+- [x] 03-05-PLAN.md — Gap closure: public goods quality fields in TelemetryLog + SSE telemetry population
 **UI hint**: yes
 
 ### Phase 4: Inflation Loop
