@@ -220,6 +220,9 @@ export interface ComparisonResult {
   verdict: string;
 }
 
+/** Budget categories for fiscal spending allocation */
+export type FiscalCategory = 'infrastructure' | 'education' | 'defense' | 'welfare';
+
 /**
  * Per-iteration deterministic economy telemetry.
  * Computed by the physics engine — no LLM inference involved.
@@ -268,6 +271,15 @@ export interface TelemetryLog {
   inflationRate?: number;
   /** Smoothed inflation expectations signal in percent */
   inflationExpectations?: number;
+  /** Central bank base interest rate as of this iteration */
+  centralBankRate?: number;
+  /** Yield snapshot keyed by bond type at iteration end */
+  bondYields?: {
+    /** Weighted avg coupon of active government bonds */
+    governmentYield?: number;
+    /** Weighted avg coupon of active corporate bonds */
+    corporateYield?: number;
+  };
 
   // ── Fiscal Policy telemetry ──────────────────────────────────────────────
   /** Infrastructure public goods quality score 0–100 (undefined when fiscal disabled) */
@@ -278,6 +290,12 @@ export interface TelemetryLog {
   defenseQuality?: number;
   /** Welfare public goods quality score 0–100 (undefined when fiscal disabled) */
   welfareQuality?: number;
+  /** M2 = M1 + time deposits / savings deposits */
+  m2?: number;
+  /** Per-category fiscal spending amounts for current iteration */
+  fiscalSpending?: Partial<Record<FiscalCategory, number>>;
+  /** Current public goods quality score per category (0-1 normalized) */
+  publicGoodsQuality?: Partial<Record<FiscalCategory, number>>;
 }
 
 /** Full-fidelity export envelope */
