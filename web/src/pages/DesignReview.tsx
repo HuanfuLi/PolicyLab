@@ -645,7 +645,7 @@ const DesignReview = () => {
               style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
             >
               {forking ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <GitFork size={18} />}
-              Fork & Simulate
+              Fork & Change Policy
             </button>
           ) : (
             <button

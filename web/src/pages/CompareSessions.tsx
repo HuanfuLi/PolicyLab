@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, CheckSquare, Square, MessageSquare, Send, Users, Clock } from 'lucide-react';
 import { useCompareStore } from '../stores/compareStore';
 import MarkdownText from '../components/MarkdownText';
-import type { SessionMetadata, ComparisonDimension } from '@policylab/shared';
+import type { SessionMetadata, ComparisonDimension, EconomyParamDiff } from '@policylab/shared';
 
 const stageBadge: Record<string, { label: string; cls: string }> = {
   'completed': { label: '✓ Completed', cls: 'badge-success' },
@@ -43,6 +43,51 @@ function DimensionRow({ dim, idx }: { dim: ComparisonDimension; idx: number }) {
           <MarkdownText>{dim.analysis}</MarkdownText>
         </p>
       )}
+    </div>
+  );
+}
+
+function ConfigDiffSection({ diffs, session1Title, session2Title }: {
+  diffs: EconomyParamDiff[];
+  session1Title: string;
+  session2Title: string;
+}) {
+  return (
+    <div style={{
+      background: 'var(--panel-alpha-05)',
+      borderRadius: 12,
+      padding: '20px 24px',
+      marginBottom: 24,
+      border: '1px solid var(--glass-border)',
+    }}>
+      <h3 style={{ margin: '0 0 16px', color: 'var(--primary)', fontSize: 16 }}>
+        Configuration Differences
+      </h3>
+      <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>
+        These economic parameters were changed between the two sessions.
+      </p>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid var(--glass-border)' }}>
+            <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)' }}>Parameter</th>
+            <th style={{ textAlign: 'right', padding: '8px 12px', color: 'var(--text-muted)' }}>{session1Title}</th>
+            <th style={{ textAlign: 'right', padding: '8px 12px', color: 'var(--text-muted)' }}>{session2Title}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {diffs.map(d => (
+            <tr key={d.param} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+              <td style={{ padding: '8px 12px' }}>{d.label}</td>
+              <td style={{ textAlign: 'right', padding: '8px 12px', fontFamily: 'monospace' }}>
+                {typeof d.session1Value === 'boolean' ? (d.session1Value ? 'Yes' : 'No') : d.session1Value}
+              </td>
+              <td style={{ textAlign: 'right', padding: '8px 12px', fontFamily: 'monospace' }}>
+                {typeof d.session2Value === 'boolean' ? (d.session2Value ? 'Yes' : 'No') : d.session2Value}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -286,6 +331,15 @@ const CompareSessions = () => {
               </div>
             ))}
           </div>
+
+          {/* Configuration Differences */}
+          {comparison.economyParamDiffs && comparison.economyParamDiffs.length > 0 && (
+            <ConfigDiffSection
+              diffs={comparison.economyParamDiffs}
+              session1Title={selected1?.title ?? 'Session A'}
+              session2Title={selected2?.title ?? 'Session B'}
+            />
+          )}
 
           {/* Dimensions */}
           <div className="glass-card" style={{ marginBottom: '2rem' }}>
