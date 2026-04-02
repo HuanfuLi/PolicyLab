@@ -39,6 +39,8 @@ The deterministic economic engine must be realistic enough that simulation outco
 - ✓ Democratic governance cycle (franchise selection, proposals, voting, ratification) — v0
 - ✓ Multi-provider LLM gateway (Anthropic, OpenAI, Gemini, Vertex, Ollama) — v0
 - ✓ Full session lifecycle (idea → brainstorm → design → simulate → reflect → review) — v0
+- ✓ Economy tab with policymaker parameter controls (slider+numeric, soft limits, tooltips) — Phase 6
+- ✓ Fork-based A/B scenario comparison with config diff and 8-dimension scoring — Phase 6
 - ✓ SSE real-time simulation streaming — v0
 - ✓ Session comparison with LLM analysis — v0
 - ✓ Import/export, reflection, and review flows — v0
@@ -125,4 +127,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after milestone v1.0 initialization*
+*Last updated: 2026-04-02 after Phase 6 (Scenario Entry) completion*
