@@ -262,6 +262,12 @@ export interface TelemetryLog {
   m1?: number;
   /** Total outstanding loan principals */
   loansOutstanding?: number;
+  /** Consumer price index (base = 100) */
+  cpi?: number;
+  /** Iteration-over-iteration CPI inflation rate in percent */
+  inflationRate?: number;
+  /** Smoothed inflation expectations signal in percent */
+  inflationExpectations?: number;
 
   // ── Fiscal Policy telemetry ──────────────────────────────────────────────
   /** Infrastructure public goods quality score 0–100 (undefined when fiscal disabled) */
@@ -324,6 +330,8 @@ export interface SessionExport {
   fiscalBudget?: BudgetAllocation;
   /** Fiscal Policy: public goods state history (optional for backward compat) */
   publicGoodsState?: PublicGoodsState[];
+  /** Inflation Loop: macro snapshots (optional for backward compat) */
+  macroSnapshots?: MacroSnapshot[];
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────
@@ -410,6 +418,14 @@ export interface EconomyConfig {
   dividendPayoutRatio?: number;    // fraction of enterprise owner wealth distributed per iteration, e.g. 0.05
   govBondCouponRate?: number;      // per-iteration coupon rate for gov bonds, e.g. 0.008
   govBondTermIterations?: number;  // default bond maturity term in iterations, e.g. 10
+  cpiBasketWeights?: CpiBasketWeights;
+  m1InflationCoeff?: number;       // blending weight for M1 growth signal, e.g. 0.30
+  inflationSmoothingWindow?: number; // rolling mean window, e.g. 3
+  productivityGrowthEstimate?: number; // estimated real productivity growth per iteration, e.g. 0.01
+  inflationAmmThreshold?: number;  // minimum inflation expectation before AMM feedback triggers, e.g. 0.5
+  inflationAmmCap?: number;        // max AMM price change per iteration in percent, e.g. 2.0
+  centralBankEnabled?: boolean;
+  cpiBasePrices?: Record<string, number>;
 
   // ── Fiscal policy tuning (Phase 3) ──────────────────────────────────────
   /**
@@ -457,6 +473,19 @@ export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   defaultLoanTermIterations: 20,
   defaultThresholdIterations: 3,
   depositInterestRate: 0.002,
+  cpiBasketWeights: {
+    food: 0.40,
+    tools: 0.25,
+    luxury_goods: 0.20,
+    raw_materials: 0.15,
+  },
+  m1InflationCoeff: 0.3,
+  inflationSmoothingWindow: 3,
+  productivityGrowthEstimate: 0.01,
+  inflationAmmThreshold: 0.5,
+  inflationAmmCap: 2.0,
+  centralBankEnabled: false,
+  cpiBasePrices: {},
   // Fiscal defaults — active when fiscalEnabled is true
   budgetSpendingRate: 0.10,
   infrastructureMultiplier: 0.005,
@@ -505,6 +534,40 @@ export interface BankBalanceSheet {
   depositLiabilities: number;
   equity: number;
   timestamp: string;
+}
+
+export interface CpiBasketWeights {
+  food: number;
+  tools: number;
+  luxury_goods: number;
+  raw_materials: number;
+}
+
+export const DEFAULT_CPI_BASKET_WEIGHTS: CpiBasketWeights = {
+  food: 0.40,
+  tools: 0.25,
+  luxury_goods: 0.20,
+  raw_materials: 0.15,
+};
+
+export interface MacroSnapshot {
+  id: string;
+  sessionId: string;
+  iterationNumber: number;
+  m0: number;
+  m1: number;
+  cpi: number;
+  inflationRate: number;
+  inflationExpectations: number;
+  totalLoansOutstanding: number;
+  treasuryBalance: number;
+  timestamp: string;
+}
+
+export interface InflationState {
+  cpi: number;
+  inflationRate: number;
+  inflationExpectations: number;
 }
 
 // ── v1.0 Fiscal Policy Types (Phase 3) ──────────────────────────────────────

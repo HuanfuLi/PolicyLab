@@ -218,6 +218,20 @@ export const bankBalanceSheets = sqliteTable('bank_balance_sheets', {
   timestamp: text('timestamp').notNull(),
 });
 
+export const macroSnapshots = sqliteTable('macro_snapshots', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  iterationNumber: integer('iteration_number').notNull(),
+  m0: real('m0').notNull(),
+  m1: real('m1').notNull(),
+  cpi: real('cpi').notNull(),
+  inflationRate: real('inflation_rate').notNull(),
+  inflationExpectations: real('inflation_expectations').notNull(),
+  totalLoansOutstanding: real('total_loans_outstanding').notNull(),
+  treasuryBalance: real('treasury_balance').notNull(),
+  timestamp: text('timestamp').notNull(),
+});
+
 // ── v1.0 Capital Markets Tables (Phase 2) ────────────────────────────────────
 export const equityPositions = sqliteTable('equity_positions', {
   id: text('id').primaryKey(),
@@ -279,4 +293,3 @@ export const publicGoodsState = sqliteTable('public_goods_state', {
   /** Welfare quality score 0–100. */
   welfareQuality: real('welfare_quality').notNull().default(50),
 });
-

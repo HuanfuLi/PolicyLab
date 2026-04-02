@@ -272,6 +272,24 @@ export function runMigrations() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_bank_balance_sheets_session ON bank_balance_sheets(session_id);
+
+    CREATE TABLE IF NOT EXISTS macro_snapshots (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      iteration_number INTEGER NOT NULL,
+      m0 REAL NOT NULL,
+      m1 REAL NOT NULL,
+      cpi REAL NOT NULL,
+      inflation_rate REAL NOT NULL,
+      inflation_expectations REAL NOT NULL,
+      total_loans_outstanding REAL NOT NULL,
+      treasury_balance REAL NOT NULL,
+      timestamp TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_macro_snapshots_session ON macro_snapshots(session_id);
+    CREATE INDEX IF NOT EXISTS idx_macro_snapshots_session_iter
+      ON macro_snapshots(session_id, iteration_number);
   `);
 
   // Capital Markets (Phase 2): equity positions and bond holdings
