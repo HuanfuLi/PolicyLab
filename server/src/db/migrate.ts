@@ -306,5 +306,34 @@ export function runMigrations() {
     CREATE INDEX IF NOT EXISTS idx_bond_holdings_owner ON bond_holdings(owner_agent_id);
   `);
 
+  // Fiscal Policy (Phase 3): budget allocations and public goods quality state
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS fiscal_budgets (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      infrastructure REAL NOT NULL,
+      education REAL NOT NULL,
+      defense REAL NOT NULL,
+      welfare REAL NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_fiscal_budgets_session ON fiscal_budgets(session_id);
+
+    CREATE TABLE IF NOT EXISTS public_goods_state (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      iteration_number INTEGER NOT NULL,
+      infrastructure_quality REAL NOT NULL DEFAULT 50,
+      education_quality REAL NOT NULL DEFAULT 50,
+      defense_quality REAL NOT NULL DEFAULT 50,
+      welfare_quality REAL NOT NULL DEFAULT 50
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_public_goods_state_session ON public_goods_state(session_id);
+    CREATE INDEX IF NOT EXISTS idx_public_goods_state_session_iter
+      ON public_goods_state(session_id, iteration_number);
+  `);
+
   console.log('Database migrations applied.');
 }

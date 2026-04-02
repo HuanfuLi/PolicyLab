@@ -242,3 +242,41 @@ export const bondHoldings = sqliteTable('bond_holdings', {
   status: text('status').notNull().default('active'),
 });
 
+// ── Fiscal Policy (Phase 3) ──────────────────────────────────────────────────
+
+/**
+ * Stores the active budget allocation for a session.
+ * One record per session — upsert on change. The four fraction columns sum to 1.0.
+ */
+export const fiscalBudgets = sqliteTable('fiscal_budgets', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  /** Fraction of treasury spending for infrastructure (0.0–1.0). */
+  infrastructure: real('infrastructure').notNull(),
+  /** Fraction of treasury spending for education (0.0–1.0). */
+  education: real('education').notNull(),
+  /** Fraction of treasury spending for defense (0.0–1.0). */
+  defense: real('defense').notNull(),
+  /** Fraction of treasury spending for welfare (0.0–1.0). */
+  welfare: real('welfare').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+/**
+ * Persistent public goods quality scores per iteration.
+ * One row per session per iteration — latest row is the current state.
+ */
+export const publicGoodsState = sqliteTable('public_goods_state', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  iterationNumber: integer('iteration_number').notNull(),
+  /** Infrastructure quality score 0–100. */
+  infrastructureQuality: real('infrastructure_quality').notNull().default(50),
+  /** Education quality score 0–100. */
+  educationQuality: real('education_quality').notNull().default(50),
+  /** Defense quality score 0–100. */
+  defenseQuality: real('defense_quality').notNull().default(50),
+  /** Welfare quality score 0–100. */
+  welfareQuality: real('welfare_quality').notNull().default(50),
+});
+
