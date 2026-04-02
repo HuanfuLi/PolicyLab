@@ -422,6 +422,48 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       trace.push(`  Δdopamine: +2 (control reward)`);
       trace.push(`  [BANK] ${agent.name} (bank agent) set interest rate`);
       break;
+    // ── Capital Market actions ───────────────────────────────────────────────
+    // These produce NO direct wealth delta in the physics engine.
+    // All financial effects come from capitalMarketEngine.processIteration() in simulationRunner.
+    // The physics engine only records trace and provides emotional effects.
+    case 'BUY_SHARES':
+      w = 0;
+      h = 0; hap = 1; cor = 0; dop = 1;
+      trace.push(`  Δwealth: 0 (share purchase deferred to capitalMarketEngine.processIteration())`);
+      trace.push(`  Δhappiness: +1 (investment optimism)`);
+      trace.push(`  Δdopamine: +1 (ownership anticipation)`);
+      trace.push(`  [CMKT] ${agent.name} requested BUY_SHARES - deferred to capitalMarketEngine.processIteration()`);
+      break;
+
+    case 'SELL_SHARES':
+      w = 0;
+      h = 0; hap = -1; cor = 1; dop = -1;
+      trace.push(`  Δwealth: 0 (share sale deferred to capitalMarketEngine.processIteration())`);
+      trace.push(`  Δhappiness: -1 (liquidation reluctance)`);
+      trace.push(`  Δcortisol: +1 (exit anxiety)`);
+      trace.push(`  Δdopamine: -1 (relinquishing ownership)`);
+      trace.push(`  [CMKT] ${agent.name} requested SELL_SHARES - deferred to capitalMarketEngine.processIteration()`);
+      break;
+
+    case 'BUY_BOND':
+      w = 0;
+      h = 0; hap = 1; cor = -1; dop = 1;
+      trace.push(`  Δwealth: 0 (bond purchase deferred to capitalMarketEngine.processIteration())`);
+      trace.push(`  Δhappiness: +1 (financial security via fixed income)`);
+      trace.push(`  Δcortisol: -1 (guaranteed return reduces anxiety)`);
+      trace.push(`  Δdopamine: +1 (prudent investment reward)`);
+      trace.push(`  [CMKT] ${agent.name} requested BUY_BOND - deferred to capitalMarketEngine.processIteration()`);
+      break;
+
+    case 'ISSUE_GOV_BOND':
+      w = 0;
+      h = 0; hap = 0; cor = -2; dop = 1;
+      trace.push(`  Δwealth: 0 (government bond issuance deferred to capitalMarketEngine.processIteration())`);
+      trace.push(`  Δcortisol: -2 (treasury financing provides fiscal stability)`);
+      trace.push(`  Δdopamine: +1 (fiscal policy agency)`);
+      trace.push(`  [CMKT] Treasury/enterprise ISSUE_GOV_BOND - deferred to capitalMarketEngine.processIteration()`);
+      break;
+
     case 'NONE':
     default:
       w = 0;

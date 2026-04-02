@@ -57,6 +57,9 @@ import { retryWithHealing } from '../llm/retryWithHealing.js';
 import * as bankingEngine from '../mechanics/bankingEngine.js';
 import * as bankingRepo from '../db/repos/bankingRepo.js';
 import { getEconomyConfig } from '../mechanics/economyConfigUtils.js';
+// Capital Markets imports (Phase 2: Capital Markets)
+import * as capitalMarketEngine from '../mechanics/capitalMarketEngine.js';
+import * as capitalMarketRepo from '../db/repos/capitalMarketRepo.js';
 // Phase 1 Economy imports
 import { getOrderBook, clearOrderBook, restoreOrderBook, isOrderBookWarm } from '../mechanics/orderBook.js';
 import { economyRepo, type AgentEconomyState } from '../db/repos/economyRepo.js';
@@ -2610,6 +2613,123 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
       }
 
+      // ── Capital market request accumulation ────────────────────────────────
+      // Gather pending capital market requests from intents before the capital market tick.
+      // Mirrors the ADJUST_TAX / EMBEZZLE pattern: scan all intents for the relevant action codes.
+      const cmktPendingSharePurchases: Array<{
+        buyerId: string;
+        enterpriseOwnerId: string;
+        sharesToBuy: number;
+        totalSharesOutstanding: number;
+      }> = [];
+      const cmktPendingShareSales: Array<{
+        sellerId: string;
+        buyerId: string;
+        enterpriseOwnerId: string;
+        sharesToSell: number;
+        totalSharesOutstanding: number;
+      }> = [];
+      const cmktPendingGovBondPurchases: Array<{
+        buyerId: string;
+        faceValue: number;
+      }> = [];
+      const cmktPendingCorpBondIssuances: Array<{
+        buyerId: string;
+        enterpriseOwnerId: string;
+        faceValue: number;
+        couponRate: number;
+        maturityIteration: number;
+      }> = [];
+
+      const cmktEconomyConfig = getEconomyConfig(session.config as Record<string, unknown> | null);
+      if (cmktEconomyConfig.capitalMarketsEnabled) {
+        // Load equity positions to compute totalSharesOutstanding per enterprise
+        const allEquityPositions = capitalMarketRepo.getEquityPositionsBySession(sessionId);
+        const sharesByEnterprise = new Map<string, number>();
+        for (const pos of allEquityPositions) {
+          const prev = sharesByEnterprise.get(pos.enterpriseOwnerId) ?? 0;
+          sharesByEnterprise.set(pos.enterpriseOwnerId, prev + pos.sharesHeld);
+        }
+
+        for (const intent of intents) {
+          if (!intent.actions) continue;
+          for (const action of intent.actions) {
+            const rawTarget = action.parameters?.target ?? action.parameters?.agent_id ?? '';
+            const targetText = typeof rawTarget === 'string' ? rawTarget.toLowerCase() : '';
+
+            if (action.actionCode === 'BUY_SHARES') {
+              // Find enterprise owner by name or ID
+              const enterpriseOwner = aliveAgents.find(
+                a => a.id === rawTarget || a.name.toLowerCase() === targetText,
+              );
+              if (!enterpriseOwner) continue;
+              const sharesToBuy = typeof action.parameters?.quantity === 'number' ? action.parameters.quantity : 10;
+              const totalShares = sharesByEnterprise.get(enterpriseOwner.id) ?? 0;
+              cmktPendingSharePurchases.push({
+                buyerId: intent.agentId,
+                enterpriseOwnerId: enterpriseOwner.id,
+                sharesToBuy,
+                totalSharesOutstanding: totalShares,
+              });
+            } else if (action.actionCode === 'SELL_SHARES') {
+              // Seller sells to any willing buyer (we pick the first available non-owner agent)
+              const enterpriseOwner = aliveAgents.find(
+                a => a.id === rawTarget || a.name.toLowerCase() === targetText,
+              );
+              if (!enterpriseOwner) continue;
+              const sharesToSell = typeof action.parameters?.quantity === 'number' ? action.parameters.quantity : 10;
+              const totalShares = sharesByEnterprise.get(enterpriseOwner.id) ?? 0;
+              // Buy side: pick the first alive agent that is not the seller and not the enterprise owner
+              const potentialBuyer = aliveAgents.find(
+                a => a.id !== intent.agentId && a.id !== enterpriseOwner.id,
+              );
+              if (!potentialBuyer) continue;
+              cmktPendingShareSales.push({
+                sellerId: intent.agentId,
+                buyerId: potentialBuyer.id,
+                enterpriseOwnerId: enterpriseOwner.id,
+                sharesToSell,
+                totalSharesOutstanding: totalShares,
+              });
+            } else if (action.actionCode === 'BUY_BOND') {
+              // target is 'treasury' for gov bonds or enterprise owner name/id for corp bonds
+              const faceValue = typeof action.parameters?.amount === 'number' ? action.parameters.amount : 50;
+              if (targetText === 'treasury' || !targetText) {
+                cmktPendingGovBondPurchases.push({
+                  buyerId: intent.agentId,
+                  faceValue,
+                });
+              } else {
+                // Corporate bond: target is enterprise owner
+                const enterpriseOwner = aliveAgents.find(
+                  a => a.id === rawTarget || a.name.toLowerCase() === targetText,
+                );
+                if (!enterpriseOwner) continue;
+                const couponRate = cmktEconomyConfig.govBondCouponRate ?? 0.01;
+                const maturityIter = iterNum + (cmktEconomyConfig.govBondTermIterations ?? 10);
+                cmktPendingCorpBondIssuances.push({
+                  buyerId: intent.agentId,
+                  enterpriseOwnerId: enterpriseOwner.id,
+                  faceValue,
+                  couponRate,
+                  maturityIteration: maturityIter,
+                });
+              }
+            } else if (action.actionCode === 'ISSUE_GOV_BOND') {
+              // Elite only (already gated by action codes): issuer is the agent themselves
+              // The face value is in the target parameter
+              const faceValue = typeof action.parameters?.amount === 'number'
+                ? action.parameters.amount
+                : (typeof rawTarget === 'string' && !isNaN(Number(rawTarget)) ? Number(rawTarget) : 100);
+              cmktPendingGovBondPurchases.push({
+                buyerId: intent.agentId,
+                faceValue,
+              });
+            }
+          }
+        }
+      }
+
       // ── Banking tick ──────────────────────────────────────────────────────
       // Runs after all agent action resolutions so agent wealth is settled before
       // interest accrual and default checks. All banking DB writes are batched here.
@@ -2670,6 +2790,77 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         bankingTotalDeposits = bankingRepo.getTotalDeposits(sessionId);
         bankingCollateralEscrow = bankingRepo.getTotalCollateral(sessionId);
         bankingLoansOutstanding = bankingRepo.getTotalLoansOutstanding(sessionId);
+      }
+
+      // ── Capital market tick ───────────────────────────────────────────────
+      // Runs immediately after banking tick so agent wealth (post-banking) is current.
+      // All capital market DB writes are batched in a single transaction.
+      // SFC: bond/equity transactions are SFC-neutral transfers within the perimeter —
+      // no escrow term needed; computeSystemFiatTotal is unchanged.
+      if (cmktEconomyConfig.capitalMarketsEnabled) {
+        const equityPositions = capitalMarketRepo.getEquityPositionsBySession(sessionId);
+        const bondHoldings = capitalMarketRepo.getActiveBondHoldingsBySession(sessionId);
+
+        // Build agent snapshots with current running wealth (post-banking deltas applied)
+        const agentsWithRunningWealth = aliveAgents.map(a => {
+          const upd = statUpdates.find(u => u.id === a.id);
+          return upd
+            ? { ...a, currentStats: { ...a.currentStats, wealth: upd.wealth } }
+            : a;
+        });
+
+        const cmktDelta = capitalMarketEngine.processIteration({
+          sessionId,
+          allAgents: agentsWithRunningWealth,
+          equityPositions,
+          bondHoldings,
+          economyConfig: cmktEconomyConfig,
+          iterationNumber: iterNum,
+          pendingSharePurchases: cmktPendingSharePurchases,
+          pendingShareSales: cmktPendingShareSales,
+          pendingGovBondPurchases: cmktPendingGovBondPurchases,
+          pendingCorpBondIssuances: cmktPendingCorpBondIssuances,
+        });
+
+        // Apply all capital market DB writes in a single synchronous transaction
+        // (once-per-iteration frequency — same rationale as banking tick)
+        sqlite.transaction(() => {
+          for (const pos of cmktDelta.upsertEquityPositions) {
+            capitalMarketRepo.upsertEquityPosition(pos);
+          }
+          for (const holding of cmktDelta.upsertBondHoldings) {
+            capitalMarketRepo.upsertBondHolding(holding);
+          }
+          for (const id of cmktDelta.deleteBondHoldingIds) {
+            capitalMarketRepo.deleteBondHolding(id);
+          }
+        })();
+
+        // Apply wealth deltas in-memory (will be persisted with the rest of statUpdates)
+        for (const [agentId, delta] of cmktDelta.wealthDeltas) {
+          const agentUpdate = statUpdates.find(u => u.id === agentId);
+          if (agentUpdate) agentUpdate.wealth += delta;
+        }
+
+        // Apply enterprise treasury deltas: corporate bond coupon/maturity payments come from
+        // enterprise owner agent wealth. Route through statUpdates so they persist with agents.
+        for (const [enterpriseOwnerId, delta] of cmktDelta.enterpriseTreasuryDeltas) {
+          const agentUpdate = statUpdates.find(u => u.id === enterpriseOwnerId);
+          if (agentUpdate) agentUpdate.wealth += delta;
+        }
+
+        // Apply treasury delta (gov bond purchases, gov coupon/maturity payments)
+        sessionStateTreasury.set(
+          sessionId,
+          (sessionStateTreasury.get(sessionId) ?? 0) + cmktDelta.treasuryDelta,
+        );
+
+        // Append capital market traces to physics trace log
+        if (cmktDelta.trace.length > 0) {
+          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
+          sessionLastPhysicsTraces.set(sessionId,
+            existingTrace + '\n' + cmktDelta.trace.join('\n'));
+        }
       }
 
       const finalStatsByAgentId = new Map(statUpdates.map(u => [u.id, u]));
