@@ -242,16 +242,6 @@ const Simulation = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          {/* Economy Telemetry Button */}
-          <button
-            onClick={() => setShowTelemetryPanel(true)}
-            className="btn-secondary"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}
-            title="Open Economy Telemetry Terminal"
-          >
-            <CircleDollarSign size={16} /> Economy Telemetry
-          </button>
-
           {/* Auto-Proceed Toggle */}
           <div
             onClick={() => setAutoProceed(p => !p)}

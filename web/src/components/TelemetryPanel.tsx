@@ -276,7 +276,7 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.72)',
+    backgroundColor: 'var(--panel-dark-50, rgba(0,0,0,0.72))',
     backdropFilter: 'blur(4px)',
   };
 
@@ -285,10 +285,10 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
     maxWidth: 960,
     maxHeight: '92vh',
     overflowY: 'auto',
-    background: 'rgba(15,20,35,0.97)',
-    border: '1px solid rgba(99,102,241,0.35)',
+    background: 'var(--bg-color)',
+    border: '1px solid var(--glass-border)',
     borderRadius: 16,
-    boxShadow: '0 24px 80px rgba(0,0,0,0.6)',
+    boxShadow: '0 24px 80px var(--panel-dark-10, rgba(0,0,0,0.3))',
     backdropFilter: 'blur(16px)',
     padding: '0 0 24px 0',
   };
@@ -298,10 +298,10 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '20px 28px 16px',
-    borderBottom: '1px solid rgba(255,255,255,0.08)',
+    borderBottom: '1px solid var(--glass-border)',
     position: 'sticky',
     top: 0,
-    background: 'rgba(15,20,35,0.97)',
+    background: 'var(--bg-color)',
     zIndex: 1,
     borderRadius: '16px 16px 0 0',
   };
@@ -315,8 +315,8 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
   };
 
   const closeBtnStyle: React.CSSProperties = {
-    background: 'rgba(255,255,255,0.08)',
-    border: '1px solid rgba(255,255,255,0.15)',
+    background: 'var(--glass-bg)',
+    border: '1px solid var(--glass-border)',
     borderRadius: 8,
     color: 'var(--text-main)',
     cursor: 'pointer',
@@ -331,8 +331,8 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
 
   const sectionStyle: React.CSSProperties = {
     margin: '20px 24px 0',
-    background: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.07)',
+    background: 'var(--glass-bg)',
+    border: '1px solid var(--glass-border)',
     borderRadius: 10,
     padding: '16px 16px 8px',
   };
@@ -340,7 +340,7 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
   const sectionTitleStyle: React.CSSProperties = {
     fontSize: '0.78rem',
     fontWeight: 700,
-    color: 'rgba(255,255,255,0.45)',
+    color: 'var(--text-dim)',
     textTransform: 'uppercase',
     letterSpacing: '0.08em',
     marginBottom: 12,
@@ -355,9 +355,9 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
   const thStyle: React.CSSProperties = {
     textAlign: 'left',
     padding: '6px 10px',
-    color: 'rgba(255,255,255,0.45)',
+    color: 'var(--text-dim)',
     fontWeight: 600,
-    borderBottom: '1px solid rgba(255,255,255,0.08)',
+    borderBottom: '1px solid var(--glass-border)',
     fontSize: '0.72rem',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
@@ -374,11 +374,11 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
   const footerStyle: React.CSSProperties = {
     margin: '20px 24px 0',
     padding: '10px 14px',
-    background: 'rgba(99,102,241,0.08)',
-    border: '1px solid rgba(99,102,241,0.2)',
+    background: 'var(--glass-bg)',
+    border: '1px solid var(--glass-border)',
     borderRadius: 8,
     fontSize: '0.72rem',
-    color: 'rgba(255,255,255,0.4)',
+    color: 'var(--text-dim)',
     textAlign: 'center',
     letterSpacing: '0.01em',
   };
@@ -391,12 +391,12 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <h2 style={titleStyle}>📊 Economy Telemetry Terminal</h2>
             {/* Tab bar */}
-            <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 6, padding: 3 }}>
+            <div style={{ display: 'flex', gap: 4, background: 'var(--glass-bg)', borderRadius: 6, padding: 3 }}>
               {(['classic', 'economic'] as const).map(tab => (
                 <button key={tab}
                   onClick={() => setActiveTab(tab)}
                   style={{
-                    background: activeTab === tab ? 'rgba(99,102,241,0.4)' : 'transparent',
+                    background: activeTab === tab ? 'var(--primary-glow)' : 'transparent',
                     border: 'none', borderRadius: 4, color: 'var(--text-main)',
                     cursor: 'pointer', padding: '4px 14px', fontSize: '0.8rem', fontWeight: 600,
                     textTransform: 'capitalize',
@@ -410,7 +410,7 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
             <button
               onClick={refresh}
               disabled={loading}
-              style={{ background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.4)', color: 'rgba(255,255,255,0.8)', borderRadius: 6, padding: '4px 12px', fontSize: '0.8rem', cursor: loading ? 'not-allowed' : 'pointer' }}
+              style={{ background: 'var(--primary-glow)', border: '1px solid var(--primary)', color: 'var(--text-main)', borderRadius: 6, padding: '4px 12px', fontSize: '0.8rem', cursor: loading ? 'not-allowed' : 'pointer' }}
             >
               {loading ? '...' : 'Refresh'}
             </button>
@@ -424,11 +424,11 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
             <EconomicDashboard data={macroHistory ?? []} />
           </div>
         ) : loading ? (
-          <div style={{ padding: '48px 28px', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>
+          <div style={{ padding: '48px 28px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
             ⏳ Loading telemetry data...
           </div>
         ) : error || logs.length === 0 ? (
-          <div style={{ padding: '48px 28px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '0.88rem' }}>
+          <div style={{ padding: '48px 28px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.88rem' }}>
             No telemetry data available yet. Run a simulation to generate data.
           </div>
         ) : (

@@ -21,8 +21,8 @@ const CHART_VIOLET  = 'var(--chart-violet)';
 
 const sectionStyle: React.CSSProperties = {
   margin: '0 0 20px 0',
-  background: 'rgba(255,255,255,0.03)',
-  border: '1px solid rgba(255,255,255,0.07)',
+  background: 'var(--glass-bg)',
+  border: '1px solid var(--glass-border)',
   borderRadius: 10,
   padding: '16px 16px 8px',
 };
@@ -30,14 +30,14 @@ const sectionStyle: React.CSSProperties = {
 const sectionTitleStyle: React.CSSProperties = {
   fontSize: '0.78rem',
   fontWeight: 700,
-  color: 'rgba(255,255,255,0.45)',
+  color: 'var(--text-dim)',
   textTransform: 'uppercase',
   letterSpacing: '0.08em',
   marginBottom: 12,
 };
 
 const emptyStateStyle: React.CSSProperties = {
-  color: 'rgba(255,255,255,0.3)',
+  color: 'var(--text-dim)',
   fontSize: '0.82rem',
   textAlign: 'center',
   padding: '24px 0 16px',
@@ -76,7 +76,7 @@ function CpiChart({ data }: { data: TelemetryLog[] }) {
     return (
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>CPI — Laspeyres Price Index</div>
-        <div style={emptyStateStyle}>No CPI data — requires Phase 4 (Inflation Loop)</div>
+        <div style={emptyStateStyle}>No CPI data — inflation tracking is not enabled for this session</div>
       </div>
     );
   }
@@ -98,11 +98,11 @@ function CpiChart({ data }: { data: TelemetryLog[] }) {
       <div style={sectionTitleStyle}>CPI — Laspeyres Price Index</div>
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-          <XAxis dataKey="iterationNumber" label={{ value: 'Iteration', position: 'insideBottomRight', offset: -4, fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} />
-          <YAxis tickFormatter={v => v.toFixed(1)} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} width={48} />
-          <Tooltip contentStyle={{ background: 'rgba(15,20,35,0.97)', border: '1px solid rgba(99,102,241,0.4)', borderRadius: 8, fontSize: '0.78rem' }} labelStyle={{ color: 'rgba(255,255,255,0.6)' }} />
-          <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)' }} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
+          <XAxis dataKey="iterationNumber" label={{ value: 'Iteration', position: 'insideBottomRight', offset: -4, fill: 'var(--text-dim)', fontSize: 10 }} tick={{ fill: 'var(--text-dim)', fontSize: 10 }} />
+          <YAxis tickFormatter={v => v.toFixed(1)} tick={{ fill: 'var(--text-dim)', fontSize: 10 }} width={48} />
+          <Tooltip contentStyle={{ background: 'var(--bg-color)', border: '1px solid var(--primary)', borderRadius: 8, fontSize: '0.78rem', color: 'var(--text-main)' }} labelStyle={{ color: 'var(--text-muted)' }} />
+          <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} />
           <Line type="monotone" dataKey="cpi" stroke={CHART_BLUE} strokeWidth={2} dot={false} name="CPI" />
           <Line type="monotone" dataKey="trend" stroke={CHART_ORANGE} strokeWidth={1.5} strokeDasharray="5 3" dot={false} name="Trend (EWMA)" />
         </LineChart>
@@ -120,7 +120,7 @@ function MoneySupplyChart({ data }: { data: TelemetryLog[] }) {
     return (
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Money Supply — M0 / M1 / M2</div>
-        <div style={emptyStateStyle}>No banking data — requires Phase 1 (Banking Foundation)</div>
+        <div style={emptyStateStyle}>No banking data — banking is not enabled for this session</div>
       </div>
     );
   }
@@ -139,11 +139,11 @@ function MoneySupplyChart({ data }: { data: TelemetryLog[] }) {
       <div style={sectionTitleStyle}>Money Supply — M0 / M1 / M2</div>
       <ResponsiveContainer width="100%" height={200}>
         <AreaChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-          <XAxis dataKey="iterationNumber" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} />
-          <YAxis tickFormatter={fmtK} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} width={48} />
-          <Tooltip contentStyle={{ background: 'rgba(15,20,35,0.97)', border: '1px solid rgba(99,102,241,0.4)', borderRadius: 8, fontSize: '0.78rem' }} labelStyle={{ color: 'rgba(255,255,255,0.6)' }} formatter={(v) => fmtK(Number(v))} />
-          <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)' }} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
+          <XAxis dataKey="iterationNumber" tick={{ fill: 'var(--text-dim)', fontSize: 10 }} />
+          <YAxis tickFormatter={fmtK} tick={{ fill: 'var(--text-dim)', fontSize: 10 }} width={48} />
+          <Tooltip contentStyle={{ background: 'var(--bg-color)', border: '1px solid var(--primary)', borderRadius: 8, fontSize: '0.78rem', color: 'var(--text-main)' }} labelStyle={{ color: 'var(--text-muted)' }} formatter={(v) => fmtK(Number(v))} />
+          <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} />
           <Area type="monotone" dataKey="m0" stackId="money" stroke={CHART_BLUE} fill={CHART_BLUE} fillOpacity={0.25} name="M0 (Base Money)" />
           <Area type="monotone" dataKey="loanExpansion" stackId="money" stroke={CHART_GREEN} fill={CHART_GREEN} fillOpacity={0.4} name="Loan Expansion (M1-M0)" />
           {hasM2 && (
@@ -164,7 +164,7 @@ function FiscalChart({ data }: { data: TelemetryLog[] }) {
     return (
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Fiscal Budget — Spending & Public Goods Quality</div>
-        <div style={emptyStateStyle}>No fiscal data — requires Phase 3 (Fiscal Policy)</div>
+        <div style={emptyStateStyle}>No fiscal data — fiscal policy is not enabled for this session</div>
       </div>
     );
   }
@@ -181,24 +181,24 @@ function FiscalChart({ data }: { data: TelemetryLog[] }) {
     <div style={sectionStyle}>
       <div style={sectionTitleStyle}>
         Fiscal Budget — Spending & Public Goods Quality
-        <span style={{ marginLeft: 8, fontSize: '0.68rem', fontWeight: 400, textTransform: 'none', color: 'rgba(255,255,255,0.3)' }}>
+        <span style={{ marginLeft: 8, fontSize: '0.68rem', fontWeight: 400, textTransform: 'none', color: 'var(--text-dim)' }}>
           (latest iteration; quality scaled 0–100)
         </span>
       </div>
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-          <XAxis dataKey="name" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} />
-          <YAxis tickFormatter={fmtK} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} width={48} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
+          <XAxis dataKey="name" tick={{ fill: 'var(--text-dim)', fontSize: 10 }} />
+          <YAxis tickFormatter={fmtK} tick={{ fill: 'var(--text-dim)', fontSize: 10 }} width={48} />
           <Tooltip
-            contentStyle={{ background: 'rgba(15,20,35,0.97)', border: '1px solid rgba(99,102,241,0.4)', borderRadius: 8, fontSize: '0.78rem' }}
-            labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
+            contentStyle={{ background: 'var(--bg-color)', border: '1px solid var(--primary)', borderRadius: 8, fontSize: '0.78rem', color: 'var(--text-main)' }}
+            labelStyle={{ color: 'var(--text-muted)' }}
             formatter={(v, name) => [
               name === 'quality' ? `${Number(v).toFixed(1)} / 100` : fmtK(Number(v)),
               name === 'quality' ? 'Quality (0–100)' : 'Spending',
             ]}
           />
-          <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)' }} />
+          <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} />
           <Bar dataKey="spending" fill={CHART_BLUE} name="Spending" radius={[3, 3, 0, 0]} />
           <Bar dataKey="quality" fill={CHART_ORANGE} name="Quality (scaled 0-100)" radius={[3, 3, 0, 0]} />
         </BarChart>
@@ -207,7 +207,7 @@ function FiscalChart({ data }: { data: TelemetryLog[] }) {
         {FISCAL_CATEGORIES.map(cat => (
           <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div style={{ width: 8, height: 8, borderRadius: 2, background: FISCAL_COLORS[cat] }} />
-            <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.4)', textTransform: 'capitalize' }}>{cat}</span>
+            <span style={{ fontSize: '0.68rem', color: 'var(--text-dim)', textTransform: 'capitalize' }}>{cat}</span>
           </div>
         ))}
       </div>
@@ -227,7 +227,7 @@ function BondYieldChart({ data }: { data: TelemetryLog[] }) {
     return (
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Bond Yields — Government & Corporate</div>
-        <div style={emptyStateStyle}>No bonds issued yet</div>
+        <div style={emptyStateStyle}>No bond data — capital markets are not enabled or no bonds have been issued</div>
       </div>
     );
   }
@@ -245,15 +245,15 @@ function BondYieldChart({ data }: { data: TelemetryLog[] }) {
       <div style={sectionTitleStyle}>Bond Yields — Government & Corporate</div>
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-          <XAxis dataKey="iterationNumber" label={{ value: 'Iteration', position: 'insideBottomRight', offset: -4, fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} />
-          <YAxis tickFormatter={yieldPct} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} width={52} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
+          <XAxis dataKey="iterationNumber" label={{ value: 'Iteration', position: 'insideBottomRight', offset: -4, fill: 'var(--text-dim)', fontSize: 10 }} tick={{ fill: 'var(--text-dim)', fontSize: 10 }} />
+          <YAxis tickFormatter={yieldPct} tick={{ fill: 'var(--text-dim)', fontSize: 10 }} width={52} />
           <Tooltip
-            contentStyle={{ background: 'rgba(15,20,35,0.97)', border: '1px solid rgba(99,102,241,0.4)', borderRadius: 8, fontSize: '0.78rem' }}
-            labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
+            contentStyle={{ background: 'var(--bg-color)', border: '1px solid var(--primary)', borderRadius: 8, fontSize: '0.78rem', color: 'var(--text-main)' }}
+            labelStyle={{ color: 'var(--text-muted)' }}
             formatter={(v) => [yieldPct(Number(v))]}
           />
-          <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)' }} />
+          <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} />
           <Line type="monotone" dataKey="governmentYield" stroke={CHART_BLUE} strokeWidth={2} dot={false} name="Gov Yield" connectNulls />
           <Line type="monotone" dataKey="corporateYield" stroke={CHART_ORANGE} strokeWidth={2} dot={false} name="Corp Yield" connectNulls />
         </LineChart>
