@@ -432,14 +432,28 @@ export default function EconomyTab({
           >
             {/* Section header */}
             <button
-              onClick={() => isVisible && toggleSection(section)}
+              onClick={() => {
+                if (isVisible) {
+                  toggleSection(section);
+                } else {
+                  // Enable the feature when clicking the disabled section header
+                  const flagMap: Record<Section, keyof EconomyConfig> = {
+                    banking: 'bankingEnabled',
+                    fiscal: 'fiscalEnabled',
+                    capitalMarkets: 'capitalMarketsEnabled',
+                    inflation: 'inflationEnabled',
+                  };
+                  onConfigChange({ [flagMap[section]]: true } as Partial<EconomyConfig>);
+                  setOpenSections(prev => ({ ...prev, [section]: true }));
+                }
+              }}
               style={{
                 width: '100%',
                 padding: '0.75rem 1rem',
                 background: 'var(--panel-alpha-05)',
                 border: 'none',
                 color: 'var(--color-bright)',
-                cursor: isVisible ? 'pointer' : 'not-allowed',
+                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
@@ -449,11 +463,11 @@ export default function EconomyTab({
                 textAlign: 'left' as const,
               }}
             >
-              {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              {isOpen && isVisible ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
               {SECTION_LABELS[section]}
               {!isVisible && (
                 <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 400 }}>
-                  Enable feature to configure
+                  Click to enable
                 </span>
               )}
             </button>
@@ -527,17 +541,17 @@ export default function EconomyTab({
                                 bottom: '130%',
                                 left: '50%',
                                 transform: 'translateX(-50%)',
-                                background: 'var(--panel-dark, #1a1a2e)',
+                                background: 'var(--bg-color)',
                                 border: '1px solid var(--glass-border)',
                                 borderRadius: '6px',
                                 padding: '0.5rem 0.75rem',
                                 fontSize: '0.78rem',
-                                color: 'var(--text-muted)',
+                                color: 'var(--text-main)',
                                 maxWidth: '280px',
                                 whiteSpace: 'normal',
                                 zIndex: 100,
                                 pointerEvents: 'none',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                               } as React.CSSProperties}>
                                 {meta.tooltip}
                               </div>

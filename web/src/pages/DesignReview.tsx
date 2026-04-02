@@ -34,8 +34,6 @@ const DesignReview = () => {
   const [lockedVariables, setLockedVariables] = useState<string[]>([]);
   // agentStatEdits: keyed by agentId, stores overridden stat values while the row is being edited
   const [agentStatEdits, setAgentStatEdits] = useState<Record<string, Record<string, number>>>({});
-  const [budgetAllocation, setBudgetAllocation] = useState<BudgetAllocation>({ ...DEFAULT_BUDGET_ALLOCATION });
-  const [fiscalEnabled, setFiscalEnabled] = useState(false);
 
   const {
     session,
@@ -75,13 +73,6 @@ const DesignReview = () => {
     }
     // Sync locked variables from config
     setLockedVariables(session.config?.lockedVariables ?? []);
-    // Sync fiscal config
-    if ((session.config as unknown as Record<string, unknown> | null | undefined)?.economyConfig) {
-      const econCfg = (session.config as unknown as Record<string, unknown>).economyConfig as Record<string, unknown> | undefined;
-      if (econCfg?.fiscalEnabled) {
-        setFiscalEnabled(true);
-      }
-    }
   }, [session?.stage, session?.config?.lockedVariables, loading]);
 
   useEffect(() => {
@@ -116,34 +107,8 @@ const DesignReview = () => {
     await sendRefinementMessage(id, text);
   };
 
-  const handleBudgetChange = (category: keyof BudgetAllocation, value: number) => {
-    const clamped = Math.max(0, Math.min(1, value));
-    const others = (['infrastructure', 'education', 'defense', 'welfare'] as const).filter(k => k !== category);
-    const remaining = 1 - clamped;
-    const otherTotal = others.reduce((sum, k) => sum + budgetAllocation[k], 0);
-    const newAlloc = { ...budgetAllocation, [category]: clamped };
-    if (otherTotal > 0) {
-      for (const k of others) {
-        newAlloc[k] = (budgetAllocation[k] / otherTotal) * remaining;
-      }
-    } else {
-      for (const k of others) {
-        newAlloc[k] = remaining / others.length;
-      }
-    }
-    setBudgetAllocation(newAlloc);
-  };
-
-  const handleSaveBudget = async () => {
-    if (!id || !fiscalEnabled) return;
-    await saveBudgetAllocation(id, budgetAllocation);
-  };
-
   const handleStartSimulation = async () => {
     if (!id) return;
-    if (fiscalEnabled) {
-      await saveBudgetAllocation(id, budgetAllocation);
-    }
     await startSimulation(id, iterations);
     navigate(`/session/${id}/simulation`);
   };
@@ -497,65 +462,7 @@ const DesignReview = () => {
         </div>
       </div>
 
-      {/* Fiscal Policy Section */}
-      {!isPastDesign && (
-        <div className="glass-card" style={{ marginTop: '1.5rem', padding: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: fiscalEnabled ? '1.25rem' : 0 }}>
-            <h3 style={{ fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <SlidersHorizontal size={16} style={{ color: 'var(--primary)' }} />
-              Fiscal Policy
-            </h3>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: fiscalEnabled ? 'var(--success)' : 'var(--text-muted)', fontSize: '0.9rem' }}>
-              <input
-                type="checkbox"
-                checked={fiscalEnabled}
-                onChange={e => setFiscalEnabled(e.target.checked)}
-                style={{ accentColor: 'var(--success)', width: '16px', height: '16px' }}
-              />
-              Enable Fiscal Policy
-            </label>
-          </div>
-          {fiscalEnabled && (
-            <div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1rem' }}>
-                {(['infrastructure', 'education', 'defense', 'welfare'] as const).map(category => (
-                  <div key={category}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                      <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                        {category}
-                      </label>
-                      <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>
-                        {Math.round(budgetAllocation[category] * 100)}%
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={1}
-                      value={Math.round(budgetAllocation[category] * 100)}
-                      onChange={e => handleBudgetChange(category, Number(e.target.value) / 100)}
-                      style={{ width: '100%', accentColor: 'var(--primary)' }}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-                  Total: {Math.round((budgetAllocation.infrastructure + budgetAllocation.education + budgetAllocation.defense + budgetAllocation.welfare) * 100)}%
-                </span>
-                <button
-                  className="btn-secondary"
-                  onClick={handleSaveBudget}
-                  style={{ fontSize: '0.85rem', padding: '0.4rem 1rem' }}
-                >
-                  Save Budget
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Fiscal Policy section removed — now managed via EconomyTab */}
 
       {/* Bottom Action Bar */}
       <div className="glass-card" style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem' }}>
