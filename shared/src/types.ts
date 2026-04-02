@@ -310,6 +310,10 @@ export interface SessionExport {
   equityPositions?: EquityPosition[];
   /** Capital Markets: bond holdings (optional for backward compat) */
   bondHoldings?: BondHolding[];
+  /** Fiscal Policy: active budget allocation (optional for backward compat) */
+  fiscalBudget?: BudgetAllocation;
+  /** Fiscal Policy: public goods state history (optional for backward compat) */
+  publicGoodsState?: PublicGoodsState[];
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────

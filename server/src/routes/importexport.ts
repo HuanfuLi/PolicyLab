@@ -21,6 +21,7 @@ import {
   bankBalanceSheets,
 } from '../db/schema.js';
 import * as capitalMarketRepo from '../db/repos/capitalMarketRepo.js';
+import * as fiscalRepo from '../db/repos/fiscalRepo.js';
 import { v4 as uuidv4 } from 'uuid';
 import type { SessionExport } from '@policylab/shared';
 import { getSessionTelemetry } from '../orchestration/simulationRunner.js';
@@ -155,6 +156,15 @@ router.get('/:id/export', async (req, res) => {
     bondHoldings: (() => {
       const rows = capitalMarketRepo.getBondHoldingsBySession(id);
       return rows.length > 0 ? rows : undefined;
+    })(),
+    // Fiscal Policy tables (present only when session used fiscal policy)
+    fiscalBudget: (() => {
+      const budget = fiscalRepo.getActiveBudget(id);
+      return budget ?? undefined;
+    })(),
+    publicGoodsState: (() => {
+      const states = fiscalRepo.getPublicGoodsStateBySession(id);
+      return states.length > 0 ? states : undefined;
     })(),
   };
 
@@ -371,6 +381,30 @@ router.post('/import', async (req, res) => {
           id: uuidv4(),
           ownerAgentId: newOwnerId,
           issuerId: newIssuerId,
+          sessionId: newSessionId,
+        });
+      }
+    }
+
+    // Fiscal Policy: budget allocation (no agent ID remapping needed)
+    if (body.fiscalBudget) {
+      fiscalRepo.upsertBudget({
+        id: uuidv4(),
+        sessionId: newSessionId,
+        infrastructure: body.fiscalBudget.infrastructure,
+        education: body.fiscalBudget.education,
+        defense: body.fiscalBudget.defense,
+        welfare: body.fiscalBudget.welfare,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // Fiscal Policy: public goods state history
+    if (body.publicGoodsState && body.publicGoodsState.length > 0) {
+      for (const state of body.publicGoodsState) {
+        fiscalRepo.upsertPublicGoodsState({
+          ...state,
+          id: uuidv4(),
           sessionId: newSessionId,
         });
       }
