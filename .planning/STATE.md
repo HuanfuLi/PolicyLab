@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 03-fiscal-policy/03-01-PLAN.md
-last_updated: "2026-04-02T03:31:27.184Z"
+stopped_at: Completed 03-fiscal-policy/03-02-PLAN.md
+last_updated: "2026-04-02T03:36:26.026Z"
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 14
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 03 (fiscal-policy) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Plan: 2 of 3
 | Phase 02-capital-markets P02 | 5 | 2 tasks | 3 files |
 | Phase 02-capital-markets P03 | 25 | 2 tasks | 5 files |
 | Phase 03-fiscal-policy P01 | 18 | 2 tasks | 4 files |
+| Phase 03-fiscal-policy P02 | 12 | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,8 @@ Recent decisions affecting current work:
 - [Phase 03-01]: EconomyConfig fiscal fields all optional — fiscalEnabled remains absent in DEFAULT_ECONOMY_CONFIG so existing sessions receive zero behavioral change
 - [Phase 03-01]: Budget allocation stored one-per-session (design-time config per FISC-01), not per-iteration — fiscal engine reads latest via getActiveBudget
 - [Phase 03-01]: Public goods quality stored per-iteration to enable trend analysis and export/import; getPublicGoodsState returns latest row (highest iterationNumber)
+- [Phase 03-02]: All budget categories distribute fiat to agents equally (SFC-compliant); quality scores are side effects of spending, not stores of value
+- [Phase 03-02]: Quality gain scale factor 0.264 calibrated: 25 fiat spending (10% of 1000 treasury, 25% alloc) yields ~2.5 quality points
 
 ### Roadmap Evolution
 
@@ -98,6 +101,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T03:31:27.179Z
-Stopped at: Completed 03-fiscal-policy/03-01-PLAN.md
+Last session: 2026-04-02T03:36:26.021Z
+Stopped at: Completed 03-fiscal-policy/03-02-PLAN.md
 Resume file: None
