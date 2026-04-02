@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-04-02T17:16:09.578Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 06-03-PLAN.md tasks 1-2, checkpoint task 3 pending human verification
+last_updated: "2026-04-02T17:23:58.747Z"
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 20
-  completed_plans: 16
+  completed_plans: 19
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 06 (scenario-entry) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 
 ## Performance Metrics
 
@@ -61,6 +61,8 @@ Plan: 3 of 4
 | Phase 05-economic-dashboard P01 | 527361 | 2 tasks | 4 files |
 | Phase 06-scenario-entry P00 | 2 | 1 tasks | 1 files |
 | Phase 06-scenario-entry P02 | 15 | 2 tasks | 4 files |
+| Phase 06-scenario-entry P01 | 15 | 2 tasks | 4 files |
+| Phase 06-scenario-entry P03 | 12 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -104,6 +106,10 @@ Recent decisions affecting current work:
 - [Phase 06-00]: Wave 0 test scaffold: placeholder tests created before implementation plans run — all 8 pass green; Plans 01-03 strengthen in-place
 - [Phase 06-scenario-entry]: Fork config uses conditional spread to preserve economyConfig/budgetAllocation only when present — avoids polluting new sessions with stale defaults
 - [Phase 06-scenario-entry]: computeParamDiffs is deterministic (no LLM) — structural comparison of EconomyConfig keys for comparison page diff display (D-08)
+- [Phase 06-01]: EconomyTab receives economyConfig and budgetAllocation as props from DesignReview — no direct store coupling in the component
+- [Phase 06-01]: Soft-limit warnings shown as inline dialog instead of window.confirm for better UX and testability
+- [Phase 06-scenario-entry]: SessionSummaryInput telemetry fields optional — sessions without economic config still produce valid prompts, just without telemetry section
+- [Phase 06-scenario-entry]: ConfigDiffSection placed before dimension rows — user sees what changed before how outcomes differed, reinforcing A/B causality
 
 ### Roadmap Evolution
 
@@ -121,6 +127,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T17:16:09.573Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-04-02T17:23:58.742Z
+Stopped at: Completed 06-03-PLAN.md tasks 1-2, checkpoint task 3 pending human verification
 Resume file: None
