@@ -95,9 +95,9 @@ Plans:
   2. An M1/M2 area chart shows money supply expansion and contraction over the simulation history; M0 baseline is visually distinct from M1 and M2 bands
   3. A fiscal budget bar chart shows per-category spending allocation and the current public goods quality score for each category
   4. A bond yield line chart tracks government and corporate bond coupon yields over time; the chart is absent (or shows empty state) when no bonds have been issued
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
-- [ ] 05-01-PLAN.md — Extend TelemetryLog shared type with Phase 3-4 fields; add macroHistory to simulationStore; install recharts
+- [x] 05-01-PLAN.md — Extend TelemetryLog shared type with Phase 3-4 fields; add macroHistory to simulationStore; install recharts
 - [ ] 05-02-PLAN.md — Build EconomicDashboard component (4 recharts panels); wire into TelemetryPanel tabs and Simulation page
 **UI hint**: yes
 
@@ -129,5 +129,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Capital Markets | 3/3 | Complete | - |
 | 3. Fiscal Policy | 5/5 | Complete   | 2026-04-02 |
 | 4. Inflation Loop | 0/3 | Not started | - |
-| 5. Economic Dashboard | 0/2 | Not started | - |
+| 5. Economic Dashboard | 1/2 | In Progress|  |
 | 6. Scenario Entry | 0/3 | Not started | - |
