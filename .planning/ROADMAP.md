@@ -48,7 +48,7 @@ Plans:
   5. All equity positions and bond holdings survive session pause/resume and appear in session export
 **Plans:** 3 plans
 Plans:
-- [ ] 02-01-PLAN.md — Types, DB schema, migration, ActionCodes, skillSystem for capital markets
+- [x] 02-01-PLAN.md — Types, DB schema, migration, ActionCodes, skillSystem for capital markets
 - [ ] 02-02-PLAN.md — Capital market engine (pure deterministic) + repository CRUD + unit tests
 - [ ] 02-03-PLAN.md — Physics engine cases, simulationRunner wiring, prompts, export/import, SFC integration tests
 **UI hint**: yes
