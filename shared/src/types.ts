@@ -306,6 +306,10 @@ export interface SessionExport {
   loanContracts?: LoanContract[];
   /** Banking Foundation: bank balance sheet snapshots (optional for backward compat) */
   bankBalanceSheets?: BankBalanceSheet[];
+  /** Capital Markets: equity positions (optional for backward compat) */
+  equityPositions?: EquityPosition[];
+  /** Capital Markets: bond holdings (optional for backward compat) */
+  bondHoldings?: BondHolding[];
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────
@@ -389,6 +393,9 @@ export interface EconomyConfig {
   capitalMarketsEnabled?: boolean;
   fiscalEnabled?: boolean;
   inflationEnabled?: boolean;
+  dividendPayoutRatio?: number;    // fraction of enterprise owner wealth distributed per iteration, e.g. 0.05
+  govBondCouponRate?: number;      // per-iteration coupon rate for gov bonds, e.g. 0.008
+  govBondTermIterations?: number;  // default bond maturity term in iterations, e.g. 10
 }
 
 export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
@@ -438,6 +445,33 @@ export interface BankBalanceSheet {
   depositLiabilities: number;
   equity: number;
   timestamp: string;
+}
+
+// ── v1.0 Capital Markets Types (Phase 2) ─────────────────────────────────────
+
+export interface EquityPosition {
+  id: string;
+  sessionId: string;
+  ownerAgentId: string;
+  /** agent.id of the enterprise owner — NOT the ephemeral in-memory enterpriseId */
+  enterpriseOwnerId: string;
+  sharesHeld: number;
+  averageCostBasis: number;
+  lastUpdated: number;  // iteration number
+}
+
+export interface BondHolding {
+  id: string;
+  sessionId: string;
+  ownerAgentId: string;
+  /** 'treasury' for government bonds; agent.id of enterprise owner for corporate bonds */
+  issuerId: string;
+  bondType: 'government' | 'corporate';
+  faceValue: number;
+  couponRate: number;       // per-iteration rate
+  maturityIteration: number;
+  purchaseIteration: number;
+  status: 'active' | 'matured' | 'defaulted';
 }
 
 /**
