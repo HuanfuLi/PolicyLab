@@ -36,8 +36,8 @@ Requirements for the Real Economy Engine milestone. Each maps to roadmap phases.
 
 ### Inflation
 
-- [ ] **INFL-01**: CPI calculated per iteration from AMM/market price data using weighted basket
-- [ ] **INFL-02**: M1 growth rate feeds back into price levels via AMM reserve scaling
+- [x] **INFL-01**: CPI calculated per iteration from AMM/market price data using weighted basket
+- [x] **INFL-02**: M1 growth rate feeds back into price levels via AMM reserve scaling
 - [ ] **INFL-03**: Inflation expectations injected into agent cognition prompts with CPI trend data
 - [ ] **INFL-04**: Agents adapt behavior in response to inflation (hoarding, wage demands, saving shifts)
 
@@ -112,8 +112,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FISC-02 | Phase 3 | Complete |
 | FISC-03 | Phase 3 | Complete |
 | FISC-04 | Phase 3 | Complete |
-| INFL-01 | Phase 4 | Pending |
-| INFL-02 | Phase 4 | Pending |
+| INFL-01 | Phase 4 | Complete |
+| INFL-02 | Phase 4 | Complete |
 | INFL-03 | Phase 4 | Pending |
 | INFL-04 | Phase 4 | Pending |
 | BANK-07 | Phase 4 | Pending |

@@ -82,7 +82,7 @@ Plans:
   4. Citizen agent prompts include a concise inflation context block (current CPI, 3-iteration trend, expectation signal); in a high-inflation session, agents demonstrably shift toward hoarding, wage demands, or accelerated purchases within their action choices
 **Plans:** 3 plans
 Plans:
-- [ ] 04-01-PLAN.md — Types, DB schema, macroSnapshotRepo, inflationEngine pure function (CPI + M1 blend + AMM factor)
+- [x] 04-01-PLAN.md — Types, DB schema, macroSnapshotRepo, inflationEngine pure function (CPI + M1 blend + AMM factor)
 - [ ] 04-02-PLAN.md — Central bank action codes (SET_RESERVE_RATIO, SET_BASE_RATE), physics engine resolution with clamping
 - [ ] 04-03-PLAN.md — SimulationRunner inflation tick, AMM feedback, cognitive injection, prompts, export/import, SFC tests
 
