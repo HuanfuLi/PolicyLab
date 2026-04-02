@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Agent, Iteration, IterationStats } from '@policylab/shared';
+import type { Agent, Iteration, IterationStats, TelemetryLog } from '@policylab/shared';
 
 // SSE event shapes mirroring server's SimulationEvent union
 type SSEEvent =
@@ -69,6 +69,9 @@ interface SimulationStore {
   // Stats history
   statsHistory: IterationStats[];
 
+  /** Per-iteration macro telemetry snapshots — populated from loadHistory and SSE */
+  macroHistory: TelemetryLog[];
+
   // Agents (loaded from API)
   agents: Agent[];
 
@@ -81,6 +84,7 @@ interface SimulationStore {
   // Actions
   loadAgents: (sessionId: string) => Promise<void>;
   loadHistory: (sessionId: string) => Promise<void>;
+  loadMacroHistory: (sessionId: string) => Promise<void>;
   loadIntentHistory: (sessionId: string) => Promise<void>;
   connectSSE: (sessionId: string) => () => void;
   pause: (sessionId: string) => Promise<void>;
@@ -104,6 +108,7 @@ const initialState = {
   pendingActionCodes: {} as Record<string, { actionCode: string; actionTarget: string | null; actions: ActionQueueRecord[] }>,
   agentIntentHistory: {} as Record<string, AgentIntentRecord[]>,
   statsHistory: [] as IterationStats[],
+  macroHistory: [] as TelemetryLog[],
   agents: [] as Agent[],
   finalReport: null as string | null,
   error: null as string | null,
@@ -112,7 +117,7 @@ const initialState = {
 export const useSimulationStore = create<SimulationStore>((set, get) => ({
   ...initialState,
 
-  reset: () => set(initialState),
+  reset: () => set({ ...initialState, macroHistory: [] as TelemetryLog[] }),
 
   loadAgents: async (sessionId: string) => {
     try {
@@ -146,6 +151,16 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
         statsHistory,
         currentIteration: iters[iters.length - 1].number,
       });
+      get().loadMacroHistory(sessionId);
+    } catch { /* ignore */ }
+  },
+
+  loadMacroHistory: async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/simulate/telemetry`);
+      if (!res.ok) return;
+      const data = await res.json() as TelemetryLog[];
+      set({ macroHistory: data ?? [] });
     } catch { /* ignore */ }
   },
 
@@ -196,13 +211,14 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
 
       const batch = buffer.splice(0);
       let needAgentReload = false;
+      let needMacroReload = false;
 
       set(state => {
         // Clone mutable state we'll update across the batch
         let { isRunning, isPaused, isComplete, currentIteration, totalIterations,
           lastSeenId,
           pendingIntents, pendingActionCodes, agentIntentHistory,
-          feed, statsHistory, finalReport, error } = state;
+          feed, statsHistory, macroHistory, finalReport, error } = state;
 
         // Process as mutable copies to avoid intermediate object allocations
         feed = [...feed];
@@ -282,6 +298,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
               statsHistory = [...statsHistory, event.stats];
               pendingIntents = {};
               needAgentReload = true;
+              needMacroReload = true;
               break;
             }
 
@@ -325,12 +342,15 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
           isRunning, isPaused, isComplete, currentIteration, totalIterations,
           lastSeenId,
           pendingIntents, pendingActionCodes, agentIntentHistory,
-          feed, statsHistory, finalReport, error,
+          feed, statsHistory, macroHistory, finalReport, error,
         };
       });
 
       if (needAgentReload) {
         get().loadAgents(sessionId);
+      }
+      if (needMacroReload) {
+        get().loadMacroHistory(sessionId);
       }
     };
 

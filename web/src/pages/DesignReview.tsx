@@ -74,8 +74,8 @@ const DesignReview = () => {
     // Sync locked variables from config
     setLockedVariables(session.config?.lockedVariables ?? []);
     // Sync fiscal config
-    if ((session.config as Record<string, unknown> | null | undefined)?.economyConfig) {
-      const econCfg = (session.config as Record<string, unknown>).economyConfig as Record<string, unknown> | undefined;
+    if ((session.config as unknown as Record<string, unknown> | null | undefined)?.economyConfig) {
+      const econCfg = (session.config as unknown as Record<string, unknown>).economyConfig as Record<string, unknown> | undefined;
       if (econCfg?.fiscalEnabled) {
         setFiscalEnabled(true);
       }
