@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-04-02T05:06:52.466Z"
+stopped_at: "Completed 03-04-PLAN.md (paused at Task 3 checkpoint:human-verify)"
+last_updated: "2026-04-02T05:07:47.753Z"
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 16
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 03 (fiscal-policy) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Plan: 2 of 5
 | Phase 03-fiscal-policy P02 | 12 | 1 tasks | 2 files |
 | Phase 03-fiscal-policy P03 | 35 | 2 tasks | 7 files |
 | Phase 03-fiscal-policy P05 | 4 | 2 tasks | 2 files |
+| Phase 03-fiscal-policy P04 | 3 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,8 @@ Recent decisions affecting current work:
 - [Phase 03-03]: skillGainBonus applied in simulationRunner via processSkills skillGainMultiplier parameter — skill processing is runner responsibility, not physics engine
 - [Phase 03-fiscal-policy]: fiscalPublicGoodsQuality lifted to outer scope so iterTelemetry (built after fiscal block closes) can read quality values
 - [Phase 03-fiscal-policy]: Conditional spread ...(fiscalPublicGoodsQuality ? {...} : {}) keeps fields absent when fiscalEnabled is false
+- [Phase 03-fiscal-policy]: Budget validation (non-negative + sum=1.0) before DB writes — invalid PUT /config returns 400 with no side effects
+- [Phase 03-fiscal-policy]: economyConfig uses partial merge in PUT /config — callers patch individual fields without overwriting others
 
 ### Roadmap Evolution
 
@@ -107,6 +110,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T05:06:52.461Z
-Stopped at: Completed 03-05-PLAN.md
+Last session: 2026-04-02T05:07:47.747Z
+Stopped at: Completed 03-04-PLAN.md (paused at Task 3 checkpoint:human-verify)
 Resume file: None
