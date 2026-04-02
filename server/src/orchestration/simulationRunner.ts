@@ -38,6 +38,10 @@ import {
   type QueuedActionInstruction,
   type AgentIntent,
   type PostMortemInput,
+  type CitizenBankingContext,
+  type BankOperationsContext,
+  type CitizenCapitalMarketContext,
+  type CitizenFiscalContext,
 } from '../llm/prompts.js';
 import {
   parseResolutionStrict,
@@ -104,7 +108,7 @@ import { simulationManager } from './simulationManager.js';
  */
 export class SimulationPausedError extends Error {
   constructor(
-    public readonly reason: 'parse-failure' | 'context-overflow',
+    public readonly reason: 'parse-failure' | 'context-overflow' | 'provider-failure' | 'pause-requested',
     public readonly iterationNumber: number,
     public readonly agentId: string,
     public readonly agentName: string,
@@ -117,6 +121,8 @@ export class SimulationPausedError extends Error {
 
 /** Regex to identify context-length errors from LLM providers */
 const CONTEXT_OVERFLOW_RE = /context.?length|maximum.?context|maximum.?token|token.?limit|too.?long|exceeds.?context|context.?window|context_length_exceeded/i;
+/** Regex to identify connection/channel failures from local OpenAI-compatible providers. */
+const PROVIDER_CONNECTION_RE = /channel error|econnreset|econnrefused|socket hang up|network error|fetch failed|connection reset|etimedout|epipe/i;
 
 /** Agents per resolution batch when session is large */
 const MAPREDUCE_THRESHOLD = 30;
@@ -1480,9 +1486,35 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         ? (iterLatestMacro.m1 - iterPreviousMacro.m1) / iterPreviousMacro.m1
         : 0;
 
+      // Pre-compute banking/capital/fiscal context once per iteration (not per agent)
+      const iterBankingDeposits = iterEconomyConfig.bankingEnabled
+        ? bankingRepo.getDepositsBySession(sessionId) : [];
+      const iterBankingLoans = iterEconomyConfig.bankingEnabled
+        ? bankingRepo.getActiveLoans(sessionId) : [];
+      const iterBankAgents = iterEconomyConfig.bankingEnabled
+        ? agents.filter(a => a.type === 'bank' && a.isAlive) : [];
+      const iterEquityPositions = iterEconomyConfig.capitalMarketsEnabled
+        ? capitalMarketRepo.getEquityPositionsBySession(sessionId) : [];
+      const iterBondHoldings = iterEconomyConfig.capitalMarketsEnabled
+        ? capitalMarketRepo.getActiveBondHoldingsBySession(sessionId) : [];
+      const iterBudgetAllocation = iterEconomyConfig.fiscalEnabled
+        ? (fiscalRepo.getActiveBudget(sessionId) ?? DEFAULT_BUDGET_ALLOCATION) : null;
+      const iterPublicGoods = iterEconomyConfig.fiscalEnabled
+        ? fiscalRepo.getPublicGoodsState(sessionId) : null;
+
       // Single-pass structured intent collection (replaces two-step natural language → parser flow)
       const intentTasks = aliveAgents.map(agent => async (): Promise<AgentIntent> => {
         try {
+          if (simulationManager.isPauseRequested(sessionId) || simulationManager.isAbortRequested(sessionId)) {
+            throw new SimulationPausedError(
+              'provider-failure',
+              iterNum,
+              agent.id,
+              agent.name,
+              `Simulation paused: stop requested before launching "${agent.name}" at iteration ${iterNum}. Resume will retry this iteration.`,
+            );
+          }
+
           // Build economy context for the agent
           const econState = agentEconomyMap.get(agent.id);
           let economyContext: {
@@ -1528,6 +1560,85 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               }
             : undefined;
 
+          // Build per-agent banking context
+          let citizenBankingContext: CitizenBankingContext | undefined;
+          let bankOperationsContext: BankOperationsContext | undefined;
+          if (iterEconomyConfig.bankingEnabled) {
+            const deposit = iterBankingDeposits.find(d => d.ownerAgentId === agent.id);
+            const bankAgent = iterBankAgents[0]; // primary bank
+            if (deposit && bankAgent) {
+              const agentLoans = iterBankingLoans.filter(l => l.borrowerAgentId === agent.id && l.status === 'active');
+              citizenBankingContext = {
+                depositBalance: deposit.balance,
+                bankName: bankAgent.name,
+                outstandingLoans: agentLoans.map(l => ({
+                  remainingBalance: l.remainingBalance,
+                  dueAtIteration: l.dueAtIteration,
+                })),
+                iterationNumber: iterNum,
+              };
+            }
+            if (agent.type === 'bank') {
+              const bankDeposits = iterBankingDeposits.filter(d => d.bankAgentId === agent.id);
+              const totalDep = bankDeposits.reduce((sum, d) => sum + d.balance, 0);
+              const bankLoans = iterBankingLoans.filter(l => l.lenderAgentId === agent.id);
+              const totalLoans = bankLoans.reduce((sum, l) => sum + l.remainingBalance, 0);
+              const reserveReq = iterEconomyConfig.reserveRequirement ?? DEFAULT_ECONOMY_CONFIG.reserveRequirement;
+              bankOperationsContext = {
+                bankReserves: agent.currentStats.wealth,
+                totalDeposits: totalDep,
+                currentReserveRatio: totalDep > 0 ? agent.currentStats.wealth / totalDep : 1,
+                reserveRequirement: reserveReq,
+                activeLoans: bankLoans.length,
+                totalLoansOutstanding: totalLoans,
+                lendingCapacity: Math.max(0, agent.currentStats.wealth - totalDep * reserveReq),
+              };
+            }
+          }
+
+          // Build per-agent capital market context
+          let citizenCapitalMarketContext: CitizenCapitalMarketContext | undefined;
+          if (iterEconomyConfig.capitalMarketsEnabled) {
+            const agentEquity = iterEquityPositions.filter(p => p.ownerAgentId === agent.id && p.sharesHeld > 0);
+            const agentBonds = iterBondHoldings.filter(b => b.ownerAgentId === agent.id);
+            if (agentEquity.length > 0 || agentBonds.length > 0) {
+              citizenCapitalMarketContext = {
+                equityHoldings: agentEquity.map(p => {
+                  const owner = agents.find(a => a.id === p.enterpriseOwnerId);
+                  return {
+                    enterpriseOwnerName: owner?.name ?? 'Unknown',
+                    sharesHeld: p.sharesHeld,
+                    estimatedValue: p.sharesHeld * p.averageCostBasis,
+                  };
+                }),
+                bondHoldings: agentBonds.map(b => {
+                  const issuer = agents.find(a => a.id === b.issuerId);
+                  return {
+                    issuerName: issuer?.name ?? (b.bondType === 'government' ? 'Treasury' : 'Unknown'),
+                    bondType: b.bondType,
+                    faceValue: b.faceValue,
+                    couponRate: b.couponRate,
+                    iterationsToMaturity: b.maturityIteration - iterNum,
+                  };
+                }),
+              };
+            }
+          }
+
+          // Build fiscal context
+          const citizenFiscalContext: CitizenFiscalContext | undefined =
+            iterBudgetAllocation && iterPublicGoods
+              ? {
+                  budgetAllocation: iterBudgetAllocation,
+                  publicGoodsQuality: {
+                    infrastructure: iterPublicGoods.infrastructureQuality,
+                    education: iterPublicGoods.educationQuality,
+                    defense: iterPublicGoods.defenseQuality,
+                    welfare: iterPublicGoods.welfareQuality,
+                  },
+                }
+              : undefined;
+
           // Single-pass: one LLM call returns structured JSON with narrative + actionCode.
           // Phase 3: pass role-restricted action set so elite agents see privileged actions.
           const lastActionResults = sessionLastActionResults.get(sessionId)?.get(agent.id);
@@ -1541,10 +1652,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             lastActionResults,
             sessionPolicy.enforcement_level,
             sharedMarketIntelligenceBlock,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
+            citizenBankingContext,
+            bankOperationsContext,
+            citizenCapitalMarketContext,
+            citizenFiscalContext,
             inflationContext,
             centralBankContext,
           );
@@ -1566,6 +1677,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             },
             throwOnExhaustion: true,
             label: `intent:${agent.name}`,
+            shouldAbort: () =>
+              simulationManager.isPauseRequested(sessionId) ||
+              simulationManager.isAbortRequested(sessionId),
           });
 
           // Task 3: Validate actionCodes against the role-allowed set.
@@ -1592,7 +1706,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             return raw && String(raw).toLowerCase() !== 'null' ? String(raw).trim() || null : null;
           })();
 
-          return {
+          const intentRecord = {
             agentId: agent.id,
             agentName: agent.name,
             intent: parsed.intent.slice(0, 500),
@@ -1600,22 +1714,61 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             actions: validatedActions,
             primaryActionCode: validatedPrimary.actionCode,
             primaryActionTarget: validatedPrimaryTarget,
-            parseMethod: 'structured',
+            parseMethod: 'structured' as const,
           };
+
+          simulationManager.broadcast(sessionId, {
+            type: 'agent-intent',
+            agentId: intentRecord.agentId,
+            agentName: intentRecord.agentName,
+            intent: intentRecord.intent,
+            actionCode: intentRecord.primaryActionCode ?? 'NONE',
+            actionTarget: intentRecord.primaryActionTarget ?? null,
+            actions: intentRecord.actions?.map(action => ({
+              actionCode: action.actionCode,
+              parameters: action.parameters,
+            })) ?? [],
+          });
+
+          return intentRecord;
         } catch (err) {
+          if (err instanceof SimulationPausedError) {
+            throw err;
+          }
+
           // Wrap any error as SimulationPausedError so the outer loop can pause cleanly.
           // This prevents a single failing agent from silently dragging all others into REST.
           const msg = err instanceof Error ? err.message : String(err);
           const isCtx = CONTEXT_OVERFLOW_RE.test(msg);
+          const isProvider = PROVIDER_CONNECTION_RE.test(msg);
+
+          if (isProvider) {
+            simulationManager.pause(sessionId);
+          }
+
           throw new SimulationPausedError(
-            isCtx ? 'context-overflow' : 'parse-failure',
+            isCtx ? 'context-overflow' : isProvider ? 'provider-failure' : 'parse-failure',
             iterNum, agent.id, agent.name,
-            `Simulation paused: ${isCtx ? 'context length exceeded' : 'parser failure'} for "${agent.name}" at iteration ${iterNum}. Resume will retry this iteration.`,
+            `Simulation paused: ${isCtx ? 'context length exceeded' : isProvider ? 'provider connection failure' : 'parser failure'} for "${agent.name}" at iteration ${iterNum}. Resume will retry this iteration.`,
           );
         }
       });
 
-      const intents = await runWithConcurrency(intentTasks, settings.maxConcurrency);
+      const intents = await runWithConcurrency(intentTasks, settings.maxConcurrency, {
+        shouldContinue: () =>
+          !simulationManager.isPauseRequested(sessionId) &&
+          !simulationManager.isAbortRequested(sessionId),
+      });
+
+      if (simulationManager.isPauseRequested(sessionId)) {
+        throw new SimulationPausedError(
+          'pause-requested',
+          iterNum,
+          'system',
+          'system',
+          `Simulation paused: user pause requested during intent collection at iteration ${iterNum}. Resume will retry this iteration.`,
+        );
+      }
 
       // ── Phase Sheriff A: Legality detection ───────────────────────────────
       // Standard path (≤ MAPREDUCE_THRESHOLD): single global check against all intents.
@@ -1648,22 +1801,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         } catch (err) {
           console.warn('[SHERIFF] Legality check failed (non-fatal):', err instanceof Error ? err.message : err);
         }
-      }
-
-      // Broadcast intents to SSE clients
-      for (const intent of intents) {
-        simulationManager.broadcast(sessionId, {
-          type: 'agent-intent',
-          agentId: intent.agentId,
-          agentName: intent.agentName,
-          intent: intent.intent,
-          actionCode: intent.primaryActionCode ?? 'NONE',
-          actionTarget: intent.primaryActionTarget ?? null,
-          actions: intent.actions?.map(action => ({
-            actionCode: action.actionCode,
-            parameters: action.parameters,
-          })) ?? [],
-        });
       }
 
       // Enqueue intent rows for async batch flush (non-blocking)
@@ -1703,6 +1840,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             parse: parseGroupResolutionStrict,
             fallback: { groupSummary: 'The group continued their activities.', agentOutcomes: [], lifecycleEvents: [] },
             label: `groupResolution:${gi}`,
+            shouldAbort: () =>
+              simulationManager.isPauseRequested(sessionId) ||
+              simulationManager.isAbortRequested(sessionId),
           });
 
           // Phase D: per-group legality check runs concurrently with resolution.
@@ -1732,7 +1872,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           return { ...resolutionResult, illegalAgents };
         });
 
-        const groupResults = await runWithConcurrency(groupTasks, settings.maxConcurrency);
+        const groupResults = await runWithConcurrency(groupTasks, settings.maxConcurrency, {
+          shouldContinue: () =>
+            !simulationManager.isPauseRequested(sessionId) &&
+            !simulationManager.isAbortRequested(sessionId),
+        });
 
         // Populate illegalActionMap from per-group legality results (Phase D)
         for (const groupResult of groupResults) {
@@ -1756,6 +1900,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           parse: parseMergeResolutionStrict,
           fallback: { narrativeSummary: 'The iteration passed.', lifecycleEvents: [] },
           label: 'mergeResolution',
+          shouldAbort: () =>
+            simulationManager.isPauseRequested(sessionId) ||
+            simulationManager.isAbortRequested(sessionId),
         });
 
         resolution = {
@@ -1778,6 +1925,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           parse: parseResolutionStrict,
           fallback: { narrativeSummary: 'The iteration passed without major events.', agentOutcomes: [], lifecycleEvents: [] },
           label: 'resolution',
+          shouldAbort: () =>
+            simulationManager.isPauseRequested(sessionId) ||
+            simulationManager.isAbortRequested(sessionId),
         });
       }
 
