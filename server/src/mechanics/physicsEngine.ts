@@ -26,6 +26,7 @@ export interface PhysicsQueuedAction {
 export interface PhysicsInput {
   agent: Agent;
   actionCode: ActionCode;
+  actionParameters?: Record<string, unknown>;
   actionTarget?: string;    // target agentId for TRADE/STEAL/HELP/SUPPRESS
   allAgents: Agent[];
   /** Phase 1: Agent's skill matrix (optional — backward compatible). */
@@ -75,6 +76,8 @@ export interface PhysicsOutput {
   happinessDelta: number;
   cortisolDelta: number;
   dopamineDelta: number;
+  policyValue?: number;
+  policyKey?: 'reserveRequirement' | 'baseLoanInterestRate';
   /**
    * Step-by-step math explanation for every calculation in this result.
    * Populated by resolveAction — always present, may be empty for queue outputs.
@@ -123,6 +126,11 @@ function stealCalc(agent: Agent, allAgents: Agent[], targetId?: string): number 
 const clampDelta = (v: number): number =>
   Math.max(-physicsConfig.clampDeltaMax, Math.min(physicsConfig.clampDeltaMax, v));
 
+function getNumericActionValue(parameters?: Record<string, unknown>): number | null {
+  const value = Number(parameters?.value);
+  return Number.isFinite(value) ? value : null;
+}
+
 /**
  * Psychological clamping — prevents LLM hallucinations of high Happiness
  * during extreme physiological distress.
@@ -143,8 +151,23 @@ export function clampHappinessByPhysiology(
  * Returns a full math trace in result.trace for debugging and the Physics Laboratory UI.
  */
 export function resolveAction(input: PhysicsInput): PhysicsOutput {
-  const { agent, actionCode, actionTarget, allAgents, skills, inventory, economyDeltas, isSabotaged, isSuppressed, isFirstAction, fiscalMultipliers } = input;
+  const {
+    agent,
+    actionCode,
+    actionParameters,
+    actionTarget,
+    allAgents,
+    skills,
+    inventory,
+    economyDeltas,
+    isSabotaged,
+    isSuppressed,
+    isFirstAction,
+    fiscalMultipliers,
+  } = input;
   let w = 0, h = 0, hap = 0, cor = 0, dop = 0;
+  let policyValue: PhysicsOutput['policyValue'];
+  let policyKey: PhysicsOutput['policyKey'];
   const trace: string[] = [];
 
   // Fiscal public goods multipliers (default to 0 when not provided — backward compatible)
@@ -444,6 +467,52 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       trace.push(`  Δdopamine: +2 (control reward)`);
       trace.push(`  [BANK] ${agent.name} (bank agent) set interest rate`);
       break;
+    case 'SET_RESERVE_RATIO': {
+      const requestedValue = getNumericActionValue(actionParameters);
+      if (agent.role.toLowerCase() !== 'central_bank') {
+        trace.push(`  [CENTRAL_BANK] Only central_bank agents can set reserve ratio`);
+        break;
+      }
+      if (requestedValue === null) {
+        trace.push(`  [CENTRAL_BANK] SET_RESERVE_RATIO rejected: numeric "value" parameter required`);
+        break;
+      }
+      const clamped = Math.max(0.05, Math.min(0.50, requestedValue));
+      hap = 1;
+      cor = 2;
+      dop = 2;
+      policyKey = 'reserveRequirement';
+      policyValue = clamped;
+      trace.push(`  Δwealth: 0 (reserve ratio change is a config update, not immediate fiat movement)`);
+      trace.push(`  Δhappiness: +1 (monetary policy agency)`);
+      trace.push(`  Δcortisol: +2 (policy decision stress)`);
+      trace.push(`  Δdopamine: +2 (control reward)`);
+      trace.push(`  Central bank set reserve ratio to ${clamped} (requested ${requestedValue})`);
+      break;
+    }
+    case 'SET_BASE_RATE': {
+      const requestedValue = getNumericActionValue(actionParameters);
+      if (agent.role.toLowerCase() !== 'central_bank') {
+        trace.push(`  [CENTRAL_BANK] Only central_bank agents can set base rate`);
+        break;
+      }
+      if (requestedValue === null) {
+        trace.push(`  [CENTRAL_BANK] SET_BASE_RATE rejected: numeric "value" parameter required`);
+        break;
+      }
+      const clamped = Math.max(0.001, Math.min(0.05, requestedValue));
+      hap = 1;
+      cor = 2;
+      dop = 2;
+      policyKey = 'baseLoanInterestRate';
+      policyValue = clamped;
+      trace.push(`  Δwealth: 0 (base rate change is a config update, not immediate fiat movement)`);
+      trace.push(`  Δhappiness: +1 (monetary policy agency)`);
+      trace.push(`  Δcortisol: +2 (policy decision stress)`);
+      trace.push(`  Δdopamine: +2 (control reward)`);
+      trace.push(`  Central bank set base rate to ${clamped} (requested ${requestedValue})`);
+      break;
+    }
     // ── Capital Market actions ───────────────────────────────────────────────
     // These produce NO direct wealth delta in the physics engine.
     // All financial effects come from capitalMarketEngine.processIteration() in simulationRunner.
@@ -561,6 +630,8 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
     happinessDelta: chap,
     cortisolDelta: ccor,
     dopamineDelta: cdop,
+    policyValue,
+    policyKey,
     trace,
   };
 }
@@ -615,6 +686,7 @@ export function resolveActionQueue(input: PhysicsQueueInput): PhysicsQueueOutput
         },
       },
       actionCode: queued.actionCode,
+      actionParameters: queued.parameters,
       actionTarget: targetId,
       allAgents,
       skills,

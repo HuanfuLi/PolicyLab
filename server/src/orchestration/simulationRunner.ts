@@ -1850,6 +1850,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               },
             },
             actionCode: action.actionCode,
+            actionParameters: action.parameters,
             actionTarget: targetAgent?.id,
             allAgents: agentsForPhysics,
             skills: weekState.skills,
