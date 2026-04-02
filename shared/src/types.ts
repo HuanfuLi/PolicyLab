@@ -434,6 +434,8 @@ export interface SessionConfig {
   checklist: BrainstormChecklist;
   readyForDesign: boolean;
   lockedVariables?: string[];
+  economyConfig?: Partial<EconomyConfig>;     // per D-01: policymaker-configured economy params
+  budgetAllocation?: BudgetAllocation;        // per D-01: fiscal budget split across categories
 }
 
 // ── v1.0 Economy Types (Phase 1: Banking Foundation) ─────────────────────

@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Send, FileText, Users, Scale, Play, Loader2, AlertCircle, Bot, GitFork, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { Send, FileText, Users, Scale, Play, Loader2, AlertCircle, Bot, GitFork, RefreshCw, SlidersHorizontal, DollarSign } from 'lucide-react';
 import { useSessionDetailStore } from '../stores/sessionDetailStore';
 import MarkdownText from '../components/MarkdownText';
+import EconomyTab from '../components/EconomyTab';
 import { DEFAULT_BUDGET_ALLOCATION } from '@policylab/shared';
 import type { BudgetAllocation } from '@policylab/shared';
 
@@ -23,7 +24,7 @@ const DesignReview = () => {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'agents' | 'law'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'agents' | 'law' | 'economy'>('overview');
   const [iterations, setIterations] = useState(20);
   const [reviewed, setReviewed] = useState(false);
   const [input, setInput] = useState('');
@@ -51,6 +52,7 @@ const DesignReview = () => {
     startSimulation,
     forkSession,
     updateLockedVariables,
+    updateEconomyConfig,
     saveBudgetAllocation,
     reset,
   } = useSessionDetailStore();
@@ -245,6 +247,9 @@ const DesignReview = () => {
             <button style={tabBtnStyle('law')} onClick={() => setActiveTab('law')}>
               <Scale size={18} /> Law
             </button>
+            <button style={tabBtnStyle('economy')} onClick={() => setActiveTab('economy')}>
+              <DollarSign size={18} /> Economy
+            </button>
           </div>
 
           <div style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
@@ -376,6 +381,18 @@ const DesignReview = () => {
                   <p style={{ color: 'var(--text-dim)' }}>No law available.</p>
                 )}
               </div>
+            )}
+
+            {activeTab === 'economy' && session?.config && (
+              <EconomyTab
+                sessionId={id!}
+                economyConfig={session.config.economyConfig ?? {}}
+                budgetAllocation={session.config.budgetAllocation ?? DEFAULT_BUDGET_ALLOCATION}
+                onConfigChange={(patch) => updateEconomyConfig(id!, patch)}
+                onBudgetChange={(budget) => {
+                  saveBudgetAllocation(id!, budget);
+                }}
+              />
             )}
           </div>
         </div>
