@@ -20,6 +20,7 @@ import {
   loanContracts,
   bankBalanceSheets,
 } from '../db/schema.js';
+import * as capitalMarketRepo from '../db/repos/capitalMarketRepo.js';
 import { v4 as uuidv4 } from 'uuid';
 import type { SessionExport } from '@policylab/shared';
 import { getSessionTelemetry } from '../orchestration/simulationRunner.js';
@@ -146,6 +147,15 @@ router.get('/:id/export', async (req, res) => {
       equity: b.equity,
       timestamp: b.timestamp,
     })) : undefined,
+    // Capital Markets tables (present only when session used capital markets)
+    equityPositions: (() => {
+      const rows = capitalMarketRepo.getEquityPositionsBySession(id);
+      return rows.length > 0 ? rows : undefined;
+    })(),
+    bondHoldings: (() => {
+      const rows = capitalMarketRepo.getBondHoldingsBySession(id);
+      return rows.length > 0 ? rows : undefined;
+    })(),
   };
 
   const safeTitle = session.title.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 40);
@@ -328,6 +338,40 @@ router.post('/import', async (req, res) => {
           depositLiabilities: b.depositLiabilities,
           equity: b.equity,
           timestamp: b.timestamp,
+        });
+      }
+    }
+
+    // Capital Markets: equity positions with agent ID remapping
+    if (body.equityPositions && body.equityPositions.length > 0) {
+      for (const pos of body.equityPositions) {
+        const newOwnerId = agentIdMap.get(pos.ownerAgentId) ?? pos.ownerAgentId;
+        // enterpriseOwnerId is also an agentId — remap it too
+        const newEnterpriseOwnerId = agentIdMap.get(pos.enterpriseOwnerId) ?? pos.enterpriseOwnerId;
+        capitalMarketRepo.upsertEquityPosition({
+          ...pos,
+          id: uuidv4(),
+          ownerAgentId: newOwnerId,
+          enterpriseOwnerId: newEnterpriseOwnerId,
+          sessionId: newSessionId,
+        });
+      }
+    }
+
+    // Capital Markets: bond holdings with agent ID remapping
+    if (body.bondHoldings && body.bondHoldings.length > 0) {
+      for (const holding of body.bondHoldings) {
+        const newOwnerId = agentIdMap.get(holding.ownerAgentId) ?? holding.ownerAgentId;
+        // issuerId: 'treasury' stays as-is; agent IDs get remapped
+        const newIssuerId = holding.issuerId === 'treasury'
+          ? 'treasury'
+          : (agentIdMap.get(holding.issuerId) ?? holding.issuerId);
+        capitalMarketRepo.upsertBondHolding({
+          ...holding,
+          id: uuidv4(),
+          ownerAgentId: newOwnerId,
+          issuerId: newIssuerId,
+          sessionId: newSessionId,
         });
       }
     }

@@ -411,6 +411,23 @@ const ACTION_SCHEMAS: Partial<Record<ActionCode, ActionSchema>> = {
     description: '[ELITE PRIVILEGE ONLY] Deploy enforcement to penalise a specific citizen.',
     params: '{ "target": string }',
   },
+  // Capital Markets actions
+  BUY_SHARES: {
+    description: 'Buy shares in an enterprise to receive dividends and capital gains. Specify the enterprise owner as target.',
+    params: '{ "target": string, "quantity": number }',
+  },
+  SELL_SHARES: {
+    description: 'Sell shares you hold in an enterprise back to the market. Specify the enterprise owner as target.',
+    params: '{ "target": string, "quantity": number }',
+  },
+  BUY_BOND: {
+    description: 'Buy a government or corporate bond for fixed coupon income. Use target "treasury" for gov bond or enterprise owner name for corp bond.',
+    params: '{ "target": string, "amount": number }',
+  },
+  ISSUE_GOV_BOND: {
+    description: '[ELITE PRIVILEGE ONLY] Issue government bonds to raise treasury funding. Sets face value via amount.',
+    params: '{ "amount": number }',
+  },
   // Banking Foundation actions
   DEPOSIT: {
     description: 'Move cash from your wallet into your bank deposit account for safe-keeping.',
@@ -531,6 +548,38 @@ function buildCitizenBankingSection(ctx?: CitizenBankingContext): string {
 You may: DEPOSIT (move cash to bank), WITHDRAW (move deposit to cash), TAKE_LOAN (borrow from bank), REPAY_LOAN.`;
 }
 
+/** Capital market context injected into citizen agent prompts when capitalMarketsEnabled is true. */
+export interface CitizenCapitalMarketContext {
+  equityHoldings: Array<{ enterpriseOwnerName: string; sharesHeld: number; estimatedValue: number }>;
+  bondHoldings: Array<{ issuerName: string; bondType: string; faceValue: number; couponRate: number; iterationsToMaturity: number }>;
+}
+
+function buildCitizenCapitalMarketSection(ctx?: CitizenCapitalMarketContext): string {
+  if (!ctx) return '';
+  if (ctx.equityHoldings.length === 0 && ctx.bondHoldings.length === 0) return '';
+
+  const lines = ['\n\n[Capital Market Holdings]'];
+
+  if (ctx.equityHoldings.length > 0) {
+    lines.push('- Equity positions: ' + ctx.equityHoldings.map(h =>
+      `${h.sharesHeld} shares of ${h.enterpriseOwnerName} (est. value: ${h.estimatedValue.toFixed(1)} fiat)`
+    ).join('; '));
+  } else {
+    lines.push('- Equity positions: none');
+  }
+
+  if (ctx.bondHoldings.length > 0) {
+    lines.push('- Bond holdings: ' + ctx.bondHoldings.map(b =>
+      `${b.bondType} bond from ${b.issuerName}, face value ${b.faceValue} @ ${(b.couponRate * 100).toFixed(2)}% coupon, ${b.iterationsToMaturity} iterations to maturity`
+    ).join('; '));
+  } else {
+    lines.push('- Bond holdings: none');
+  }
+
+  lines.push('You may: BUY_SHARES (invest in enterprise equity), SELL_SHARES (exit position), BUY_BOND (fixed income), ISSUE_GOV_BOND (leaders only).');
+  return lines.join('\n');
+}
+
 function buildBankOperationsSection(ctx?: BankOperationsContext): string {
   if (!ctx) return '';
   return `\n\n[Bank Operations]
@@ -633,6 +682,8 @@ export function buildNaturalIntentPrompt(
   citizenBankingContext?: CitizenBankingContext,
   /** Banking Foundation: bank agent operations context (shown when agent.type === 'bank'). */
   bankOperationsContext?: BankOperationsContext,
+  /** Capital Markets: equity/bond holdings context (shown when capitalMarketsEnabled). */
+  citizenCapitalMarketContext?: CitizenCapitalMarketContext,
 ): LLMMessage[] {
   // Static prefix: identical across all agent calls in an iteration → cacheable
   const staticPrefix = `You are a citizen living in a simulated society based on: "${session.idea}"
@@ -825,6 +876,8 @@ Next step: ${cognitiveContext.currentPlanStep}`;
   // Banking Foundation: build banking context blocks
   const citizenBankingBlock = buildCitizenBankingSection(citizenBankingContext);
   const bankOperationsBlock = buildBankOperationsSection(bankOperationsContext);
+  // Capital Markets: build capital market context block
+  const citizenCapitalMarketBlock = buildCitizenCapitalMarketSection(citizenCapitalMarketContext);
 
   // Personality traits — injected as a character influence, not a hard rule
   const traitsBlock = agent.personalityTraits && agent.personalityTraits.length > 0
@@ -839,7 +892,7 @@ Your current situation:
 - Health: ${agent.currentStats.health}/100
 - Happiness: ${agent.currentStats.happiness}/100
 - Cortisol (stress): ${cortisol}/100  ${cortisol > 80 ? '— extreme; survival instincts dominant' : cortisol > 60 ? '— elevated; risk tolerance impaired' : cortisol > 40 ? '— moderate tension' : '— calm'}
-- Dopamine (drive):  ${dopamine}/100  ${dopamine > 70 ? '— energized, ambitious' : dopamine > 40 ? '— baseline motivation' : '— low drive, prone to conservative choices'}${economyBlock}${cognitiveBlock}${marketKnowledgeBlock}${agentNamesBlock}${citizenBankingBlock}${bankOperationsBlock}
+- Dopamine (drive):  ${dopamine}/100  ${dopamine > 70 ? '— energized, ambitious' : dopamine > 40 ? '— baseline motivation' : '— low drive, prone to conservative choices'}${economyBlock}${cognitiveBlock}${marketKnowledgeBlock}${agentNamesBlock}${citizenBankingBlock}${bankOperationsBlock}${citizenCapitalMarketBlock}
 
 ${iterationContext}${capitalistIdentityBlock}${biologicalSubconscious}${stressModifier}${actionResultsBlock}
 ${marketIntelligenceBlock ?? ''}
