@@ -62,11 +62,13 @@ Plans:
   2. Each budget category produces a measurable per-iteration effect on the relevant simulation stat (e.g., education allocation raises agent skill gain rate, welfare supplements UBI); the effect is absent when allocation is zero
   3. Public goods quality scores for each category exist as persistent state in the DB; they increase (with diminishing returns) when spending exceeds a threshold and decay when spending is absent; the score is visible in simulation telemetry
   4. The treasury balance never goes negative after budget execution; if the treasury lacks funds, spending is scaled down proportionally rather than minting fiat
-**Plans:** 2/3 plans executed
+**Plans:** 5 plans
 Plans:
 - [x] 03-01-PLAN.md — Types, DB schema, migration, EconomyConfig extensions, fiscalRepo CRUD
 - [x] 03-02-PLAN.md — Fiscal engine (pure deterministic) with budget execution, public goods quality, multiplier effects + unit tests
-- [ ] 03-03-PLAN.md — Physics engine multipliers, simulationRunner wiring, prompts, export/import, SFC integration tests
+- [x] 03-03-PLAN.md — Physics engine multipliers, simulationRunner wiring, prompts, export/import, SFC integration tests
+- [ ] 03-04-PLAN.md — Gap closure: design-time budget configurability (server endpoint + DesignReview sliders)
+- [ ] 03-05-PLAN.md — Gap closure: public goods quality fields in TelemetryLog + SSE telemetry population
 **UI hint**: yes
 
 ### Phase 4: Inflation Loop
@@ -108,7 +110,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Banking Foundation | 3/3 | Complete |  |
 | 2. Capital Markets | 3/3 | Complete | - |
-| 3. Fiscal Policy | 2/3 | In Progress|  |
+| 3. Fiscal Policy | 3/5 | In Progress (gap closure) |  |
 | 4. Inflation Loop | 0/3 | Not started | - |
 | 5. Economic Dashboard | 0/2 | Not started | - |
 
