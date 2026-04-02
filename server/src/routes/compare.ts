@@ -15,7 +15,7 @@ import { getProvider } from '../llm/gateway.js';
 import { readSettings } from '../settings.js';
 import { buildComparisonMessages, buildComparisonChatMessages } from '../llm/prompts.js';
 import { parseJSON } from '../parsers/json.js';
-import type { ComparisonResult, ChatMessage } from '@policylab/shared';
+import type { ComparisonResult, ChatMessage, EconomyParamDiff } from '@policylab/shared';
 
 const router = Router();
 
@@ -35,16 +35,38 @@ async function loadSessionSummary(sessionId: string) {
     .orderBy(asc(iterations.iterationNumber));
 
   let avgWealth = 0, avgHealth = 0, avgHappiness = 0;
+  let giniCoefficient: number | undefined;
+  let m1: number | undefined;
+  let loansOutstanding: number | undefined;
+  let infrastructureQuality: number | undefined;
+  let educationQuality: number | undefined;
+  let defenseQuality: number | undefined;
+  let welfareQuality: number | undefined;
+
   if (iterRows.length > 0) {
     const last = iterRows[iterRows.length - 1];
     try {
-      const stats = JSON.parse(last.statistics) as {
-        avgWealth?: number; avgHealth?: number; avgHappiness?: number;
-      };
-      avgWealth = Math.round(stats.avgWealth ?? 0);
-      avgHealth = Math.round(stats.avgHealth ?? 0);
-      avgHappiness = Math.round(stats.avgHappiness ?? 0);
+      const stats = JSON.parse(last.statistics) as Record<string, unknown>;
+      avgWealth = Math.round((stats.avgWealth as number | undefined) ?? 0);
+      avgHealth = Math.round((stats.avgHealth as number | undefined) ?? 0);
+      avgHappiness = Math.round((stats.avgHappiness as number | undefined) ?? 0);
+      giniCoefficient = typeof stats.giniCoefficient === 'number' ? stats.giniCoefficient : undefined;
+      m1 = typeof stats.m1 === 'number' ? stats.m1 : undefined;
+      loansOutstanding = typeof stats.loansOutstanding === 'number' ? stats.loansOutstanding : undefined;
+      infrastructureQuality = typeof stats.infrastructureQuality === 'number' ? stats.infrastructureQuality : undefined;
+      educationQuality = typeof stats.educationQuality === 'number' ? stats.educationQuality : undefined;
+      defenseQuality = typeof stats.defenseQuality === 'number' ? stats.defenseQuality : undefined;
+      welfareQuality = typeof stats.welfareQuality === 'number' ? stats.welfareQuality : undefined;
     } catch { /* use defaults */ }
+  }
+
+  // Extract economyConfig from session config JSON
+  let economyConfig: Record<string, unknown> = {};
+  if (session.config) {
+    try {
+      const cfg = JSON.parse(session.config) as Record<string, unknown>;
+      economyConfig = (cfg.economyConfig as Record<string, unknown>) ?? {};
+    } catch { /* use empty */ }
   }
 
   let verdict: string | null = null;
@@ -65,7 +87,65 @@ async function loadSessionSummary(sessionId: string) {
     avgHealth,
     avgHappiness,
     verdict,
+    // Economic telemetry
+    giniCoefficient,
+    m1,
+    loansOutstanding,
+    infrastructureQuality,
+    educationQuality,
+    defenseQuality,
+    welfareQuality,
+    economyConfig,
   };
+}
+
+// Param diff label map — maps EconomyConfig keys to human-readable labels
+const PARAM_LABELS: Record<string, string> = {
+  bankingEnabled: 'Banking Enabled',
+  reserveRequirement: 'Reserve Ratio',
+  baseLoanInterestRate: 'Loan Interest Rate',
+  depositInterestRate: 'Deposit Interest Rate',
+  defaultLoanTermIterations: 'Loan Term',
+  defaultThresholdIterations: 'Default Threshold',
+  capitalMarketsEnabled: 'Capital Markets Enabled',
+  fiscalEnabled: 'Fiscal Policy Enabled',
+  inflationEnabled: 'Inflation Enabled',
+  dividendPayoutRatio: 'Dividend Payout Ratio',
+  govBondCouponRate: 'Gov Bond Coupon Rate',
+  govBondTermIterations: 'Gov Bond Maturity',
+  budgetSpendingRate: 'Budget Spending Rate',
+  infrastructureMultiplier: 'Infrastructure Multiplier',
+  educationMultiplier: 'Education Multiplier',
+  defenseMultiplier: 'Defense Multiplier',
+  welfareMultiplier: 'Welfare Multiplier',
+  publicGoodsDecayRate: 'Public Goods Decay Rate',
+  publicGoodsGainDiminishing: 'Diminishing Returns Exponent',
+  m1InflationCoeff: 'M1 Inflation Coefficient',
+  inflationAmmThreshold: 'AMM Price Pressure Threshold',
+  inflationAmmCap: 'AMM Price Change Cap',
+  centralBankEnabled: 'Central Bank Enabled',
+};
+
+/** Compute deterministic param diffs between two sessions' economyConfig objects. */
+function computeParamDiffs(
+  config1: Record<string, unknown>,
+  config2: Record<string, unknown>,
+): EconomyParamDiff[] {
+  const allKeys = new Set([...Object.keys(config1), ...Object.keys(config2)]);
+  const diffs: EconomyParamDiff[] = [];
+  for (const key of allKeys) {
+    const v1 = config1[key];
+    const v2 = config2[key];
+    if (v1 !== v2 && (typeof v1 === 'number' || typeof v1 === 'boolean' || typeof v2 === 'number' || typeof v2 === 'boolean')) {
+      diffs.push({
+        param: key,
+        label: PARAM_LABELS[key] ?? key,
+        session1Value: (v1 as number | boolean) ?? ('N/A' as unknown as number),
+        session2Value: (v2 as number | boolean) ?? ('N/A' as unknown as number),
+      });
+    }
+  }
+  return diffs;
 }
 
 // POST /api/compare
@@ -94,12 +174,15 @@ router.post('/', async (req, res) => {
     const raw = await provider.chat(llmMessages, { model: settings.centralAgentModel });
     const parsed = parseJSON<{ narrative: string; dimensions: ComparisonResult['dimensions']; verdict: string }>(raw);
 
+    const economyParamDiffs = computeParamDiffs(summary1.economyConfig, summary2.economyConfig);
+
     const comparison: ComparisonResult = {
       session1Id: id1,
       session2Id: id2,
       narrative: parsed.narrative,
       dimensions: parsed.dimensions,
       verdict: parsed.verdict,
+      economyParamDiffs: economyParamDiffs.length > 0 ? economyParamDiffs : undefined,
     };
 
     // Persist the comparison as a system message so /chat can reload it

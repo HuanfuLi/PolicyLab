@@ -218,6 +218,20 @@ export interface ComparisonResult {
   dimensions: ComparisonDimension[];
   /** 1-2 sentence takeaway */
   verdict: string;
+  /** Per D-08: list of EconomyConfig parameters that differ between the two sessions */
+  economyParamDiffs?: EconomyParamDiff[];
+}
+
+/** A single economic parameter that differs between two compared sessions. */
+export interface EconomyParamDiff {
+  /** EconomyConfig key name */
+  param: string;
+  /** Human-readable label */
+  label: string;
+  /** Value in session 1 */
+  session1Value: number | boolean;
+  /** Value in session 2 */
+  session2Value: number | boolean;
 }
 
 /** Budget categories for fiscal spending allocation */
