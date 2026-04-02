@@ -78,7 +78,11 @@ Plans:
   2. When M1 grows faster than a configurable threshold, AMM reserve scaling applies upward price pressure; a 50-iteration session with high lending activity shows higher commodity prices than an equivalent session with no lending
   3. The central bank agent observes CPI trend and M1 growth each iteration and emits reserve ratio and base rate adjustments that take effect the following iteration; rate changes are visible in telemetry
   4. Citizen agent prompts include a concise inflation context block (current CPI, 3-iteration trend, expectation signal); in a high-inflation session, agents demonstrably shift toward hoarding, wage demands, or accelerated purchases within their action choices
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 04-01-PLAN.md — Types, DB schema, macroSnapshotRepo, inflationEngine pure function (CPI + M1 blend + AMM factor)
+- [ ] 04-02-PLAN.md — Central bank action codes (SET_RESERVE_RATIO, SET_BASE_RATE), physics engine resolution with clamping
+- [ ] 04-03-PLAN.md — SimulationRunner inflation tick, AMM feedback, cognitive injection, prompts, export/import, SFC tests
 
 ### Phase 5: Economic Dashboard
 **Goal**: Four real-time chart panels surface the economic telemetry produced by Phases 1-4; policymakers can observe CPI trends, money supply dynamics, budget execution, and bond yields during and after a simulation run
@@ -102,7 +106,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Banking Foundation | 3/3 | Complete |  |
 | 2. Capital Markets | 3/3 | Complete | - |
 | 3. Fiscal Policy | 0/3 | Not started | - |
-| 4. Inflation Loop | 0/TBD | Not started | - |
+| 4. Inflation Loop | 0/3 | Not started | - |
 | 5. Economic Dashboard | 0/TBD | Not started | - |
 
 ### Phase 6: Scenario Entry — policymakers configure economic parameters and initial conditions at session design time
