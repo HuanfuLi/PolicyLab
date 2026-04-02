@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 02-capital-markets/02-01-PLAN.md
-last_updated: "2026-04-02T00:22:27.289Z"
+stopped_at: Completed 02-capital-markets/02-02-PLAN.md
+last_updated: "2026-04-02T00:30:25.770Z"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 02 (Capital Markets) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Plan: 2 of 3
 | Phase 01-banking-foundation P02 | 4 | 2 tasks | 3 files |
 | Phase 01-banking-foundation P03 | 37 | 2 tasks | 8 files |
 | Phase 02-capital-markets P01 | 15 | 2 tasks | 5 files |
+| Phase 02-capital-markets P02 | 5 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,9 @@ Recent decisions affecting current work:
 - [Phase 02-01]: enterpriseOwnerId is agent.id (DB-persisted), NOT in-memory enterpriseId — survives session export/import
 - [Phase 02-01]: No bondEscrow in SFC accounting — bond purchase is a direct wealth transfer within the SFC perimeter
 - [Phase 02-01]: ISSUE_GOV_BOND restricted to elite roles only; BUY_SHARES/SELL_SHARES/BUY_BOND available to all citizens
+- [Phase 02-02]: processCorpBondIssuance wealth goes to enterpriseTreasuryDeltas, not wealthDeltas — Plan 03 (simulationRunner) must route to enterprise owner agent wealth
+- [Phase 02-02]: IPO share price fixed at 10 fiat when totalSharesOutstanding === 0 — avoids division by zero
+- [Phase 02-02]: capitalMarketEngine.ts has zero DB imports — pure engine, separation of concerns mirroring bankingEngine/bankingRepo pattern
 
 ### Roadmap Evolution
 
@@ -87,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T00:22:27.284Z
-Stopped at: Completed 02-capital-markets/02-01-PLAN.md
+Last session: 2026-04-02T00:30:25.766Z
+Stopped at: Completed 02-capital-markets/02-02-PLAN.md
 Resume file: None

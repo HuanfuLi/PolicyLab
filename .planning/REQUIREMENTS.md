@@ -21,10 +21,10 @@ Requirements for the Real Economy Engine milestone. Each maps to roadmap phases.
 ### Capital Markets
 
 - [x] **CMKT-01**: Enterprise equity — share issuance at founding or capital raise, ownership table persisted
-- [ ] **CMKT-02**: Dividend distribution — enterprise profits distributed pro-rata to shareholders
-- [ ] **CMKT-03**: Government bonds — treasury issues debt with configurable coupon rate and maturity
-- [ ] **CMKT-04**: Bond coupon payments from treasury to holders each cycle; maturity redeems principal
-- [ ] **CMKT-05**: Corporate bonds — enterprises issue debt; reuses government bond instrument schema
+- [x] **CMKT-02**: Dividend distribution — enterprise profits distributed pro-rata to shareholders
+- [x] **CMKT-03**: Government bonds — treasury issues debt with configurable coupon rate and maturity
+- [x] **CMKT-04**: Bond coupon payments from treasury to holders each cycle; maturity redeems principal
+- [x] **CMKT-05**: Corporate bonds — enterprises issue debt; reuses government bond instrument schema
 - [x] **CMKT-06**: Bond/equity holder ledger persisted to DB for pause/resume and export
 
 ### Fiscal Policy
@@ -103,10 +103,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BANK-06 | Phase 1 | Complete |
 | BANK-08 | Phase 1 | Complete |
 | CMKT-01 | Phase 2 | Complete |
-| CMKT-02 | Phase 2 | Pending |
-| CMKT-03 | Phase 2 | Pending |
-| CMKT-04 | Phase 2 | Pending |
-| CMKT-05 | Phase 2 | Pending |
+| CMKT-02 | Phase 2 | Complete |
+| CMKT-03 | Phase 2 | Complete |
+| CMKT-04 | Phase 2 | Complete |
+| CMKT-05 | Phase 2 | Complete |
 | CMKT-06 | Phase 2 | Complete |
 | FISC-01 | Phase 3 | Pending |
 | FISC-02 | Phase 3 | Pending |
