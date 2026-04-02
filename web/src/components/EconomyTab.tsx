@@ -533,7 +533,6 @@ export default function EconomyTab({
                                 padding: '0.5rem 0.75rem',
                                 fontSize: '0.78rem',
                                 color: 'var(--text-muted)',
-                                whiteSpace: 'nowrap',
                                 maxWidth: '280px',
                                 whiteSpace: 'normal',
                                 zIndex: 100,
