@@ -1,5 +1,12 @@
 import type { LLMMessage, ContentBlock } from './types.js';
-import type { Agent, ChatMessage, Session, ComparisonResult, BrainstormChecklist, SessionPolicy } from '@policylab/shared';
+import type {
+  Agent,
+  ChatMessage,
+  Session,
+  ComparisonResult,
+  BrainstormChecklist,
+  SessionPolicy,
+} from '@policylab/shared';
 import type { ActionCode } from '../mechanics/actionCodes.js';
 import { getSubconsciousDrive } from '../mechanics/historicalRAG.js';
 
@@ -620,6 +627,29 @@ You may: ISSUE_LOAN (to requesting citizens), SET_INTEREST_RATE, or REST.
 Reserve requirement: You MUST maintain reserves / total_deposits >= ${ctx.reserveRequirement}.`;
 }
 
+export interface CentralBankContext {
+  cpi: number;
+  inflationRate: number;
+  inflationExpectations: number;
+  m1Current: number;
+  m1GrowthRate: number;
+  currentReserveRatio: number;
+  currentBaseRate: number;
+}
+
+function buildInflationContextSection(inflationContext?: string): string {
+  if (!inflationContext?.trim()) return '';
+  return `\n\n[Economic Conditions]\n${inflationContext.trim()}`;
+}
+
+function buildCentralBankSection(ctx?: CentralBankContext): string {
+  if (!ctx) return '';
+  return `\n\n[CENTRAL BANK DASHBOARD]
+CPI ${ctx.cpi.toFixed(1)}, Inflation ${ctx.inflationRate.toFixed(1)}%/iter (trend: ${ctx.inflationExpectations.toFixed(1)}%), M1 ${ctx.m1Current.toFixed(1)}, M1 growth ${(ctx.m1GrowthRate * 100).toFixed(1)}%.
+Current policy: reserve ratio ${ctx.currentReserveRatio.toFixed(3)}, base rate ${ctx.currentBaseRate.toFixed(3)}.
+You may SET_RESERVE_RATIO (0.05-0.50) or SET_BASE_RATE (0.001-0.05).`;
+}
+
 function buildMarketBoardSection(entries?: readonly MarketBoardEntry[]): string {
   if (!entries || entries.length === 0) {
     return '[Current Market Board]\n- No clearing data yet. Use posted prices and scarcity signals cautiously.';
@@ -714,6 +744,10 @@ export function buildNaturalIntentPrompt(
   citizenCapitalMarketContext?: CitizenCapitalMarketContext,
   /** Fiscal Policy: budget allocation and public goods quality context (shown when fiscalEnabled). */
   citizenFiscalContext?: CitizenFiscalContext,
+  /** Inflation Loop: concise citizen inflation context from the previous iteration. */
+  inflationContext?: string,
+  /** Inflation Loop: central bank dashboard with CPI, M1, and policy state. */
+  centralBankContext?: CentralBankContext,
 ): LLMMessage[] {
   // Static prefix: identical across all agent calls in an iteration → cacheable
   const staticPrefix = `You are a citizen living in a simulated society based on: "${session.idea}"
@@ -910,6 +944,8 @@ Next step: ${cognitiveContext.currentPlanStep}`;
   const citizenCapitalMarketBlock = buildCitizenCapitalMarketSection(citizenCapitalMarketContext);
   // Fiscal Policy: build fiscal context block
   const citizenFiscalBlock = buildCitizenFiscalSection(citizenFiscalContext);
+  const inflationBlock = buildInflationContextSection(inflationContext);
+  const centralBankBlock = buildCentralBankSection(centralBankContext);
 
   // Personality traits — injected as a character influence, not a hard rule
   const traitsBlock = agent.personalityTraits && agent.personalityTraits.length > 0
@@ -924,7 +960,7 @@ Your current situation:
 - Health: ${agent.currentStats.health}/100
 - Happiness: ${agent.currentStats.happiness}/100
 - Cortisol (stress): ${cortisol}/100  ${cortisol > 80 ? '— extreme; survival instincts dominant' : cortisol > 60 ? '— elevated; risk tolerance impaired' : cortisol > 40 ? '— moderate tension' : '— calm'}
-- Dopamine (drive):  ${dopamine}/100  ${dopamine > 70 ? '— energized, ambitious' : dopamine > 40 ? '— baseline motivation' : '— low drive, prone to conservative choices'}${economyBlock}${cognitiveBlock}${marketKnowledgeBlock}${agentNamesBlock}${citizenBankingBlock}${bankOperationsBlock}${citizenCapitalMarketBlock}${citizenFiscalBlock}
+- Dopamine (drive):  ${dopamine}/100  ${dopamine > 70 ? '— energized, ambitious' : dopamine > 40 ? '— baseline motivation' : '— low drive, prone to conservative choices'}${economyBlock}${cognitiveBlock}${marketKnowledgeBlock}${agentNamesBlock}${citizenBankingBlock}${bankOperationsBlock}${citizenCapitalMarketBlock}${citizenFiscalBlock}${inflationBlock}${centralBankBlock}
 
 ${iterationContext}${capitalistIdentityBlock}${biologicalSubconscious}${stressModifier}${actionResultsBlock}
 ${marketIntelligenceBlock ?? ''}
@@ -1304,6 +1340,14 @@ interface SessionSummaryInput {
   avgHappiness: number;
   deaths: number;
   verdict: string | null;
+  // Economic telemetry (Phase 6)
+  giniCoefficient?: number;
+  m1?: number;
+  loansOutstanding?: number;
+  infrastructureQuality?: number;
+  educationQuality?: number;
+  defenseQuality?: number;
+  welfareQuality?: number;
 }
 
 export function buildComparisonMessages(
@@ -1311,16 +1355,33 @@ export function buildComparisonMessages(
   session2: SessionSummaryInput
 ): LLMMessage[] {
   const systemPrompt = `You are the Central Agent evaluating two completed society simulations.
-Compare them objectively across exactly 5 dimensions: Economic Equality, Citizen Wellbeing, Social Cohesion, Governance Effectiveness, Long-term Stability.
+Compare them objectively across exactly 8 dimensions: Economic Equality, Citizen Wellbeing, Social Cohesion, Governance Effectiveness, Long-term Stability, Banking Stability, Fiscal Effectiveness, Economic Growth.
+For Banking Stability, Fiscal Effectiveness, and Economic Growth: if the economic telemetry data is not available for a session, note this in your analysis and score conservatively based on available indirect evidence.
 Respond with ONLY valid JSON, no markdown, no preamble.`;
 
-  const fmt = (s: SessionSummaryInput, label: 'A' | 'B') =>
-    `=== SOCIETY ${label}: ${s.title} ===
+  const fmt = (s: SessionSummaryInput, label: 'A' | 'B') => {
+    let text = `=== SOCIETY ${label}: ${s.title} ===
 Overview: ${(s.societyOverview ?? '(none)').slice(0, 500)}
 Law excerpt: ${(s.law ?? '(none)').slice(0, 400)}
 Agents: ${s.agentCount} citizens, Deaths: ${s.deaths}
 Final avg — wealth: ${s.avgWealth}, health: ${s.avgHealth}/100, happiness: ${s.avgHappiness}/100
 Evaluation verdict: ${s.verdict ?? '(none)'}`;
+
+    // Append economic telemetry if available
+    const econ: string[] = [];
+    if (s.giniCoefficient !== undefined) econ.push(`Gini: ${s.giniCoefficient.toFixed(3)}`);
+    if (s.m1 !== undefined) econ.push(`M1: ${s.m1.toFixed(0)}`);
+    if (s.loansOutstanding !== undefined) econ.push(`Loans outstanding: ${s.loansOutstanding.toFixed(0)}`);
+    if (s.infrastructureQuality !== undefined) econ.push(`Infrastructure quality: ${s.infrastructureQuality.toFixed(1)}`);
+    if (s.educationQuality !== undefined) econ.push(`Education quality: ${s.educationQuality.toFixed(1)}`);
+    if (s.defenseQuality !== undefined) econ.push(`Defense quality: ${s.defenseQuality.toFixed(1)}`);
+    if (s.welfareQuality !== undefined) econ.push(`Welfare quality: ${s.welfareQuality.toFixed(1)}`);
+    if (econ.length > 0) {
+      text += `\nEconomic telemetry: ${econ.join(', ')}`;
+    }
+
+    return text;
+  };
 
   const userPrompt = `${fmt(session1, 'A')}
 
@@ -1334,7 +1395,10 @@ Compare these two societies. Return JSON:
     { "name": "Citizen Wellbeing", "score1": 0, "score2": 0, "analysis": "..." },
     { "name": "Social Cohesion", "score1": 0, "score2": 0, "analysis": "..." },
     { "name": "Governance Effectiveness", "score1": 0, "score2": 0, "analysis": "..." },
-    { "name": "Long-term Stability", "score1": 0, "score2": 0, "analysis": "..." }
+    { "name": "Long-term Stability", "score1": 0, "score2": 0, "analysis": "..." },
+    { "name": "Banking Stability", "score1": 0, "score2": 0, "analysis": "..." },
+    { "name": "Fiscal Effectiveness", "score1": 0, "score2": 0, "analysis": "..." },
+    { "name": "Economic Growth", "score1": 0, "score2": 0, "analysis": "..." }
   ],
   "verdict": "<1-2 sentence overall takeaway>"
 }`;
