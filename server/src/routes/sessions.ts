@@ -393,10 +393,18 @@ router.post('/:id/fork', async (req, res) => {
     const now = new Date().toISOString();
     const totalIterations = body.iterations || 20;
 
+    // Extract economyConfig and budgetAllocation from source session config
+    let sourceConfig: Record<string, unknown> = {};
+    if (source.config) {
+      try { sourceConfig = JSON.parse(source.config) as Record<string, unknown>; } catch { /* use empty */ }
+    }
+
     const config = JSON.stringify({
       totalIterations,
       checklist: { governance: true, economy: true, legal: true, culture: true, infrastructure: true },
       readyForDesign: true,
+      ...(sourceConfig.economyConfig ? { economyConfig: sourceConfig.economyConfig } : {}),
+      ...(sourceConfig.budgetAllocation ? { budgetAllocation: sourceConfig.budgetAllocation } : {}),
     });
 
     await db.insert(sessions).values({
@@ -429,6 +437,12 @@ router.post('/:id/fork', async (req, res) => {
         diedAtIteration: null,
         personalityTraits: a.personalityTraits,
       });
+    }
+
+    // Clone fiscal budget if source had one
+    const sourceBudget = sourceConfig.budgetAllocation as BudgetAllocation | undefined;
+    if (sourceBudget) {
+      fiscalRepo.createBudget(newId, sourceBudget);
     }
 
     res.status(201).json({ id: newId });
