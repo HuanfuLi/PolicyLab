@@ -64,11 +64,13 @@ import * as capitalMarketRepo from '../db/repos/capitalMarketRepo.js';
 import * as fiscalEngine from '../mechanics/fiscalEngine.js';
 import * as fiscalRepo from '../db/repos/fiscalRepo.js';
 import { DEFAULT_BUDGET_ALLOCATION, DEFAULT_PUBLIC_GOODS_INITIAL } from '@policylab/shared';
+import { computeInflation } from '../mechanics/inflationEngine.js';
+import * as macroSnapshotRepo from '../db/repos/macroSnapshotRepo.js';
 // Phase 1 Economy imports
 import { getOrderBook, clearOrderBook, restoreOrderBook, isOrderBookWarm } from '../mechanics/orderBook.js';
 import { economyRepo, type AgentEconomyState } from '../db/repos/economyRepo.js';
-import type { Agent, IterationStats, Inventory, ItemType, MarketState, PriceIndex, SkillMatrix, TelemetryLog } from '@policylab/shared';
-import { DEFAULT_SKILL_MATRIX, DEFAULT_INVENTORY } from '@policylab/shared';
+import type { Agent, IterationStats, Inventory, ItemType, MarketState, PriceIndex, SkillMatrix, TelemetryLog, InflationState } from '@policylab/shared';
+import { DEFAULT_SKILL_MATRIX, DEFAULT_INVENTORY, DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
 import { getActionMultiplier, getSkillMultiplier, processSkills } from '../mechanics/skillSystem.js';
 // Phase 3 Cognitive Engine imports
 import {
@@ -241,6 +243,7 @@ const sessionLastActionResults = new Map<string, Map<string, string>>();
 const sessionIterationMetrics = new Map<string, string>();
 // Per-session telemetry snapshots (one per completed iteration)
 const sessionTelemetryLogs = new Map<string, TelemetryLog[]>();
+const sessionInflationState = new Map<string, InflationState>();
 // Stock-Flow Consistency (SFC) tracking: detect fiat leaks/minting between iterations.
 // The economy is fully closed-loop — no state fiat injection. Total must remain constant.
 const sessionSFCTracking = new Map<string, { initialFiat: number }>();
@@ -585,6 +588,44 @@ function updatePriceHistory(sessionId: string, priceIndices: PriceIndex[]): void
     history.set(idx.itemType, idx.vwap || idx.lastPrice || 0);
   }
   sessionPriceHistory.set(sessionId, history);
+}
+
+function getInflationBasketPrices(
+  sessionId: string,
+  economyConfig: ReturnType<typeof getEconomyConfig>,
+  priceIndices: PriceIndex[] = [],
+): Record<string, number> {
+  const iterationPrices = new Map<ItemType, number>();
+  for (const idx of priceIndices) {
+    iterationPrices.set(idx.itemType, idx.volume > 0 ? idx.vwap : idx.lastPrice);
+  }
+  const priceHistory = sessionPriceHistory.get(sessionId);
+  const basePrices = economyConfig.cpiBasePrices ?? {};
+  return {
+    food: iterationPrices.get('food') ?? priceHistory?.get('food') ?? basePrices.food ?? 1,
+    tools: iterationPrices.get('tools') ?? priceHistory?.get('tools') ?? basePrices.tools ?? 1,
+    luxury_goods: iterationPrices.get('luxury_goods') ?? priceHistory?.get('luxury_goods') ?? basePrices.luxury_goods ?? 1,
+    raw_materials: iterationPrices.get('raw_materials') ?? priceHistory?.get('raw_materials') ?? basePrices.raw_materials ?? 1,
+  };
+}
+
+function buildInflationContext(state?: InflationState): string | undefined {
+  if (!state) return undefined;
+  const direction = state.inflationRate >= 0 ? 'up' : 'down';
+  return `Economic conditions: CPI is ${state.cpi.toFixed(1)} (${direction} ${Math.abs(state.inflationRate).toFixed(1)}% from base). Inflation running at ${state.inflationRate.toFixed(1)}% this period. Consider adjusting wage demands or consumption strategy.`;
+}
+
+function applyInflationFeedback(pool: AutomatedMarketMaker, factor: number): void {
+  if (Math.abs(factor - 1) <= 0.001) return;
+
+  if (factor > 1) {
+    const withdrawal = pool.currentFoodReserve * (1 - 1 / factor);
+    pool.withdrawGoodsReserve(withdrawal);
+    return;
+  }
+
+  const injection = pool.currentFoodReserve * ((1 / factor) - 1);
+  pool.injectGoodsReserve(injection);
 }
 
 function applyEnterpriseAction(params: {
@@ -1284,6 +1325,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         sessionMultiAMMRegistry.delete(sessionId);
         sessionAllostaticStates.delete(sessionId);
         sessionIterationMetrics.delete(sessionId);
+        sessionInflationState.delete(sessionId);
         sessionSFCTracking.delete(sessionId);
         sessionStateTreasury.delete(sessionId);
         sessionLastPhysicsTraces.delete(sessionId);
@@ -1324,6 +1366,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           sessionMultiAMMRegistry.delete(sessionId);
           sessionAllostaticStates.delete(sessionId);
           sessionIterationMetrics.delete(sessionId);
+          sessionInflationState.delete(sessionId);
           sessionSFCTracking.delete(sessionId);
           sessionStateTreasury.delete(sessionId);
           sessionLastPhysicsTraces.delete(sessionId);
@@ -1426,6 +1469,17 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         ? `\n\n[MARKET INTELLIGENCE — Use this data to reason about economic opportunity]\n\nCommodity prices and supply:\n${miLines.join('\n')}\n\nEconomy:\n  Population: ${aliveAgents.length} alive agents\n  Active enterprises: ${iterEntsSummary}\n  Unemployed agents: ${iterUnemployedCount}\n\nHow to read this:\n- CRITICAL/LOW reserve means the market is undersupplied — prices will rise further if no one produces.\n- SURPLUS reserve means the market is oversupplied — selling now yields less than baseline.\n- Your skills determine how efficiently you can produce each commodity.`
         : '';
 
+      // Pre-compute inflation/macro context once per iteration (not per agent)
+      const iterInflationState = sessionInflationState.get(sessionId);
+      const iterInflationContext = buildInflationContext(iterInflationState);
+      const iterEconomyConfig = getEconomyConfig(session.config as Record<string, unknown> | null);
+      const iterMacroSnapshots = macroSnapshotRepo.getRecentSnapshots(db, sessionId, 2);
+      const iterLatestMacro = iterMacroSnapshots[0] ?? null;
+      const iterPreviousMacro = iterMacroSnapshots[1] ?? null;
+      const iterM1GrowthRate = iterLatestMacro && iterPreviousMacro && iterPreviousMacro.m1 !== 0
+        ? (iterLatestMacro.m1 - iterPreviousMacro.m1) / iterPreviousMacro.m1
+        : 0;
+
       // Single-pass structured intent collection (replaces two-step natural language → parser flow)
       const intentTasks = aliveAgents.map(agent => async (): Promise<AgentIntent> => {
         try {
@@ -1461,6 +1515,18 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           } : undefined;
           const ownedEnterprise = [...enterpriseRegistry.values()].find(enterprise => enterprise.ownerId === agent.id);
           const personalStatus = buildPersonalStatus(sessionId, agent.id, ownedEnterprise?.id, agent.currentStats.wealth);
+          const inflationContext = iterInflationContext;
+          const centralBankContext = agent.role === 'central_bank' && iterInflationState
+            ? {
+                cpi: iterInflationState.cpi,
+                inflationRate: iterInflationState.inflationRate,
+                inflationExpectations: iterInflationState.inflationExpectations,
+                m1Current: iterLatestMacro?.m1 ?? 0,
+                m1GrowthRate: iterM1GrowthRate,
+                currentReserveRatio: iterEconomyConfig.reserveRequirement ?? DEFAULT_ECONOMY_CONFIG.reserveRequirement,
+                currentBaseRate: iterEconomyConfig.baseLoanInterestRate ?? DEFAULT_ECONOMY_CONFIG.baseLoanInterestRate,
+              }
+            : undefined;
 
           // Single-pass: one LLM call returns structured JSON with narrative + actionCode.
           // Phase 3: pass role-restricted action set so elite agents see privileged actions.
@@ -1475,6 +1541,12 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             lastActionResults,
             sessionPolicy.enforcement_level,
             sharedMarketIntelligenceBlock,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            inflationContext,
+            centralBankContext,
           );
 
           // throwOnExhaustion: true — after all retries, throw instead of silently defaulting to REST.
@@ -2176,6 +2248,40 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         if (taxerState) taxerState.wealthDelta += actualTaxCollected;
       }
 
+      {
+        const configRoot = (session.config as Record<string, unknown> | null) ?? {};
+        const persistedEconomyConfig = getEconomyConfig(configRoot);
+        let configChanged = false;
+
+        for (const intent of intents) {
+          for (const action of intent.actions ?? []) {
+            const requestedValue = typeof action.parameters?.value === 'number' ? action.parameters.value : null;
+            if (requestedValue === null) continue;
+
+            if (action.actionCode === 'SET_RESERVE_RATIO') {
+              persistedEconomyConfig.reserveRequirement = Math.max(0.05, Math.min(0.50, requestedValue));
+              configChanged = true;
+            }
+
+            if (action.actionCode === 'SET_BASE_RATE') {
+              persistedEconomyConfig.baseLoanInterestRate = Math.max(0.001, Math.min(0.05, requestedValue));
+              configChanged = true;
+            }
+          }
+        }
+
+        if (configChanged) {
+          session.config = {
+            ...(configRoot ?? {}),
+            economyConfig: {
+              ...((configRoot.economyConfig as Record<string, unknown> | undefined) ?? {}),
+              ...persistedEconomyConfig,
+            },
+          };
+          await sessionRepo.updateConfig(sessionId, session.config as Record<string, unknown>);
+        }
+      }
+
       // ── EMBEZZLE Settlement: skim communal pool pro-rata from all other agents ──
       // SFC-correct: wealth is redistributed, not created. Each embezzler draws up to
       // 20 fiat spread evenly across all other alive agents (capped by their available wealth).
@@ -2750,6 +2856,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       let bankingTotalDeposits = 0;
       let bankingCollateralEscrow = 0;
       let bankingLoansOutstanding = 0;
+      let inflationTelemetry: Pick<TelemetryLog, 'cpi' | 'inflationRate' | 'inflationExpectations'> | null = null;
 
       if (economyConfig.bankingEnabled) {
         const bankAgents = agents.filter(a => a.type === 'bank' && a.isAlive);
@@ -2937,6 +3044,102 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
       }
 
+      // ── Inflation tick ────────────────────────────────────────────────────
+      // Runs after banking/capital/fiscal effects are known so CPI, M1, and treasury
+      // all reflect the end-of-iteration macro state before telemetry is recorded.
+      if (economyConfig.inflationEnabled) {
+        const configRoot = (session.config as Record<string, unknown> | null) ?? {};
+        const persistedEconomyConfig = getEconomyConfig(configRoot);
+        const currentPrices = getInflationBasketPrices(sessionId, persistedEconomyConfig, marketState.priceIndices);
+        const hasBasePrices = Object.keys(persistedEconomyConfig.cpiBasePrices ?? {}).length > 0;
+
+        if (!hasBasePrices) {
+          persistedEconomyConfig.cpiBasePrices = { ...currentPrices };
+          session.config = {
+            ...configRoot,
+            economyConfig: {
+              ...((configRoot.economyConfig as Record<string, unknown> | undefined) ?? {}),
+              ...persistedEconomyConfig,
+            },
+          };
+          await sessionRepo.updateConfig(sessionId, session.config as Record<string, unknown>);
+        }
+
+        const finalWealthByAgentId = new Map(statUpdates.map(update => [update.id, update.wealth]));
+        const treasuryBalance = sessionStateTreasury.get(sessionId) ?? 0;
+        const currentM0 = computeSystemFiatTotal(
+          agents,
+          sessionAMMRegistry.get(sessionId),
+          sessionMultiAMMRegistry.get(sessionId),
+          treasuryBalance,
+          finalWealthByAgentId,
+          bankingTotalDeposits,
+          bankingCollateralEscrow,
+        );
+        const latestSnapshot = macroSnapshotRepo.getLatestSnapshot(db, sessionId);
+        const smoothingWindow = persistedEconomyConfig.inflationSmoothingWindow ?? DEFAULT_ECONOMY_CONFIG.inflationSmoothingWindow ?? 3;
+        const recentSnapshots = macroSnapshotRepo.getRecentSnapshots(db, sessionId, smoothingWindow);
+        const inflationOutput = computeInflation({
+          iterationNumber: iterNum,
+          currentPrices,
+          basePrices: persistedEconomyConfig.cpiBasePrices ?? currentPrices,
+          m1Current: currentM0 + bankingLoansOutstanding,
+          m1Previous: latestSnapshot?.m1 ?? null,
+          previousCpi: latestSnapshot?.cpi ?? null,
+          recentCpiHistory: recentSnapshots.map(snapshot => snapshot.cpi).reverse(),
+          economyConfig: persistedEconomyConfig,
+        });
+
+        macroSnapshotRepo.insertMacroSnapshot(db, {
+          sessionId,
+          iterationNumber: iterNum,
+          m0: currentM0,
+          m1: currentM0 + bankingLoansOutstanding,
+          cpi: inflationOutput.cpi,
+          inflationRate: inflationOutput.inflationRate,
+          inflationExpectations: inflationOutput.inflationExpectations,
+          totalLoansOutstanding: bankingLoansOutstanding,
+          treasuryBalance,
+        });
+
+        sessionInflationState.set(sessionId, {
+          cpi: inflationOutput.cpi,
+          inflationRate: inflationOutput.inflationRate,
+          inflationExpectations: inflationOutput.inflationExpectations,
+        });
+        inflationTelemetry = {
+          cpi: inflationOutput.cpi,
+          inflationRate: inflationOutput.inflationRate,
+          inflationExpectations: inflationOutput.inflationExpectations,
+        };
+
+        if (Math.abs(inflationOutput.ammFeedbackFactor - 1) > 0.001) {
+          const primaryAMM = sessionAMMRegistry.get(sessionId);
+          if (primaryAMM) {
+            applyInflationFeedback(primaryAMM, inflationOutput.ammFeedbackFactor);
+          }
+          const secondaryAMMs = sessionMultiAMMRegistry.get(sessionId);
+          if (secondaryAMMs) {
+            for (const pool of secondaryAMMs.values()) {
+              applyInflationFeedback(pool, inflationOutput.ammFeedbackFactor);
+            }
+          }
+          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
+          sessionLastPhysicsTraces.set(
+            sessionId,
+            existingTrace + '\n' + `AMM feedback: scaled goods reserves for price factor ${inflationOutput.ammFeedbackFactor.toFixed(4)}`,
+          );
+        }
+
+        if (inflationOutput.trace.length > 0) {
+          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
+          sessionLastPhysicsTraces.set(
+            sessionId,
+            existingTrace + '\n' + inflationOutput.trace.join('\n'),
+          );
+        }
+      }
+
       const finalStatsByAgentId = new Map(statUpdates.map(u => [u.id, u]));
 
       const cognitivePostInputs: CognitivePostInput[] = aliveAgents.map(agent => {
@@ -3087,6 +3290,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           m0: totalFiatSupply,  // base money — constant under SFC (includes depositBalances + collateral)
           m1: totalFiatSupply + bankingLoansOutstanding,  // M1 = M0 + outstanding loan principals
           loansOutstanding: bankingLoansOutstanding,
+          ...(inflationTelemetry ?? {}),
           // Fiscal public goods quality telemetry (absent when fiscalEnabled is false)
           ...(fiscalPublicGoodsQuality ? {
             infrastructureQuality: Math.round(fiscalPublicGoodsQuality.infrastructureQuality * 100) / 100,
@@ -3448,6 +3652,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     sessionLastActionResults.delete(sessionId);
     sessionIterationMetrics.delete(sessionId);
     sessionTelemetryLogs.delete(sessionId);
+    sessionInflationState.delete(sessionId);
     sessionSFCTracking.delete(sessionId);
     sessionStateTreasury.delete(sessionId);
     sessionLastPhysicsTraces.delete(sessionId);
@@ -3466,6 +3671,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     sessionLastActionResults.delete(sessionId);
     sessionIterationMetrics.delete(sessionId);
     sessionTelemetryLogs.delete(sessionId);
+    sessionInflationState.delete(sessionId);
     sessionSFCTracking.delete(sessionId);
     sessionStateTreasury.delete(sessionId);
     sessionLastPhysicsTraces.delete(sessionId);
