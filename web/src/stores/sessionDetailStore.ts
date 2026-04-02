@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { brainstormApi } from '../api/brainstorm';
-import type { SessionDetail, ChatMessage, Agent, DesignProgressEvent, BudgetAllocation } from '@policylab/shared';
+import type { SessionDetail, ChatMessage, Agent, DesignProgressEvent, BudgetAllocation, EconomyConfig } from '@policylab/shared';
 
 interface DesignProgress {
   active: boolean;
@@ -29,6 +29,7 @@ interface SessionDetailStore {
   startSimulation: (id: string, totalIterations: number) => Promise<void>;
   forkSession: (id: string, iterations: number) => Promise<string>;
   updateLockedVariables: (id: string, lockedVars: string[]) => Promise<void>;
+  updateEconomyConfig: (id: string, patch: Partial<EconomyConfig>) => Promise<void>;
   saveBudgetAllocation: (sessionId: string, allocation: BudgetAllocation) => Promise<void>;
   reset: () => void;
 }
@@ -346,6 +347,20 @@ export const useSessionDetailStore = create<SessionDetailStore>((set, get) => ({
             config: state.session.config
               ? { ...state.session.config, lockedVariables: lockedVars }
               : { totalIterations: 20, checklist: { governance: false, economy: false, legal: false, culture: false, infrastructure: false }, readyForDesign: false, lockedVariables: lockedVars },
+          }
+        : state.session,
+    }));
+  },
+
+  updateEconomyConfig: async (id: string, patch: Partial<EconomyConfig>) => {
+    await brainstormApi.patchConfig(id, { economyConfig: patch });
+    set(state => ({
+      session: state.session
+        ? {
+            ...state.session,
+            config: state.session.config
+              ? { ...state.session.config, economyConfig: { ...(state.session.config.economyConfig ?? {}), ...patch } }
+              : state.session.config,
           }
         : state.session,
     }));
