@@ -101,10 +101,27 @@ Plans:
 - [ ] 05-02-PLAN.md — Build EconomicDashboard component (4 recharts panels); wire into TelemetryPanel tabs and Simulation page
 **UI hint**: yes
 
+### Phase 6: Scenario Entry — policymakers configure economic parameters and initial conditions at session design time
+
+**Goal:** Policymakers configure all EconomyConfig parameters through an Economy tab in Design Review, fork sessions to create A/B policy experiments, and compare results with 8-dimension scoring and a configuration differences table showing exactly which parameters were changed
+**Depends on:** Phase 5
+**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10
+**Success Criteria** (what must be TRUE):
+  1. An Economy tab in Design Review displays all EconomyConfig parameters in grouped collapsible panels (Banking, Fiscal, Capital Markets, Inflation) with slider + numeric input controls
+  2. Each parameter has an inline tooltip with a real-world analogy and soft-limit warnings that trigger on user interaction (not page load) when values exceed recommended ranges
+  3. Forking a session preserves economyConfig and budgetAllocation from the source session; the forked session's Economy tab shows identical values
+  4. The comparison page shows a "Configuration Differences" table listing only the economic parameters that differ between two sessions
+  5. The comparison prompt evaluates 8 dimensions (5 existing + Banking Stability, Fiscal Effectiveness, Economic Growth) using economic telemetry data when available
+**Plans:** 3 plans
+Plans:
+- [ ] 06-01-PLAN.md — SessionConfig type extension, EconomyTab component with parameter controls, DesignReview tab wiring
+- [ ] 06-02-PLAN.md — Fork endpoint upgrade (config preservation), EconomyParamDiff type, comparison route telemetry + param diff
+- [ ] 06-03-PLAN.md — Comparison prompt expansion (8 dimensions), ConfigDiff UI section, fork button relabeling, end-to-end verification
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -113,13 +130,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 3. Fiscal Policy | 5/5 | Complete   | 2026-04-02 |
 | 4. Inflation Loop | 0/3 | Not started | - |
 | 5. Economic Dashboard | 0/2 | Not started | - |
-
-### Phase 6: Scenario Entry — policymakers configure economic parameters and initial conditions at session design time
-
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 5
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd:plan-phase 6 to break down)
+| 6. Scenario Entry | 0/3 | Not started | - |
