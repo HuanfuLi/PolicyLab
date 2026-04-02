@@ -112,11 +112,11 @@ Plans:
   3. Forking a session preserves economyConfig and budgetAllocation from the source session; the forked session's Economy tab shows identical values
   4. The comparison page shows a "Configuration Differences" table listing only the economic parameters that differ between two sessions
   5. The comparison prompt evaluates 8 dimensions (5 existing + Banking Stability, Fiscal Effectiveness, Economic Growth) using economic telemetry data when available
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 Plans:
 - [ ] 06-00-PLAN.md — Wave 0 test scaffold (scenarioEntry.test.ts with placeholder tests for fork config, computeParamDiffs, prompt dimensions)
 - [ ] 06-01-PLAN.md — SessionConfig type extension, EconomyTab component with parameter controls, DesignReview tab wiring
-- [ ] 06-02-PLAN.md — Fork endpoint upgrade (config preservation), EconomyParamDiff type, comparison route telemetry + param diff
+- [x] 06-02-PLAN.md — Fork endpoint upgrade (config preservation), EconomyParamDiff type, comparison route telemetry + param diff
 - [ ] 06-03-PLAN.md — Comparison prompt expansion (8 dimensions), ConfigDiff UI section, fork button relabeling, end-to-end verification
 
 ## Progress
@@ -131,4 +131,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Fiscal Policy | 5/5 | Complete   | 2026-04-02 |
 | 4. Inflation Loop | 0/3 | Not started | - |
 | 5. Economic Dashboard | 1/2 | In Progress|  |
-| 6. Scenario Entry | 0/4 | Not started | - |
+| 6. Scenario Entry | 1/4 | In Progress|  |

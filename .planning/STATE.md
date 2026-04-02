@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-04-02T05:22:00.511Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-04-02T17:16:09.578Z"
 progress:
   total_phases: 6
-  completed_phases: 3
-  total_plans: 19
-  completed_plans: 13
+  completed_phases: 4
+  total_plans: 20
+  completed_plans: 16
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** The deterministic economic engine must be realistic enough that simulation outcomes are meaningful for understanding real-world policy trade-offs.
-**Current focus:** Phase 05 — economic-dashboard
+**Current focus:** Phase 06 — scenario-entry
 
 ## Current Position
 
-Phase: 05 (economic-dashboard) — EXECUTING
-Plan: 2 of 2
+Phase: 06 (scenario-entry) — EXECUTING
+Plan: 3 of 4
 
 ## Performance Metrics
 
@@ -59,6 +59,8 @@ Plan: 2 of 2
 | Phase 03-fiscal-policy P04 | 3 | 2 tasks | 3 files |
 | Phase 04 P01 | 5 | 2 tasks | 6 files |
 | Phase 05-economic-dashboard P01 | 527361 | 2 tasks | 4 files |
+| Phase 06-scenario-entry P00 | 2 | 1 tasks | 1 files |
+| Phase 06-scenario-entry P02 | 15 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -99,6 +101,9 @@ Recent decisions affecting current work:
 - [Phase 04]: [Phase 04-01]: inflationEngine stays DB-free and falls back to blended inflation when CPI history is too short for a rolling mean.
 - [Phase 05-01]: macroHistory populated by polling /simulate/telemetry endpoint (not SSE push) — SSE events lack TelemetryLog; polling is simpler and low-frequency
 - [Phase 05-01]: FiscalCategory exported from shared/src/types.ts alongside TelemetryLog — co-location avoids import loops
+- [Phase 06-00]: Wave 0 test scaffold: placeholder tests created before implementation plans run — all 8 pass green; Plans 01-03 strengthen in-place
+- [Phase 06-scenario-entry]: Fork config uses conditional spread to preserve economyConfig/budgetAllocation only when present — avoids polluting new sessions with stale defaults
+- [Phase 06-scenario-entry]: computeParamDiffs is deterministic (no LLM) — structural comparison of EconomyConfig keys for comparison page diff display (D-08)
 
 ### Roadmap Evolution
 
@@ -116,6 +121,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T05:22:00.507Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-04-02T17:16:09.573Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None
