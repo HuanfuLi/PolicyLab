@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: Completed 02-capital-markets/02-02-PLAN.md
-last_updated: "2026-04-02T00:30:25.770Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 02-capital-markets/02-03-PLAN.md
+last_updated: "2026-04-02T00:40:35.953Z"
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -51,6 +51,7 @@ Plan: 3 of 3
 | Phase 01-banking-foundation P03 | 37 | 2 tasks | 8 files |
 | Phase 02-capital-markets P01 | 15 | 2 tasks | 5 files |
 | Phase 02-capital-markets P02 | 5 | 2 tasks | 3 files |
+| Phase 02-capital-markets P03 | 25 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,8 @@ Recent decisions affecting current work:
 - [Phase 02-02]: processCorpBondIssuance wealth goes to enterpriseTreasuryDeltas, not wealthDeltas — Plan 03 (simulationRunner) must route to enterprise owner agent wealth
 - [Phase 02-02]: IPO share price fixed at 10 fiat when totalSharesOutstanding === 0 — avoids division by zero
 - [Phase 02-02]: capitalMarketEngine.ts has zero DB imports — pure engine, separation of concerns mirroring bankingEngine/bankingRepo pattern
+- [Phase 02-03]: processIteration uses separate typed arrays for each request type — matched actual Plan 02-02 implementation, not the generic pendingRequests spec
+- [Phase 02-03]: enterpriseTreasuryDeltas (corp bond coupon/maturity) routed to enterprise owner agent wealth in statUpdates — no separate enterprise treasury ledger needed
 
 ### Roadmap Evolution
 
@@ -91,6 +94,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T00:30:25.766Z
-Stopped at: Completed 02-capital-markets/02-02-PLAN.md
+Last session: 2026-04-02T00:40:35.949Z
+Stopped at: Completed 02-capital-markets/02-03-PLAN.md
 Resume file: None

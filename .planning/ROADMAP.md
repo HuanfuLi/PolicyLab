@@ -50,7 +50,7 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — Types, DB schema, migration, ActionCodes, skillSystem for capital markets
 - [x] 02-02-PLAN.md — Capital market engine (pure deterministic) + repository CRUD + unit tests
-- [ ] 02-03-PLAN.md — Physics engine cases, simulationRunner wiring, prompts, export/import, SFC integration tests
+- [x] 02-03-PLAN.md — Physics engine cases, simulationRunner wiring, prompts, export/import, SFC integration tests
 **UI hint**: yes
 
 ### Phase 3: Fiscal Policy
