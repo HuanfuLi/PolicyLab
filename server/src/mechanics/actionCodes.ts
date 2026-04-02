@@ -53,6 +53,11 @@ export type ActionCode =
   | 'REPAY_LOAN'
   | 'ISSUE_LOAN'         // bank agent only
   | 'SET_INTEREST_RATE'  // bank agent only
+  // Capital Markets (Phase 2)
+  | 'BUY_SHARES'
+  | 'SELL_SHARES'
+  | 'BUY_BOND'
+  | 'ISSUE_GOV_BOND'    // elite role only (leader/governor)
   | 'NONE';
 
 const VALID_ACTIONS: Set<string> = new Set([
@@ -65,6 +70,8 @@ const VALID_ACTIONS: Set<string> = new Set([
   // Banking Foundation (Phase 1: Banking Foundation)
   'DEPOSIT', 'WITHDRAW', 'TAKE_LOAN', 'REPAY_LOAN',
   'ISSUE_LOAN', 'SET_INTEREST_RATE',
+  // Capital Markets (Phase 2)
+  'BUY_SHARES', 'SELL_SHARES', 'BUY_BOND', 'ISSUE_GOV_BOND',
   'NONE',
 ]);
 
@@ -126,6 +133,8 @@ const BASE_ACTIONS: readonly ActionCode[] = [
   'STEAL', 'HELP', 'INVEST',
   // Banking actions available to all citizens
   'DEPOSIT', 'WITHDRAW', 'TAKE_LOAN', 'REPAY_LOAN',
+  // Capital market actions available to all citizens
+  'BUY_SHARES', 'SELL_SHARES', 'BUY_BOND',
   'NONE',
 ];
 
@@ -134,6 +143,11 @@ const BANK_ACTIONS: readonly ActionCode[] = [
   ...BASE_ACTIONS,
   'ISSUE_LOAN', 'SET_INTEREST_RATE',
 ];
+
+/** Capital market actions available to all non-bank citizen roles */
+export const CAPITAL_MARKET_ACTIONS = new Set<ActionCode>([
+  'BUY_SHARES', 'SELL_SHARES', 'BUY_BOND', 'ISSUE_GOV_BOND',
+]);
 
 /** Specialist-tier additions (organised/skilled actors) */
 const SPECIALIST_ACTIONS: readonly ActionCode[] = [
@@ -145,6 +159,7 @@ const SPECIALIST_ACTIONS: readonly ActionCode[] = [
 /** Elite-tier adds governing privileges on top of specialist set */
 const ELITE_ACTIONS: readonly ActionCode[] = [
   ...SPECIALIST_ACTIONS, 'EMBEZZLE', 'ADJUST_TAX', 'SUPPRESS',
+  'ISSUE_GOV_BOND',  // government bond issuance — leader/governor only
 ];
 
 /**

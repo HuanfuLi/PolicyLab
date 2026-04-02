@@ -72,6 +72,11 @@ const ACTION_SKILL_MAP: Record<ActionCode, { primary: SkillCategory; secondary?:
     REPAY_LOAN: { primary: 'trading', secondary: 'scholarship' },
     ISSUE_LOAN: { primary: 'management', secondary: 'trading' },
     SET_INTEREST_RATE: { primary: 'scholarship', secondary: 'management' },
+    // Capital Markets actions (Phase 2)
+    BUY_SHARES: { primary: 'trading', secondary: undefined },
+    SELL_SHARES: { primary: 'trading', secondary: undefined },
+    BUY_BOND: { primary: 'trading', secondary: undefined },
+    ISSUE_GOV_BOND: { primary: 'management', secondary: undefined },
     NONE: { primary: 'scholarship' },
 };
 

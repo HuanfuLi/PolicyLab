@@ -274,5 +274,37 @@ export function runMigrations() {
     CREATE INDEX IF NOT EXISTS idx_bank_balance_sheets_session ON bank_balance_sheets(session_id);
   `);
 
+  // Capital Markets (Phase 2): equity positions and bond holdings
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS equity_positions (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      owner_agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      enterprise_owner_id TEXT NOT NULL,
+      shares_held INTEGER NOT NULL DEFAULT 0,
+      average_cost_basis REAL NOT NULL DEFAULT 0,
+      last_updated INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_equity_positions_session ON equity_positions(session_id);
+    CREATE INDEX IF NOT EXISTS idx_equity_positions_owner ON equity_positions(owner_agent_id);
+
+    CREATE TABLE IF NOT EXISTS bond_holdings (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      owner_agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      issuer_id TEXT NOT NULL,
+      bond_type TEXT NOT NULL,
+      face_value REAL NOT NULL,
+      coupon_rate REAL NOT NULL,
+      maturity_iteration INTEGER NOT NULL,
+      purchase_iteration INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active'
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_bond_holdings_session ON bond_holdings(session_id);
+    CREATE INDEX IF NOT EXISTS idx_bond_holdings_owner ON bond_holdings(owner_agent_id);
+  `);
+
   console.log('Database migrations applied.');
 }

@@ -218,3 +218,27 @@ export const bankBalanceSheets = sqliteTable('bank_balance_sheets', {
   timestamp: text('timestamp').notNull(),
 });
 
+// ── v1.0 Capital Markets Tables (Phase 2) ────────────────────────────────────
+export const equityPositions = sqliteTable('equity_positions', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  ownerAgentId: text('owner_agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  enterpriseOwnerId: text('enterprise_owner_id').notNull(),  // agent.id of enterprise owner
+  sharesHeld: integer('shares_held').notNull().default(0),
+  averageCostBasis: real('average_cost_basis').notNull().default(0),
+  lastUpdated: integer('last_updated').notNull().default(0),
+});
+
+export const bondHoldings = sqliteTable('bond_holdings', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  ownerAgentId: text('owner_agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
+  issuerId: text('issuer_id').notNull(),  // 'treasury' | agentId of enterprise owner
+  bondType: text('bond_type').notNull(),  // 'government' | 'corporate'
+  faceValue: real('face_value').notNull(),
+  couponRate: real('coupon_rate').notNull(),
+  maturityIteration: integer('maturity_iteration').notNull(),
+  purchaseIteration: integer('purchase_iteration').notNull(),
+  status: text('status').notNull().default('active'),
+});
+
