@@ -64,7 +64,7 @@ Plans:
   4. The treasury balance never goes negative after budget execution; if the treasury lacks funds, spending is scaled down proportionally rather than minting fiat
 **Plans:** 3 plans
 Plans:
-- [ ] 03-01-PLAN.md — Types, DB schema, migration, EconomyConfig extensions, fiscalRepo CRUD
+- [x] 03-01-PLAN.md — Types, DB schema, migration, EconomyConfig extensions, fiscalRepo CRUD
 - [ ] 03-02-PLAN.md — Fiscal engine (pure deterministic) with budget execution, public goods quality, multiplier effects + unit tests
 - [ ] 03-03-PLAN.md — Physics engine multipliers, simulationRunner wiring, prompts, export/import, SFC integration tests
 **UI hint**: yes

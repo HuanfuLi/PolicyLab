@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 02-capital-markets/02-03-PLAN.md
-last_updated: "2026-04-02T02:36:09.023Z"
+status: Ready to execute
+stopped_at: Completed 03-fiscal-policy/03-01-PLAN.md
+last_updated: "2026-04-02T03:31:27.184Z"
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 9
-  completed_plans: 6
+  total_plans: 14
+  completed_plans: 7
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** The deterministic economic engine must be realistic enough that simulation outcomes are meaningful for understanding real-world policy trade-offs.
-**Current focus:** Phase 02 — Capital Markets
+**Current focus:** Phase 03 — fiscal-policy
 
 ## Current Position
 
-Phase: 02
-Plan: Not started
+Phase: 03 (fiscal-policy) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Plan: Not started
 | Phase 02-capital-markets P01 | 15 | 2 tasks | 5 files |
 | Phase 02-capital-markets P02 | 5 | 2 tasks | 3 files |
 | Phase 02-capital-markets P03 | 25 | 2 tasks | 5 files |
+| Phase 03-fiscal-policy P01 | 18 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,9 @@ Recent decisions affecting current work:
 - [Phase 02-02]: capitalMarketEngine.ts has zero DB imports — pure engine, separation of concerns mirroring bankingEngine/bankingRepo pattern
 - [Phase 02-03]: processIteration uses separate typed arrays for each request type — matched actual Plan 02-02 implementation, not the generic pendingRequests spec
 - [Phase 02-03]: enterpriseTreasuryDeltas (corp bond coupon/maturity) routed to enterprise owner agent wealth in statUpdates — no separate enterprise treasury ledger needed
+- [Phase 03-01]: EconomyConfig fiscal fields all optional — fiscalEnabled remains absent in DEFAULT_ECONOMY_CONFIG so existing sessions receive zero behavioral change
+- [Phase 03-01]: Budget allocation stored one-per-session (design-time config per FISC-01), not per-iteration — fiscal engine reads latest via getActiveBudget
+- [Phase 03-01]: Public goods quality stored per-iteration to enable trend analysis and export/import; getPublicGoodsState returns latest row (highest iterationNumber)
 
 ### Roadmap Evolution
 
@@ -94,6 +98,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T00:40:35.949Z
-Stopped at: Completed 02-capital-markets/02-03-PLAN.md
+Last session: 2026-04-02T03:31:27.179Z
+Stopped at: Completed 03-fiscal-policy/03-01-PLAN.md
 Resume file: None

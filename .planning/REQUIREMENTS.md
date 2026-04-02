@@ -29,10 +29,10 @@ Requirements for the Real Economy Engine milestone. Each maps to roadmap phases.
 
 ### Fiscal Policy
 
-- [ ] **FISC-01**: Budget categories (infrastructure, education, defense, welfare) configurable at session design time
+- [x] **FISC-01**: Budget categories (infrastructure, education, defense, welfare) configurable at session design time
 - [ ] **FISC-02**: Spending multipliers — each category affects specific simulation stats (e.g., education → skill gain rate)
 - [ ] **FISC-03**: Public goods quality scores [0–100] that increase with spending (diminishing returns) and decay without it
-- [ ] **FISC-04**: Budget allocation stored in session config and applied each iteration
+- [x] **FISC-04**: Budget allocation stored in session config and applied each iteration
 
 ### Inflation
 
@@ -108,10 +108,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CMKT-04 | Phase 2 | Complete |
 | CMKT-05 | Phase 2 | Complete |
 | CMKT-06 | Phase 2 | Complete |
-| FISC-01 | Phase 3 | Pending |
+| FISC-01 | Phase 3 | Complete |
 | FISC-02 | Phase 3 | Pending |
 | FISC-03 | Phase 3 | Pending |
-| FISC-04 | Phase 3 | Pending |
+| FISC-04 | Phase 3 | Complete |
 | INFL-01 | Phase 4 | Pending |
 | INFL-02 | Phase 4 | Pending |
 | INFL-03 | Phase 4 | Pending |
