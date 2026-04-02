@@ -35,20 +35,20 @@ patterns-established:
 requirements-completed:
   - D-09
   - D-02
-duration: 12min
-completed: "2026-04-01"
+duration: 12min + checkpoint verification cycle
+completed: "2026-04-02"
 ---
 
 # Phase 06 Plan 03: Comparison Prompt Expansion + Config Diff UI Summary
 
-**8-dimension LLM comparison prompt with economic telemetry injection, ConfigDiffSection table with session-title headers, and fork button relabeled for A/B policy workflow**
+**8-dimension LLM comparison prompt with economic telemetry injection, ConfigDiffSection table with session-title headers, and fork button relabeled for A/B policy workflow — end-to-end verified**
 
 ## Performance
 
-- **Duration:** 12 min
+- **Duration:** 12 min (tasks 1-2) + checkpoint verification cycle
 - **Started:** 2026-04-01T13:20:00Z
-- **Completed:** 2026-04-01T13:32:00Z
-- **Tasks:** 2 (Task 3 is checkpoint — pending human verification)
+- **Completed:** 2026-04-02T17:45:00Z
+- **Tasks:** 3 (2 auto + 1 checkpoint:human-verify — approved)
 - **Files modified:** 3
 
 ## Accomplishments
@@ -56,6 +56,7 @@ completed: "2026-04-01"
 - Extended `SessionSummaryInput` with 7 optional economic telemetry fields and updated `buildComparisonMessages` to request 8 dimensions and inject available telemetry
 - Added `ConfigDiffSection` React component to `CompareSessions.tsx` that renders a parameter diff table with actual session titles as column headers, placed before the dimension rows
 - Updated fork button label from "Fork & Simulate" to "Fork & Change Policy" to communicate the A/B experiment workflow intent (D-02)
+- Post-checkpoint verification approved; 3 issues identified and fixed: tooltip theme-aware CSS vars, duplicate Fiscal Policy section removed, disabled sections made clickable to enable
 
 ## Task Commits
 
@@ -63,7 +64,9 @@ Each task was committed atomically:
 
 1. **Task 1: Expand comparison prompt to 8 dimensions with economic telemetry** - `4dd1e1d` (feat)
 2. **Task 2: Add Configuration Differences section to comparison UI and update fork button** - `47617a4` (feat)
-3. **Task 3: Verify full scenario entry workflow** - checkpoint (pending human verification)
+3. **Task 3: Post-checkpoint verification fixes** - `0c0b525` (fix — tooltip CSS vars, duplicate section, disabled section UX)
+
+**Plan metadata (prior):** `de0a98b` (docs: complete plan — pre-verification)
 
 ## Files Created/Modified
 
@@ -79,7 +82,41 @@ Each task was committed atomically:
 
 ## Deviations from Plan
 
-None — plan executed exactly as written.
+### Auto-fixed Issues (Post-Checkpoint Verification)
+
+**1. [Rule 1 - Bug] Tooltip used hardcoded hex color instead of theme-aware CSS var**
+- **Found during:** Task 3 (human checkpoint verification)
+- **Issue:** Tooltip background used hardcoded hex (`#1a1a2e`), breaking dark-mode theme consistency
+- **Fix:** Replaced with `var(--panel-bg)` and related CSS vars from the existing design system
+- **Files modified:** `web/src/pages/DesignReview.tsx`
+- **Verification:** Visual inspection confirmed theme consistency
+- **Committed in:** `0c0b525`
+
+**2. [Rule 1 - Bug] Duplicate Fiscal Policy section appeared in DesignReview Economy tab**
+- **Found during:** Task 3 (human checkpoint verification)
+- **Issue:** Fiscal Policy configuration panel was rendered twice in the Economy tab
+- **Fix:** Removed the duplicate JSX block
+- **Files modified:** `web/src/pages/DesignReview.tsx`
+- **Verification:** Visual inspection confirmed single Fiscal Policy section
+- **Committed in:** `0c0b525`
+
+**3. [Rule 2 - Missing Critical] Disabled sections (Capital Markets, Inflation) were not clickable to enable**
+- **Found during:** Task 3 (human checkpoint verification)
+- **Issue:** Disabled sections showed a locked appearance with no interaction affordance; users had no UI path to enable these features
+- **Fix:** Made disabled section headers clickable; clicking shows an "Enable" affordance that activates the feature in `economyConfig` state
+- **Files modified:** `web/src/pages/DesignReview.tsx`
+- **Verification:** Clicking a disabled section now enables it and reveals controls
+- **Committed in:** `0c0b525`
+
+**4. [Intentional design] Fork button only shows after simulation (isPastDesign)**
+- Fork button visibility is gated on `isPastDesign` — only appears after the source session has been simulated at least once.
+- Confirmed as intended: forking makes sense only when there is a completed run to diverge from.
+- No code change required; documented here for future reference.
+
+---
+
+**Total deviations:** 3 auto-fixed post-checkpoint (2 Rule 1 bugs, 1 Rule 2 missing critical UX)
+**Impact on plan:** All fixes necessary for correctness and usability. No scope creep — fixes limited to files modified by this plan.
 
 ## Known Stubs
 
@@ -95,8 +132,12 @@ None - no external service configuration required.
 
 ## Next Phase Readiness
 
-Phase 06 is now complete pending human verification of the full end-to-end flow (Task 3 checkpoint). Once verified, all D-02, D-08, D-09 requirements are satisfied.
+Phase 06 (Scenario Entry) is fully complete. All 4 plans executed and end-to-end verified. Requirements D-02, D-08, D-09 are satisfied.
+
+The full policymaker workflow is functional: Economy tab configuration → fork with config preservation → simulate → compare with 8-dimension scoring and configuration diff table.
+
+Phase 4 (Inflation Loop) plans 02-03 and Phase 5 plan 02 (EconomicDashboard charts) remain pending. No blockers from this plan for downstream work.
 
 ---
 *Phase: 06-scenario-entry*
-*Completed: 2026-04-01*
+*Completed: 2026-04-02*

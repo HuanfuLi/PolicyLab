@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase complete — ready for verification
-stopped_at: Completed 06-03-PLAN.md tasks 1-2, checkpoint task 3 pending human verification
-last_updated: "2026-04-02T17:23:58.747Z"
+stopped_at: Completed 06-03-PLAN.md — Phase 06 scenario-entry fully complete and verified
+last_updated: "2026-04-02T18:07:04.655Z"
 progress:
   total_phases: 6
   completed_phases: 5
@@ -63,6 +63,7 @@ Plan: 4 of 4
 | Phase 06-scenario-entry P02 | 15 | 2 tasks | 4 files |
 | Phase 06-scenario-entry P01 | 15 | 2 tasks | 4 files |
 | Phase 06-scenario-entry P03 | 12 | 2 tasks | 3 files |
+| Phase 06-scenario-entry P03 | 12 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -110,6 +111,9 @@ Recent decisions affecting current work:
 - [Phase 06-01]: Soft-limit warnings shown as inline dialog instead of window.confirm for better UX and testability
 - [Phase 06-scenario-entry]: SessionSummaryInput telemetry fields optional — sessions without economic config still produce valid prompts, just without telemetry section
 - [Phase 06-scenario-entry]: ConfigDiffSection placed before dimension rows — user sees what changed before how outcomes differed, reinforcing A/B causality
+- [Phase 06-scenario-entry]: SessionSummaryInput telemetry fields optional — sessions without economic config still produce valid prompts, just without telemetry section
+- [Phase 06-scenario-entry]: Fork button shows only when isPastDesign (after first simulation) — intentional design; fork workflow makes sense only with a completed run to diverge from
+- [Phase 06-scenario-entry]: Post-checkpoint: tooltip uses theme-aware CSS vars; disabled sections clickable to enable; duplicate Fiscal section removed
 
 ### Roadmap Evolution
 
@@ -127,6 +131,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T17:23:58.742Z
-Stopped at: Completed 06-03-PLAN.md tasks 1-2, checkpoint task 3 pending human verification
+Last session: 2026-04-02T18:07:04.650Z
+Stopped at: Completed 06-03-PLAN.md — Phase 06 scenario-entry fully complete and verified
 Resume file: None
