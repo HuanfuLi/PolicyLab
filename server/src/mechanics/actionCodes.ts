@@ -21,6 +21,10 @@
  *  - REPAY_LOAN: Make a loan repayment
  *  - ISSUE_LOAN: Bank agent issues a loan to a requesting citizen
  *  - SET_INTEREST_RATE: Bank agent adjusts the lending rate
+ *
+ * Inflation Loop additions (Phase 4: Central Bank):
+ *  - SET_RESERVE_RATIO: Central bank adjusts reserve requirement
+ *  - SET_BASE_RATE: Central bank adjusts the base lending rate
  */
 
 export type ActionCode =
@@ -53,6 +57,9 @@ export type ActionCode =
   | 'REPAY_LOAN'
   | 'ISSUE_LOAN'         // bank agent only
   | 'SET_INTEREST_RATE'  // bank agent only
+  // Inflation Loop (Phase 4: Central Bank)
+  | 'SET_RESERVE_RATIO'  // central_bank agent only
+  | 'SET_BASE_RATE'      // central_bank agent only
   // Capital Markets (Phase 2)
   | 'BUY_SHARES'
   | 'SELL_SHARES'
@@ -70,6 +77,8 @@ const VALID_ACTIONS: Set<string> = new Set([
   // Banking Foundation (Phase 1: Banking Foundation)
   'DEPOSIT', 'WITHDRAW', 'TAKE_LOAN', 'REPAY_LOAN',
   'ISSUE_LOAN', 'SET_INTEREST_RATE',
+  // Inflation Loop (Phase 4: Central Bank)
+  'SET_RESERVE_RATIO', 'SET_BASE_RATE',
   // Capital Markets (Phase 2)
   'BUY_SHARES', 'SELL_SHARES', 'BUY_BOND', 'ISSUE_GOV_BOND',
   'NONE',
@@ -144,6 +153,11 @@ const BANK_ACTIONS: readonly ActionCode[] = [
   'ISSUE_LOAN', 'SET_INTEREST_RATE',
 ];
 
+/** Central bank exclusive actions — bank operations plus monetary policy levers */
+const CENTRAL_BANK_ACTIONS: readonly ActionCode[] = [
+  'SET_RESERVE_RATIO', 'SET_BASE_RATE',
+];
+
 /** Capital market actions available to all non-bank citizen roles */
 export const CAPITAL_MARKET_ACTIONS = new Set<ActionCode>([
   'BUY_SHARES', 'SELL_SHARES', 'BUY_BOND', 'ISSUE_GOV_BOND',
@@ -171,6 +185,9 @@ const ELITE_ACTIONS: readonly ActionCode[] = [
  */
 export function getAllowedActions(role: string): readonly ActionCode[] {
   if (role.toLowerCase() === 'bank') return BANK_ACTIONS;
+  if (role.toLowerCase() === 'central_bank') {
+    return [...BASE_ACTIONS, ...BANK_ACTIONS, ...CENTRAL_BANK_ACTIONS];
+  }
   const tier = getRoleTier(role);
   if (tier === 'elite') return ELITE_ACTIONS;
   if (tier === 'specialist') return SPECIALIST_ACTIONS;
