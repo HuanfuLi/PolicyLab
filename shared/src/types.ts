@@ -262,6 +262,16 @@ export interface TelemetryLog {
   m1?: number;
   /** Total outstanding loan principals */
   loansOutstanding?: number;
+
+  // ── Fiscal Policy telemetry ──────────────────────────────────────────────
+  /** Infrastructure public goods quality score 0–100 (undefined when fiscal disabled) */
+  infrastructureQuality?: number;
+  /** Education public goods quality score 0–100 (undefined when fiscal disabled) */
+  educationQuality?: number;
+  /** Defense public goods quality score 0–100 (undefined when fiscal disabled) */
+  defenseQuality?: number;
+  /** Welfare public goods quality score 0–100 (undefined when fiscal disabled) */
+  welfareQuality?: number;
 }
 
 /** Full-fidelity export envelope */
