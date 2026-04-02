@@ -3,7 +3,8 @@ import { eq, asc, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { sessions, agents, iterations, chatMessages, agentIntents } from '../db/schema.js';
 import { v4 as uuidv4 } from 'uuid';
-import type { SessionMetadata, SessionDetail, Agent, ChatMessage, Stage } from '@policylab/shared';
+import type { SessionMetadata, SessionDetail, Agent, ChatMessage, Stage, BudgetAllocation } from '@policylab/shared';
+import * as fiscalRepo from '../db/repos/fiscalRepo.js';
 
 const router = Router();
 
@@ -307,7 +308,27 @@ router.patch('/:id/stage', async (req, res) => {
 // PUT /api/sessions/:id/config — patch config fields (kept for backward compat)
 router.put('/:id/config', async (req, res) => {
   const { id } = req.params;
-  const body = req.body as { totalIterations?: number; checklist?: unknown; readyForDesign?: boolean; stage?: string; lockedVariables?: string[] };
+  const body = req.body as {
+    totalIterations?: number;
+    checklist?: unknown;
+    readyForDesign?: boolean;
+    stage?: string;
+    lockedVariables?: string[];
+    economyConfig?: Partial<Record<string, unknown>>;
+    budgetAllocation?: BudgetAllocation;
+  };
+
+  // Budget validation — reject invalid allocations before any DB writes
+  if (body.budgetAllocation) {
+    const alloc = body.budgetAllocation;
+    if (alloc.infrastructure < 0 || alloc.education < 0 || alloc.defense < 0 || alloc.welfare < 0) {
+      return res.status(400).json({ error: 'Budget allocations must be non-negative' });
+    }
+    const sum = alloc.infrastructure + alloc.education + alloc.defense + alloc.welfare;
+    if (Math.abs(sum - 1.0) > 0.01) {
+      return res.status(400).json({ error: 'Budget allocation must sum to 1.0' });
+    }
+  }
 
   try {
     const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
@@ -325,6 +346,10 @@ router.put('/:id/config', async (req, res) => {
     if (body.checklist !== undefined) updatedConfig.checklist = body.checklist;
     if (body.readyForDesign !== undefined) updatedConfig.readyForDesign = body.readyForDesign;
     if (body.lockedVariables !== undefined) updatedConfig.lockedVariables = body.lockedVariables;
+    if (body.economyConfig !== undefined) {
+      const existingEconomy = (currentConfig.economyConfig ?? {}) as Record<string, unknown>;
+      updatedConfig.economyConfig = { ...existingEconomy, ...body.economyConfig };
+    }
 
     const now = new Date().toISOString();
     const updates: Record<string, unknown> = {
@@ -334,6 +359,11 @@ router.put('/:id/config', async (req, res) => {
     if (body.stage) updates.stage = body.stage;
 
     await db.update(sessions).set(updates).where(eq(sessions.id, id));
+
+    // Budget persistence — only after db.update succeeds
+    if (body.budgetAllocation) {
+      fiscalRepo.createBudget(id, body.budgetAllocation);
+    }
 
     const [updated] = await db.select().from(sessions).where(eq(sessions.id, id));
     res.json({
