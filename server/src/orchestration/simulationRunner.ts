@@ -2879,6 +2879,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // Runs after capital market tick. Executes budget spending from treasury,
       // updates public goods quality, applies welfare payments to agents.
       // SFC: all spending flows from treasury to agents (direct transfers).
+      let fiscalPublicGoodsQuality: { infrastructureQuality: number; educationQuality: number; defenseQuality: number; welfareQuality: number } | null = null;
       if (economyConfig.fiscalEnabled) {
         const budgetAllocation = fiscalRepo.getActiveBudget(sessionId) ?? DEFAULT_BUDGET_ALLOCATION;
         const currentPublicGoods = fiscalRepo.getPublicGoodsState(sessionId);
@@ -2900,6 +2901,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           aliveAgentIds: aliveAgents.map(a => a.id),
           iterationNumber: iterNum,
         });
+
+        // Lift quality scores to outer scope for iterTelemetry population
+        fiscalPublicGoodsQuality = fiscalDelta.updatedPublicGoods;
 
         // Apply treasury delta (spending removed from treasury)
         sessionStateTreasury.set(sessionId, treasuryBalance + fiscalDelta.treasuryDelta);
@@ -3082,6 +3086,13 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           m0: totalFiatSupply,  // base money — constant under SFC (includes depositBalances + collateral)
           m1: totalFiatSupply + bankingLoansOutstanding,  // M1 = M0 + outstanding loan principals
           loansOutstanding: bankingLoansOutstanding,
+          // Fiscal public goods quality telemetry (absent when fiscalEnabled is false)
+          ...(fiscalPublicGoodsQuality ? {
+            infrastructureQuality: Math.round(fiscalPublicGoodsQuality.infrastructureQuality * 100) / 100,
+            educationQuality: Math.round(fiscalPublicGoodsQuality.educationQuality * 100) / 100,
+            defenseQuality: Math.round(fiscalPublicGoodsQuality.defenseQuality * 100) / 100,
+            welfareQuality: Math.round(fiscalPublicGoodsQuality.welfareQuality * 100) / 100,
+          } : {}),
         };
         // Phase A: SFC drift check — warn if unaccounted fiat appears or disappears.
         // Keep a floor tolerance so extinction or tiny populations do not generate
