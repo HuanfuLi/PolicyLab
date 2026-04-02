@@ -1,21 +1,6 @@
 import React, { useEffect, useState } from 'react';
-
-interface TelemetryLog {
-  iterationNumber: number;
-  totalFiatSupply: number;
-  ammFoodReserve_Y: number;
-  ammFiatReserve_X: number;
-  ammSpotPrice_Food: number;
-  totalCaloriesBurned: number;
-  totalCaloriesProduced: number;
-  actionFailureRate: number;
-  giniCoefficient?: number;
-  socialMobilityIndex?: number;
-  trustIndex?: number;
-  crimeRate?: number;
-  averageCortisol?: number;
-  averageDopamine?: number;
-}
+import type { TelemetryLog } from '@policylab/shared';
+import EconomicDashboard from './EconomicDashboard';
 
 // ── Chart color tokens (kept in sync with --chart-* CSS variables in index.css)
 const CHART_BLUE    = 'var(--chart-blue)';
@@ -234,13 +219,15 @@ function SVGLineChart({
 interface TelemetryPanelProps {
   sessionId: string;
   onClose: () => void;
+  macroHistory?: TelemetryLog[];   // pre-loaded from simulationStore
 }
 
-export default function TelemetryPanel({ sessionId, onClose }: TelemetryPanelProps) {
+export default function TelemetryPanel({ sessionId, onClose, macroHistory }: TelemetryPanelProps) {
   const [logs, setLogs] = useState<TelemetryLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [activeTab, setActiveTab] = useState<'classic' | 'economic'>('classic');
 
   const refresh = () => setRefreshKey(k => k + 1);
 
@@ -401,7 +388,24 @@ export default function TelemetryPanel({ sessionId, onClose }: TelemetryPanelPro
       <div style={panelStyle}>
         {/* Header */}
         <div style={headerStyle}>
-          <h2 style={titleStyle}>📊 Economy Telemetry Terminal</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <h2 style={titleStyle}>📊 Economy Telemetry Terminal</h2>
+            {/* Tab bar */}
+            <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 6, padding: 3 }}>
+              {(['classic', 'economic'] as const).map(tab => (
+                <button key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  style={{
+                    background: activeTab === tab ? 'rgba(99,102,241,0.4)' : 'transparent',
+                    border: 'none', borderRadius: 4, color: 'var(--text-main)',
+                    cursor: 'pointer', padding: '4px 14px', fontSize: '0.8rem', fontWeight: 600,
+                    textTransform: 'capitalize',
+                  }}>
+                  {tab === 'classic' ? 'Classic' : 'Economic'}
+                </button>
+              ))}
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button
               onClick={refresh}
@@ -415,7 +419,11 @@ export default function TelemetryPanel({ sessionId, onClose }: TelemetryPanelPro
         </div>
 
         {/* Body */}
-        {loading ? (
+        {activeTab === 'economic' ? (
+          <div style={{ padding: '16px 24px' }}>
+            <EconomicDashboard data={macroHistory ?? []} />
+          </div>
+        ) : loading ? (
           <div style={{ padding: '48px 28px', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>
             ⏳ Loading telemetry data...
           </div>

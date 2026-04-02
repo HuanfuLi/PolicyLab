@@ -4,6 +4,7 @@ import { Play, Pause, Square, X, Activity, Heart, CircleDollarSign, Users, Loade
 import { useSimulationStore, type AgentIntentRecord } from '../stores/simulationStore';
 import { useShallow } from 'zustand/react/shallow';
 import MarkdownText from '../components/MarkdownText';
+import TelemetryPanel from '../components/TelemetryPanel';
 
 // Chart color tokens (kept in sync with --chart-* CSS variables in index.css)
 const CHART_ORANGE = 'var(--chart-orange)';
@@ -15,7 +16,7 @@ const Simulation = () => {
   const {
     isRunning, isPaused, isComplete,
     currentIteration, totalIterations,
-    feed, statsHistory, agents, finalReport, error,
+    feed, statsHistory, agents, finalReport, error, macroHistory,
     loadAgents, loadHistory, connectSSE,
     pause, resume, abort, abortAndReset, reset,
     continueSimulation, forkSimulation,
@@ -23,7 +24,7 @@ const Simulation = () => {
     isRunning: s.isRunning, isPaused: s.isPaused, isComplete: s.isComplete,
     currentIteration: s.currentIteration, totalIterations: s.totalIterations,
     feed: s.feed, statsHistory: s.statsHistory, agents: s.agents,
-    finalReport: s.finalReport, error: s.error,
+    finalReport: s.finalReport, error: s.error, macroHistory: s.macroHistory,
     loadAgents: s.loadAgents, loadHistory: s.loadHistory, connectSSE: s.connectSSE,
     pause: s.pause, resume: s.resume, abort: s.abort, abortAndReset: s.abortAndReset, reset: s.reset,
     continueSimulation: s.continueSimulation, forkSimulation: s.forkSimulation,
@@ -42,6 +43,7 @@ const Simulation = () => {
   // the local setSessionStage call could trigger auto-proceed with a stale stage value.
   const [sessionStage, setSessionStage] = useState<string>('');
   const [extraIterations, setExtraIterations] = useState(10);
+  const [showTelemetryPanel, setShowTelemetryPanel] = useState(false);
   const [agentStatusTab, setAgentStatusTab] = useState<'lifecycle' | 'intents'>('intents');
   const [confirmDialog, setConfirmDialog] = useState<'end' | 'abort' | null>(null);
   const [autoProceed, setAutoProceed] = useState(() => localStorage.getItem('sim-auto-proceed') === 'true');
@@ -240,6 +242,16 @@ const Simulation = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          {/* Economy Telemetry Button */}
+          <button
+            onClick={() => setShowTelemetryPanel(true)}
+            className="btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}
+            title="Open Economy Telemetry Terminal"
+          >
+            <CircleDollarSign size={16} /> Economy Telemetry
+          </button>
+
           {/* Auto-Proceed Toggle */}
           <div
             onClick={() => setAutoProceed(p => !p)}
@@ -641,6 +653,15 @@ const Simulation = () => {
             else handleAbort();
           }}
           onCancel={() => setConfirmDialog(null)}
+        />
+      )}
+
+      {/* Economy Telemetry Terminal */}
+      {showTelemetryPanel && id && (
+        <TelemetryPanel
+          sessionId={id}
+          onClose={() => setShowTelemetryPanel(false)}
+          macroHistory={macroHistory}
         />
       )}
     </div>
