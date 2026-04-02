@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { brainstormApi } from '../api/brainstorm';
-import type { SessionDetail, ChatMessage, Agent, DesignProgressEvent } from '@policylab/shared';
+import type { SessionDetail, ChatMessage, Agent, DesignProgressEvent, BudgetAllocation } from '@policylab/shared';
 
 interface DesignProgress {
   active: boolean;
@@ -29,6 +29,7 @@ interface SessionDetailStore {
   startSimulation: (id: string, totalIterations: number) => Promise<void>;
   forkSession: (id: string, iterations: number) => Promise<string>;
   updateLockedVariables: (id: string, lockedVars: string[]) => Promise<void>;
+  saveBudgetAllocation: (sessionId: string, allocation: BudgetAllocation) => Promise<void>;
   reset: () => void;
 }
 
@@ -377,5 +378,16 @@ export const useSessionDetailStore = create<SessionDetailStore>((set, get) => ({
     set(state => ({
       session: state.session ? { ...state.session, stage: 'simulating' } : null,
     }));
+  },
+
+  saveBudgetAllocation: async (sessionId: string, allocation: BudgetAllocation) => {
+    await fetch(`/api/sessions/${sessionId}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        budgetAllocation: allocation,
+        economyConfig: { fiscalEnabled: true },
+      }),
+    });
   },
 }));
