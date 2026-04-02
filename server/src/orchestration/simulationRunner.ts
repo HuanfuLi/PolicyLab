@@ -60,6 +60,10 @@ import { getEconomyConfig } from '../mechanics/economyConfigUtils.js';
 // Capital Markets imports (Phase 2: Capital Markets)
 import * as capitalMarketEngine from '../mechanics/capitalMarketEngine.js';
 import * as capitalMarketRepo from '../db/repos/capitalMarketRepo.js';
+// Fiscal Policy imports (Phase 3: Fiscal Policy)
+import * as fiscalEngine from '../mechanics/fiscalEngine.js';
+import * as fiscalRepo from '../db/repos/fiscalRepo.js';
+import { DEFAULT_BUDGET_ALLOCATION, DEFAULT_PUBLIC_GOODS_INITIAL } from '@policylab/shared';
 // Phase 1 Economy imports
 import { getOrderBook, clearOrderBook, restoreOrderBook, isOrderBookWarm } from '../mechanics/orderBook.js';
 import { economyRepo, type AgentEconomyState } from '../db/repos/economyRepo.js';
@@ -245,6 +249,9 @@ const sessionSFCTracking = new Map<string, { initialFiat: number }>();
 const sessionStateTreasury = new Map<string, number>();
 // D4: Last iteration's physics trace log — injected into next iteration's resolution prompt.
 const sessionLastPhysicsTraces = new Map<string, string>();
+// Fiscal Policy: multiplier effects from the previous iteration's public goods state.
+// Provides a 1-iteration lag (realistic: infrastructure improvement takes time to take effect).
+const sessionFiscalMultipliers = new Map<string, fiscalEngine.MultiplierEffects>();
 
 function computeSystemFiatTotal(
   agents: Agent[],
@@ -1280,6 +1287,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         sessionSFCTracking.delete(sessionId);
         sessionStateTreasury.delete(sessionId);
         sessionLastPhysicsTraces.delete(sessionId);
+        sessionFiscalMultipliers.delete(sessionId);
         if (simulationManager.isResetRequested(sessionId)) {
           // The abort-reset endpoint already cleaned the DB and set the stage.
           // Just exit — do not overwrite the stage with 'simulation-complete'.
@@ -1319,6 +1327,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           sessionSFCTracking.delete(sessionId);
           sessionStateTreasury.delete(sessionId);
           sessionLastPhysicsTraces.delete(sessionId);
+          sessionFiscalMultipliers.delete(sessionId);
           if (simulationManager.isResetRequested(sessionId)) {
             simulationManager.broadcast(sessionId, { type: 'aborted-reset' });
           } else {
@@ -1849,6 +1858,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             isSabotaged: sabotageRegistry.has(agent.id),
             isSuppressed: suppressRegistry.has(agent.id),
             isFirstAction: actionIndex === 0,
+            fiscalMultipliers: sessionFiscalMultipliers.get(sessionId),
           });
 
           weekState.executedActions.push(action);
@@ -1955,7 +1965,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           runningCortisol = clampStat(runningCortisol + effectiveCortisolDelta);
           runningDopamine = clampStat(runningDopamine + physics.dopamineDelta);
 
-          weekState.skills = processSkills(weekState.skills, action.actionCode);
+          const fiscalSkillMult = sessionFiscalMultipliers.get(sessionId);
+          const skillGainMult = fiscalSkillMult ? 1 + fiscalSkillMult.skillGainBonus : 1.0;
+          weekState.skills = processSkills(weekState.skills, action.actionCode, skillGainMult);
 
           if (runningHealth < 20) {
             weekState.interrupted = true;
@@ -2863,6 +2875,63 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
       }
 
+      // ── Fiscal policy tick ──────────────────────────────────────────────────
+      // Runs after capital market tick. Executes budget spending from treasury,
+      // updates public goods quality, applies welfare payments to agents.
+      // SFC: all spending flows from treasury to agents (direct transfers).
+      if (economyConfig.fiscalEnabled) {
+        const budgetAllocation = fiscalRepo.getActiveBudget(sessionId) ?? DEFAULT_BUDGET_ALLOCATION;
+        const currentPublicGoods = fiscalRepo.getPublicGoodsState(sessionId);
+        const treasuryBalance = sessionStateTreasury.get(sessionId) ?? 0;
+
+        const fiscalDelta = fiscalEngine.executeBudget({
+          treasuryBalance,
+          budgetAllocation,
+          economyConfig,
+          currentPublicGoods: currentPublicGoods
+            ? {
+                iterationNumber: currentPublicGoods.iterationNumber,
+                infrastructureQuality: currentPublicGoods.infrastructureQuality,
+                educationQuality: currentPublicGoods.educationQuality,
+                defenseQuality: currentPublicGoods.defenseQuality,
+                welfareQuality: currentPublicGoods.welfareQuality,
+              }
+            : { iterationNumber: 0, ...DEFAULT_PUBLIC_GOODS_INITIAL },
+          aliveAgentIds: aliveAgents.map(a => a.id),
+          iterationNumber: iterNum,
+        });
+
+        // Apply treasury delta (spending removed from treasury)
+        sessionStateTreasury.set(sessionId, treasuryBalance + fiscalDelta.treasuryDelta);
+
+        // Apply agent welfare/spending payments to statUpdates (in-memory, persisted below)
+        for (const [agentId, payment] of fiscalDelta.agentPayments) {
+          const agentUpdate = statUpdates.find(u => u.id === agentId);
+          if (agentUpdate) agentUpdate.wealth += payment;
+        }
+
+        // Persist public goods state for this iteration
+        sqlite.transaction(() => {
+          fiscalRepo.upsertPublicGoodsState({
+            id: `${sessionId}-${iterNum}`,
+            sessionId,
+            ...fiscalDelta.updatedPublicGoods,
+          });
+        })();
+
+        // Store multiplier effects for the NEXT iteration's physics calls (1-iteration lag).
+        // Public goods effects are realistic with a lag: investment this week affects
+        // productivity next week as infrastructure improvements take time to materialize.
+        sessionFiscalMultipliers.set(sessionId, fiscalDelta.multiplierEffects);
+
+        // Append fiscal traces to physics trace log
+        if (fiscalDelta.trace.length > 0) {
+          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
+          sessionLastPhysicsTraces.set(sessionId,
+            existingTrace + '\n' + fiscalDelta.trace.join('\n'));
+        }
+      }
+
       const finalStatsByAgentId = new Map(statUpdates.map(u => [u.id, u]));
 
       const cognitivePostInputs: CognitivePostInput[] = aliveAgents.map(agent => {
@@ -3370,6 +3439,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     sessionSFCTracking.delete(sessionId);
     sessionStateTreasury.delete(sessionId);
     sessionLastPhysicsTraces.delete(sessionId);
+    sessionFiscalMultipliers.delete(sessionId);
 
     await sessionRepo.updateStage(sessionId, 'simulation-complete');
     simulationManager.broadcast(sessionId, { type: 'simulation-complete', finalReport });
@@ -3387,6 +3457,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     sessionSFCTracking.delete(sessionId);
     sessionStateTreasury.delete(sessionId);
     sessionLastPhysicsTraces.delete(sessionId);
+    sessionFiscalMultipliers.delete(sessionId);
 
     if (err instanceof SimulationPausedError) {
       // Structured pause: persist simulation-paused stage so the resume route can restart.

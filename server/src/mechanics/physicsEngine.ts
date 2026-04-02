@@ -45,6 +45,17 @@ export interface PhysicsInput {
   isSuppressed?: boolean;
   /** True only for the first action in the queue — dopamine decay fires once per week, not per action. */
   isFirstAction?: boolean;
+  /**
+   * Fiscal Policy: public goods multiplier effects from the previous iteration.
+   * Applied to WORK/PRODUCE productivity and SUPPRESS enforcement.
+   * Default: all zeroes when not provided (backward compatible).
+   */
+  fiscalMultipliers?: {
+    productivityBonus: number;
+    skillGainBonus: number;
+    enforcementBonus: number;
+    welfarePerAgent: number;
+  };
 }
 
 export interface PhysicsQueueInput {
@@ -132,9 +143,13 @@ export function clampHappinessByPhysiology(
  * Returns a full math trace in result.trace for debugging and the Physics Laboratory UI.
  */
 export function resolveAction(input: PhysicsInput): PhysicsOutput {
-  const { agent, actionCode, actionTarget, allAgents, skills, inventory, economyDeltas, isSabotaged, isSuppressed, isFirstAction } = input;
+  const { agent, actionCode, actionTarget, allAgents, skills, inventory, economyDeltas, isSabotaged, isSuppressed, isFirstAction, fiscalMultipliers } = input;
   let w = 0, h = 0, hap = 0, cor = 0, dop = 0;
   const trace: string[] = [];
+
+  // Fiscal public goods multipliers (default to 0 when not provided — backward compatible)
+  const productivityBonus = fiscalMultipliers?.productivityBonus ?? 0;
+  const enforcementBonus = fiscalMultipliers?.enforcementBonus ?? 0;
 
   // Compute skill and tool multipliers if available
   const skillMult = skills ? getActionMultiplier(skills, actionCode) : 1.0;
@@ -149,12 +164,14 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
   switch (actionCode) {
     case 'WORK': {
       const base = roleIncome(agent.role);
-      w = base * productionMult;
+      const infraBoost = 1 + productivityBonus;
+      w = base * productionMult * infraBoost;
       h = -2;
       hap = -1;
       cor = -3;
       dop = 2;
-      trace.push(`  Δwealth: roleIncome(${agent.role} = ${roleTierLabel(agent.role)}) = ${base} × productionMult(${productionMult.toFixed(3)}) = ${w.toFixed(3)} (funded from state treasury)`);
+      trace.push(`  Δwealth: roleIncome(${agent.role} = ${roleTierLabel(agent.role)}) = ${base} × productionMult(${productionMult.toFixed(3)}) × infraBoost(${infraBoost.toFixed(3)}) = ${w.toFixed(3)} (funded from state treasury)`);
+      if (productivityBonus > 0) trace.push(`  [Fiscal] Infrastructure quality boost: +${(productivityBonus * 100).toFixed(2)}% productivity`);
       trace.push(`  Δhealth: -2 (labor cost)`);
       trace.push(`  Δhappiness: -1 (moderate work satisfaction)`);
       trace.push(`  Δcortisol: -3 (productive relief)`);
@@ -337,17 +354,22 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       trace.push(`  Δcortisol: +5 (fear of backlash)`);
       trace.push(`  Δdopamine: +4 (political power reward)`);
       break;
-    case 'SUPPRESS':
+    case 'SUPPRESS': {
+      // Defense quality (enforcementBonus) increases suppression effectiveness.
+      // The suppressor feels more confident with higher enforcement capability.
+      const defenseConfidenceBonus = enforcementBonus;
       w = 0;
       h = 0;
-      hap = 4;
+      hap = 4 + defenseConfidenceBonus * 10;  // defense quality amplifies domination satisfaction
       cor = 8;
       dop = 6;
       trace.push(`  Note: target's penalty (+cortisol, -happiness) applied separately in runner`);
-      trace.push(`  Δhappiness: +4 (satisfaction from domination)`);
+      trace.push(`  Δhappiness: +4 (satisfaction from domination)${defenseConfidenceBonus > 0 ? ` + ${(defenseConfidenceBonus * 10).toFixed(2)} (defense quality confidence boost)` : ''}`);
       trace.push(`  Δcortisol: +8 (stress from wielding coercive power)`);
       trace.push(`  Δdopamine: +6 (domination reward)`);
+      if (enforcementBonus > 0) trace.push(`  [Fiscal] Defense quality enforcement bonus: +${(enforcementBonus * 100).toFixed(2)}%`);
       break;
+    }
     // ── Banking actions ─────────────────────────────────────────────────────
     // These produce NO direct wealth delta in the physics engine.
     // All financial effects come from bankingEngine.processIteration() in simulationRunner.

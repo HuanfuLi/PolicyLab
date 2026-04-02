@@ -145,19 +145,23 @@ export function getRoleAffinity(role: string): SkillCategory | null {
  *
  * @param skills  Current skill matrix (will be mutated in-place for performance).
  * @param action  The action code the agent executed.
+ * @param skillGainMultiplier  Optional multiplier for XP gains (default 1.0).
+ *                             Education public goods quality applies a bonus here.
  * @returns       The updated skill matrix.
  */
 export function processSkills(
     skills: SkillMatrix,
     action: ActionCode,
+    skillGainMultiplier?: number,
 ): SkillMatrix {
     const mapping = ACTION_SKILL_MAP[action];
+    const mult = skillGainMultiplier ?? 1.0;
 
     // 1. Award XP for exercised skills
     if (mapping) {
-        grantXP(skills, mapping.primary, XP_PER_ACTION);
+        grantXP(skills, mapping.primary, Math.round(XP_PER_ACTION * mult));
         if (mapping.secondary) {
-            grantXP(skills, mapping.secondary, Math.round(XP_PER_ACTION * 0.5));
+            grantXP(skills, mapping.secondary, Math.round(XP_PER_ACTION * 0.5 * mult));
         }
     }
 
