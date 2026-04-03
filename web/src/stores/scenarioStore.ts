@@ -139,6 +139,7 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
         if (t.id !== tabId) return t;
         const updatedConfig = { ...t.economyConfig, ...patch };
         const deltas = t.isBaseline ? undefined : computeDeltas(updatedConfig, baselineConfig);
+        if (deltas) console.log('[scenarioStore] deltas:', Object.keys(deltas).length, deltas);
         return { ...t, economyConfig: updatedConfig, deltas };
       }),
     }));

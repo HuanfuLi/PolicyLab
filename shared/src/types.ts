@@ -436,6 +436,8 @@ export interface SessionConfig {
   lockedVariables?: string[];
   economyConfig?: Partial<EconomyConfig>;     // per D-01: policymaker-configured economy params
   budgetAllocation?: BudgetAllocation;        // per D-01: fiscal budget split across categories
+  /** Phase 7: confidence metadata from bootstrap — maps param key → 'high' | 'medium' | 'low' */
+  bootstrapConfidence?: Record<string, string>;
 }
 
 // ── v1.0 Economy Types (Phase 1: Banking Foundation) ─────────────────────
