@@ -50,7 +50,7 @@ const IdeaInput = () => {
   // Navigate to design-review when bootstrap completes
   useEffect(() => {
     if (bootstrapStore.mode === 'complete' && bootstrapStore.sessionId) {
-      navigate(`/session/${bootstrapStore.sessionId}/design-review`);
+      navigate(`/session/${bootstrapStore.sessionId}/design`);
       bootstrapStore.reset();
     }
   }, [bootstrapStore.mode, bootstrapStore.sessionId, navigate, bootstrapStore]);
@@ -314,7 +314,9 @@ const IdeaInput = () => {
             </h1>
             {bootstrapStore.selectedLocation && (
               <p style={{ fontSize: '1.1rem', color: 'var(--text-muted)' }}>
-                {bootstrapStore.selectedLocation.name}, {bootstrapStore.selectedLocation.country}
+                {bootstrapStore.selectedLocation.name !== bootstrapStore.selectedLocation.country
+                  ? `${bootstrapStore.selectedLocation.name}, ${bootstrapStore.selectedLocation.country}`
+                  : bootstrapStore.selectedLocation.name}
               </p>
             )}
           </div>

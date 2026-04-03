@@ -53,9 +53,11 @@ const LocationSearch: React.FC<LocationSearchProps> = ({ onSelect, disabled }) =
   };
 
   const handleSelect = (loc: LocationResult) => {
-    const displayName = loc.state
-      ? `${loc.name}, ${loc.state}, ${loc.country}`
-      : `${loc.name}, ${loc.country}`;
+    const displayName = loc.type === 'country'
+      ? loc.name
+      : loc.state
+        ? `${loc.name}, ${loc.state}, ${loc.country}`
+        : `${loc.name}, ${loc.country}`;
     setQuery(displayName);
     setSelectedName(displayName);
     setShowDropdown(false);
@@ -112,7 +114,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({ onSelect, disabled }) =
             transform: 'translateY(-50%)',
             width: '18px',
             height: '18px',
-            border: '2px solid var(--border)',
+            border: '2px solid var(--glass-border)',
             borderTopColor: 'var(--primary)',
             borderRadius: '50%',
             animation: 'spin 0.8s linear infinite',
@@ -127,13 +129,13 @@ const LocationSearch: React.FC<LocationSearchProps> = ({ onSelect, disabled }) =
           left: 0,
           right: 0,
           zIndex: 50,
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
+          background: 'var(--bg-color)',
+          border: '1px solid var(--glass-border)',
           borderRadius: '8px',
           marginTop: '4px',
           maxHeight: '280px',
           overflowY: 'auto',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+          boxShadow: '0 8px 24px var(--panel-dark-10, rgba(0,0,0,0.2))',
         }}>
           {results.map((loc, i) => (
             <div
@@ -144,7 +146,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({ onSelect, disabled }) =
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                borderBottom: i < results.length - 1 ? '1px solid var(--border)' : 'none',
+                borderBottom: i < results.length - 1 ? '1px solid var(--glass-border)' : 'none',
                 transition: 'background 0.15s',
               }}
               onMouseDown={(e) => e.preventDefault()}
@@ -152,7 +154,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({ onSelect, disabled }) =
               onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--primary-alpha, rgba(99,102,241,0.1))'; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
             >
-              <span style={{ color: 'var(--text)' }}>
+              <span style={{ color: 'var(--text-main)' }}>
                 {loc.name}
                 {loc.state && <span style={{ color: 'var(--text-muted)' }}>, {loc.state}</span>}
                 <span style={{ color: 'var(--text-muted)' }}>, {loc.country}</span>
