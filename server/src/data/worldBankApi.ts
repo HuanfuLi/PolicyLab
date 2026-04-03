@@ -89,35 +89,9 @@ export async function fetchIndicatorBatch(
   indicatorCodes: string[],
   dateRange?: string,
 ): Promise<IndicatorResult[]> {
-  try {
-    const joined = indicatorCodes.join(';');
-    let url = `${BASE_URL}/country/${countryCode}/indicator/${joined}?format=json&per_page=500&mrv=1`;
-    if (dateRange) {
-      url += `&date=${dateRange}`;
-    }
-
-    const res = await fetch(url);
-    const json = await res.json();
-
-    const data = json[1];
-    if (!data || !Array.isArray(data)) {
-      return [];
-    }
-
-    const results: IndicatorResult[] = [];
-    for (const entry of data) {
-      if (entry.value === null || entry.value === undefined) continue;
-      results.push({
-        indicatorCode: entry.indicator.id,
-        value: entry.value,
-        year: parseInt(entry.date, 10),
-        confidence: assessConfidence(parseInt(entry.date, 10)),
-      });
-    }
-
-    return results;
-  } catch (err) {
-    console.warn(`[worldBankApi] Failed to fetch batch for ${countryCode}:`, err);
-    return [];
-  }
+  // World Bank API does NOT support semicolon-separated indicator codes.
+  // Fetch each indicator individually in parallel.
+  const promises = indicatorCodes.map(code => fetchIndicator(countryCode, code, dateRange));
+  const results = await Promise.all(promises);
+  return results.filter((r): r is IndicatorResult => r !== null);
 }
