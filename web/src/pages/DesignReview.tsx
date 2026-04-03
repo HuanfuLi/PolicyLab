@@ -7,7 +7,6 @@ import MarkdownText from '../components/MarkdownText';
 import EconomyTab from '../components/EconomyTab';
 import ScenarioTabs from '../components/ScenarioTabs';
 import { DEFAULT_BUDGET_ALLOCATION } from '@policylab/shared';
-import type { BudgetAllocation } from '@policylab/shared';
 
 const LOCKABLE_VARIABLES = [
   { key: 'wealth', label: 'Wealth' },
