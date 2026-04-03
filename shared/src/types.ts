@@ -796,6 +796,10 @@ export interface LocationProfile {
     giniIndex?: DataPoint;
     inflationRate?: DataPoint;
     realInterestRate?: DataPoint;
+    lendingInterestRate?: DataPoint;
+    depositInterestRate?: DataPoint;
+    interestRateSpread?: DataPoint;
+    stockMarketCap?: DataPoint;
   };
   fiscal: {
     taxRevenuePctGdp?: DataPoint;
@@ -803,6 +807,7 @@ export interface LocationProfile {
     militaryExpPctGdp?: DataPoint;
     healthExpPctGdp?: DataPoint;
     educationExpPctGdp?: DataPoint;
+    govDebtPctGdp?: DataPoint;
   };
   governance?: DataPoint<string>;
   infrastructure?: DataPoint<string>;

@@ -78,7 +78,7 @@ export async function fetchLocationData(
   ];
   const demoResults = await fetchIndicatorBatch(countryCode, demographicCodes);
 
-  // Step 2: Economics
+  // Step 2: Economics + Banking rates
   progress?.onStep('economics', 2, TOTAL_STEPS);
   const econCodes = [
     WB_INDICATORS.gdpPerCapita,
@@ -86,6 +86,10 @@ export async function fetchLocationData(
     WB_INDICATORS.giniIndex,
     WB_INDICATORS.inflationCPI,
     WB_INDICATORS.realInterestRate,
+    WB_INDICATORS.lendingInterestRate,
+    WB_INDICATORS.depositInterestRate,
+    WB_INDICATORS.interestRateSpread,
+    WB_INDICATORS.stockMarketCap,
   ];
   const econResults = await fetchIndicatorBatch(countryCode, econCodes);
 
@@ -97,6 +101,7 @@ export async function fetchLocationData(
     WB_INDICATORS.militaryExpPctGdp,
     WB_INDICATORS.healthExpPctGdp,
     WB_INDICATORS.educationExpPctGdp,
+    WB_INDICATORS.govDebtPctGdp,
   ];
   const fiscalResults = await fetchIndicatorBatch(countryCode, fiscalCodes);
 
@@ -142,6 +147,10 @@ export async function fetchLocationData(
       giniIndex: toDataPoint(allResults, 'giniIndex'),
       inflationRate: toDataPoint(allResults, 'inflationCPI'),
       realInterestRate: toDataPoint(allResults, 'realInterestRate'),
+      lendingInterestRate: toDataPoint(allResults, 'lendingInterestRate'),
+      depositInterestRate: toDataPoint(allResults, 'depositInterestRate'),
+      interestRateSpread: toDataPoint(allResults, 'interestRateSpread'),
+      stockMarketCap: toDataPoint(allResults, 'stockMarketCap'),
     },
     fiscal: {
       taxRevenuePctGdp: toDataPoint(allResults, 'taxRevenuePctGdp'),
@@ -149,6 +158,7 @@ export async function fetchLocationData(
       militaryExpPctGdp: toDataPoint(allResults, 'militaryExpPctGdp'),
       healthExpPctGdp: toDataPoint(allResults, 'healthExpPctGdp'),
       educationExpPctGdp: toDataPoint(allResults, 'educationExpPctGdp'),
+      govDebtPctGdp: toDataPoint(allResults, 'govDebtPctGdp'),
     },
     // Governance and infrastructure are qualitative — to be filled by LLM
     governance: { value: 'Unknown', source: 'llm' as DataSource, confidence: 'low' as ConfidenceLevel },

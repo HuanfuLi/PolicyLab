@@ -45,49 +45,56 @@ export function profileToEconomyConfig(profile: LocationProfile): {
 } {
   const confidence: Record<string, ConfidenceLevel> = {};
 
-  // --- Interest rate mapping ---
-  const annualRate = profile.economics.realInterestRate?.value;
-  let baseLoanInterestRate: number;
-  if (annualRate != null) {
-    baseLoanInterestRate = annualRate / 100 / ITERATIONS_PER_YEAR;
-    confidence['baseLoanInterestRate'] = profile.economics.realInterestRate!.confidence;
-  } else {
-    baseLoanInterestRate = 0.005; // default fallback
-    confidence['baseLoanInterestRate'] = 'low';
+  // Helper: pick best available data point and track confidence
+  function pickAndTrack(key: string, dp: { value: number; confidence: ConfidenceLevel } | undefined, fallback: number): number {
+    if (dp != null) {
+      confidence[key] = dp.confidence;
+      return dp.value;
+    }
+    return fallback;
   }
 
-  const depositInterestRate = baseLoanInterestRate * 0.4;
-  confidence['depositInterestRate'] = confidence['baseLoanInterestRate'];
+  // --- Lending interest rate ---
+  // Priority: WB lendingInterestRate (direct) > WB realInterestRate (indirect) > default
+  const lendingAnnual = profile.economics.lendingInterestRate?.value
+    ?? profile.economics.realInterestRate?.value;
+  const lendingSrc = profile.economics.lendingInterestRate ?? profile.economics.realInterestRate;
+  const baseLoanInterestRate = lendingAnnual != null
+    ? Math.max(0.001, Math.min(0.02, lendingAnnual / 100 / ITERATIONS_PER_YEAR))
+    : 0.005;
+  confidence['baseLoanInterestRate'] = lendingSrc?.confidence ?? 'low';
+
+  // --- Deposit interest rate ---
+  // Priority: WB depositInterestRate (direct) > derived from lending rate × 0.4
+  const depositAnnual = profile.economics.depositInterestRate?.value;
+  const depositInterestRate = depositAnnual != null
+    ? Math.max(0.0005, Math.min(0.01, depositAnnual / 100 / ITERATIONS_PER_YEAR))
+    : baseLoanInterestRate * 0.4;
+  confidence['depositInterestRate'] = profile.economics.depositInterestRate?.confidence
+    ?? confidence['baseLoanInterestRate'];
 
   // --- Reserve requirement ---
-  let reserveRequirement: number;
-  if (annualRate != null) {
-    reserveRequirement = Math.max(0.03, Math.min(0.20, annualRate / 100));
-    confidence['reserveRequirement'] = profile.economics.realInterestRate!.confidence;
-  } else {
-    reserveRequirement = 0.10;
-    confidence['reserveRequirement'] = 'low';
-  }
+  // No direct WB indicator for statutory reserve ratio. Use a heuristic:
+  // Developing economies (GDP < $15k) tend toward 0.10-0.15; developed toward 0.03-0.08.
+  const gdpPC = profile.economics.gdpPerCapita?.value ?? 10000;
+  const reserveRequirement = gdpPC < 5000 ? 0.15
+    : gdpPC < 15000 ? 0.10
+    : gdpPC < 40000 ? 0.07
+    : 0.03;
+  confidence['reserveRequirement'] = profile.economics.gdpPerCapita?.confidence ?? 'low';
 
   // --- Budget spending rate ---
   const govExpense = profile.fiscal.govExpensePctGdp?.value;
-  let budgetSpendingRate: number;
-  if (govExpense != null) {
-    budgetSpendingRate = Math.max(0.05, Math.min(0.25, govExpense / 100));
-    confidence['budgetSpendingRate'] = profile.fiscal.govExpensePctGdp!.confidence;
-  } else {
-    budgetSpendingRate = 0.10;
-    confidence['budgetSpendingRate'] = 'low';
-  }
+  const budgetSpendingRate = govExpense != null
+    ? Math.max(0.05, Math.min(0.25, govExpense / 100))
+    : 0.10;
+  confidence['budgetSpendingRate'] = profile.fiscal.govExpensePctGdp?.confidence ?? 'low';
 
   // --- Budget allocation: normalize fiscal spending categories ---
-  const military = profile.fiscal.militaryExpPctGdp?.value ?? 2.0;
-  const health = profile.fiscal.healthExpPctGdp?.value ?? 7.0;
-  const education = profile.fiscal.educationExpPctGdp?.value ?? 5.0;
-  // Infrastructure = remainder * 0.3 (estimate from remaining spending)
-  const totalKnown = military + health + education;
-  const infrastructure = totalKnown * 0.3;
-
+  const military = pickAndTrack('_budgetDefense', profile.fiscal.militaryExpPctGdp, 2.0);
+  const health = pickAndTrack('_budgetWelfare', profile.fiscal.healthExpPctGdp, 7.0);
+  const education = pickAndTrack('_budgetEducation', profile.fiscal.educationExpPctGdp, 5.0);
+  const infrastructure = (military + health + education) * 0.3; // estimated remainder
   const rawTotal = military + health + education + infrastructure;
   const budget: BudgetAllocation = {
     defense: military / rawTotal,
@@ -95,42 +102,85 @@ export function profileToEconomyConfig(profile: LocationProfile): {
     education: education / rawTotal,
     infrastructure: infrastructure / rawTotal,
   };
-
-  // Track budget confidence as lowest confidence among inputs
   const fiscalConfidences: ConfidenceLevel[] = [
     profile.fiscal.militaryExpPctGdp?.confidence ?? 'low',
     profile.fiscal.healthExpPctGdp?.confidence ?? 'low',
     profile.fiscal.educationExpPctGdp?.confidence ?? 'low',
   ];
-  const lowestConfidence = fiscalConfidences.includes('low') ? 'low'
+  confidence['budgetAllocation'] = fiscalConfidences.includes('low') ? 'low'
     : fiscalConfidences.includes('medium') ? 'medium' : 'high';
-  confidence['budgetAllocation'] = lowestConfidence;
 
-  // --- Inflation mapping (from real CPI inflation rate) ---
-  const inflationCPI = profile.economics.inflationRate?.value;
-  let inflationAmmThreshold = 0.005; // default
-  let inflationAmmCap = 0.02; // default
+  // --- Inflation AMM params ---
+  // These are PERCENTAGE-SCALE thresholds (default 0.5 and 2.0), NOT per-iteration decimals!
+  // inflationAmmThreshold: minimum inflation expectation % before AMM feedback triggers
+  // inflationAmmCap: max AMM price change per iteration in %
+  const inflationCPI = profile.economics.inflationRate?.value; // annual CPI inflation %
+  let inflationAmmThreshold: number;
+  let inflationAmmCap: number;
   if (inflationCPI != null) {
-    // Higher real inflation → loosen the AMM threshold so prices can move more freely
-    const annualInflation = inflationCPI / 100;
-    inflationAmmThreshold = Math.max(0.002, Math.min(0.02, annualInflation / ITERATIONS_PER_YEAR));
-    inflationAmmCap = Math.max(0.01, Math.min(0.05, annualInflation * 2 / ITERATIONS_PER_YEAR));
+    // Scale: threshold ~ CPI/12 (monthly equivalent), clamped to param's expected range
+    inflationAmmThreshold = Math.max(0.2, Math.min(1.5, inflationCPI / ITERATIONS_PER_YEAR));
+    inflationAmmCap = Math.max(1.0, Math.min(5.0, inflationCPI / ITERATIONS_PER_YEAR * 3));
     confidence['inflationAmmThreshold'] = profile.economics.inflationRate!.confidence;
     confidence['inflationAmmCap'] = profile.economics.inflationRate!.confidence;
   } else {
+    inflationAmmThreshold = 0.5;
+    inflationAmmCap = 2.0;
     confidence['inflationAmmThreshold'] = 'low';
     confidence['inflationAmmCap'] = 'low';
   }
 
-  // --- Productivity growth estimate (from real GDP growth rate) ---
+  // --- Productivity growth estimate ---
   const gdpGrowth = profile.economics.gdpGrowth?.value;
-  let productivityGrowthEstimate = 0.01; // default 1% per iteration
-  if (gdpGrowth != null) {
-    productivityGrowthEstimate = Math.max(0.001, Math.min(0.05, gdpGrowth / 100 / ITERATIONS_PER_YEAR));
-    confidence['productivityGrowthEstimate'] = profile.economics.gdpGrowth!.confidence;
+  const productivityGrowthEstimate = gdpGrowth != null
+    ? Math.max(0.001, Math.min(0.05, gdpGrowth / 100 / ITERATIONS_PER_YEAR))
+    : 0.01;
+  confidence['productivityGrowthEstimate'] = profile.economics.gdpGrowth?.confidence ?? 'low';
+
+  // --- M1 inflation coefficient ---
+  // Higher inflation economies need stronger M1-to-price feedback
+  const m1InflationCoeff = inflationCPI != null
+    ? Math.max(0.1, Math.min(0.5, 0.3 + (inflationCPI - 3) * 0.02))
+    : 0.3;
+  confidence['m1InflationCoeff'] = profile.economics.inflationRate?.confidence ?? 'low';
+
+  // --- Government bond coupon rate ---
+  // Derived from gov debt burden + lending rate: higher debt = higher yield
+  const govDebt = profile.fiscal.govDebtPctGdp?.value;
+  let govBondCouponRate: number;
+  if (govDebt != null && lendingAnnual != null) {
+    // Bond yield ~ lending rate × 0.6 + debt premium
+    const debtPremium = govDebt > 80 ? 0.003 : govDebt > 50 ? 0.002 : 0.001;
+    govBondCouponRate = Math.max(0.001, Math.min(0.02,
+      (lendingAnnual / 100 * 0.6 + debtPremium) / ITERATIONS_PER_YEAR));
+    confidence['govBondCouponRate'] = lendingSrc?.confidence ?? 'low';
   } else {
-    confidence['productivityGrowthEstimate'] = 'low';
+    govBondCouponRate = 0.004;
+    confidence['govBondCouponRate'] = 'low';
   }
+
+  // --- Dividend payout ratio ---
+  // Proxied by stock market maturity: larger market cap → more dividend culture
+  const stockMktCap = profile.economics.stockMarketCap?.value;
+  let dividendPayoutRatio: number;
+  if (stockMktCap != null) {
+    dividendPayoutRatio = stockMktCap > 100 ? 0.08
+      : stockMktCap > 50 ? 0.06
+      : stockMktCap > 20 ? 0.04
+      : 0.02;
+    confidence['dividendPayoutRatio'] = profile.economics.stockMarketCap!.confidence;
+  } else {
+    dividendPayoutRatio = 0.05;
+    confidence['dividendPayoutRatio'] = 'low';
+  }
+
+  // --- Default loan term ---
+  // Developing economies: shorter terms. Developed: longer.
+  const defaultLoanTermIterations = gdpPC < 5000 ? 12
+    : gdpPC < 15000 ? 16
+    : gdpPC < 40000 ? 20
+    : 24;
+  confidence['defaultLoanTermIterations'] = profile.economics.gdpPerCapita?.confidence ?? 'low';
 
   const config: Partial<EconomyConfig> = {
     bankingEnabled: true,
@@ -144,8 +194,10 @@ export function profileToEconomyConfig(profile: LocationProfile): {
     inflationAmmThreshold,
     inflationAmmCap,
     productivityGrowthEstimate,
-    // Keep other defaults from DEFAULT_ECONOMY_CONFIG
-    defaultLoanTermIterations: 20,
+    m1InflationCoeff,
+    govBondCouponRate,
+    dividendPayoutRatio,
+    defaultLoanTermIterations,
     defaultThresholdIterations: 3,
   };
 

@@ -28,12 +28,19 @@ export const WB_INDICATORS = {
   inflationCPI: 'FP.CPI.TOTL.ZG',
   realInterestRate: 'FR.INR.RINR',
 
+  // ── Banking / Interest Rates ─────────────────────────────────────────────
+  lendingInterestRate: 'FR.INR.LEND',   // Commercial bank lending rate (annual %)
+  depositInterestRate: 'FR.INR.DPST',   // Commercial bank deposit rate (annual %)
+  interestRateSpread: 'FR.INR.LNDP',    // Lending rate minus deposit rate (pp)
+  stockMarketCap: 'CM.MKT.LCAP.GD.ZS', // Stock market cap % GDP (capital markets maturity proxy)
+
   // ── Fiscal ────────────────────────────────────────────────────────────────
   taxRevenuePctGdp: 'GC.TAX.TOTL.GD.ZS',
   govExpensePctGdp: 'GC.XPN.TOTL.GD.ZS',
   militaryExpPctGdp: 'MS.MIL.XPND.GD.ZS',
   healthExpPctGdp: 'SH.XPD.CHEX.GD.ZS',
   educationExpPctGdp: 'SE.XPD.TOTL.GD.ZS',
+  govDebtPctGdp: 'GC.DOD.TOTL.GD.ZS',  // Central gov debt % GDP (bond yield proxy)
 
   // ── Infrastructure ────────────────────────────────────────────────────────
   electricityAccess: 'EG.ELC.ACCS.ZS',
