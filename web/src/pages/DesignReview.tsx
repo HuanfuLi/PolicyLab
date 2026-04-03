@@ -382,6 +382,7 @@ const DesignReview = () => {
                     saveBudgetAllocation(id!, budget);
                   }}
                   onRunAll={handleRunAllScenarios}
+                  bootstrapConfidence={session.config.bootstrapConfidence}
                 />
               ) : (
                 <EconomyTab

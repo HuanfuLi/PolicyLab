@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { EconomyConfig, BudgetAllocation, ScenarioTab } from '@policylab/shared';
+import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
 
 interface ScenarioState {
   tabs: ScenarioTab[];
@@ -25,22 +26,25 @@ function scenarioLetter(index: number): string {
   return String.fromCharCode(65 + index);
 }
 
-/** Compute deltas between a tab's config and the baseline config */
+/** Compute deltas between a tab's config and the baseline config.
+ *  Both configs are merged with DEFAULT_ECONOMY_CONFIG first so that
+ *  params using defaults are still visible when changed. */
 function computeDeltas(
   tabConfig: Partial<EconomyConfig>,
   baselineConfig: Partial<EconomyConfig>,
 ): Record<string, { from: number | boolean; to: number | boolean }> | undefined {
+  const defaults = DEFAULT_ECONOMY_CONFIG as Record<string, unknown>;
+  const fullBaseline = { ...defaults, ...baselineConfig } as Record<string, unknown>;
+  const fullTab = { ...defaults, ...tabConfig } as Record<string, unknown>;
   const deltas: Record<string, { from: number | boolean; to: number | boolean }> = {};
-  const allKeys = new Set([...Object.keys(tabConfig), ...Object.keys(baselineConfig)]);
 
-  for (const key of allKeys) {
-    const baseVal = (baselineConfig as Record<string, unknown>)[key];
-    const tabVal = (tabConfig as Record<string, unknown>)[key];
+  for (const key of Object.keys(fullBaseline)) {
+    const baseVal = fullBaseline[key];
+    const tabVal = fullTab[key];
     if (
       baseVal !== tabVal &&
-      baseVal !== undefined &&
-      tabVal !== undefined &&
-      (typeof baseVal === 'number' || typeof baseVal === 'boolean')
+      (typeof baseVal === 'number' || typeof baseVal === 'boolean') &&
+      (typeof tabVal === 'number' || typeof tabVal === 'boolean')
     ) {
       deltas[key] = {
         from: baseVal as number | boolean,
@@ -65,19 +69,23 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
     // Only initialize if tabs are empty
     if (tabs.length > 0) return;
 
+    // Merge with defaults so ALL params are in the baseline (not just bootstrap-provided ones).
+    // This ensures computeDeltas can detect changes to any param, not just the ~13 from bootstrap.
+    const fullConfig: Partial<EconomyConfig> = { ...DEFAULT_ECONOMY_CONFIG, ...config };
+
     const baselineId = crypto.randomUUID();
     const baselineTab: ScenarioTab = {
       id: baselineId,
       name: 'Baseline',
       isBaseline: true,
-      economyConfig: { ...config },
+      economyConfig: { ...fullConfig },
       budgetAllocation: { ...budget },
     };
 
     set({
       tabs: [baselineTab],
       activeTabId: baselineId,
-      baselineConfig: { ...config },
+      baselineConfig: { ...fullConfig },
       baselineBudget: { ...budget },
     });
   },
@@ -139,7 +147,6 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
         if (t.id !== tabId) return t;
         const updatedConfig = { ...t.economyConfig, ...patch };
         const deltas = t.isBaseline ? undefined : computeDeltas(updatedConfig, baselineConfig);
-        if (deltas) console.log('[scenarioStore] deltas:', Object.keys(deltas).length, deltas);
         return { ...t, economyConfig: updatedConfig, deltas };
       }),
     }));
