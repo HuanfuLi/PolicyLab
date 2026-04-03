@@ -90,8 +90,16 @@ export async function fetchIndicatorBatch(
   dateRange?: string,
 ): Promise<IndicatorResult[]> {
   // World Bank API does NOT support semicolon-separated indicator codes.
-  // Fetch each indicator individually in parallel.
-  const promises = indicatorCodes.map(code => fetchIndicator(countryCode, code, dateRange));
-  const results = await Promise.all(promises);
-  return results.filter((r): r is IndicatorResult => r !== null);
+  // Fetch in small concurrent batches of 5 to avoid rate limiting (429/504 errors).
+  const BATCH_SIZE = 5;
+  const allResults: IndicatorResult[] = [];
+
+  for (let i = 0; i < indicatorCodes.length; i += BATCH_SIZE) {
+    const chunk = indicatorCodes.slice(i, i + BATCH_SIZE);
+    const promises = chunk.map(code => fetchIndicator(countryCode, code, dateRange));
+    const results = await Promise.all(promises);
+    allResults.push(...results.filter((r): r is IndicatorResult => r !== null));
+  }
+
+  return allResults;
 }
