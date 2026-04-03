@@ -188,6 +188,34 @@ interface EconomyTabProps {
   budgetAllocation: BudgetAllocation;
   onConfigChange: (patch: Partial<EconomyConfig>) => void;
   onBudgetChange: (budget: BudgetAllocation) => void;
+  /** Confidence metadata from bootstrap — maps param key → 'high' | 'medium' | 'low' */
+  bootstrapConfidence?: Record<string, string>;
+}
+
+/** Small inline badge showing data source confidence for bootstrapped values */
+function ConfidenceDot({ level }: { level?: string }) {
+  if (!level) return null;
+  const color = level === 'high' ? 'var(--success, #22c55e)'
+    : level === 'medium' ? 'var(--color-yellow, #eab308)'
+    : 'var(--text-dim)';
+  const label = level === 'high' ? 'From real data'
+    : level === 'medium' ? 'Estimated from data'
+    : 'Default value';
+  return (
+    <span
+      title={label}
+      style={{
+        display: 'inline-block',
+        width: 8,
+        height: 8,
+        borderRadius: '50%',
+        background: color,
+        marginLeft: 6,
+        verticalAlign: 'middle',
+        cursor: 'help',
+      }}
+    />
+  );
 }
 
 // ── EconomyTab ───────────────────────────────────────────────────────────────
@@ -197,6 +225,7 @@ export default function EconomyTab({
   budgetAllocation,
   onConfigChange,
   onBudgetChange,
+  bootstrapConfidence,
 }: EconomyTabProps) {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     banking: true,
@@ -316,9 +345,13 @@ export default function EconomyTab({
     PARAM_META.filter(m => m.section === section).length > 0;
 
   const isSectionVisible = (section: Section): boolean => {
-    if (section === 'capitalMarkets') return !!economyConfig.capitalMarketsEnabled;
-    if (section === 'inflation') return !!economyConfig.inflationEnabled;
-    return true;
+    const flagMap: Record<Section, keyof EconomyConfig> = {
+      banking: 'bankingEnabled',
+      fiscal: 'fiscalEnabled',
+      capitalMarkets: 'capitalMarketsEnabled',
+      inflation: 'inflationEnabled',
+    };
+    return !!economyConfig[flagMap[section]];
   };
 
   return (
@@ -336,6 +369,15 @@ export default function EconomyTab({
           fontSize: '0.875rem',
         }}>
           Economy features were not configured for this session. These defaults will apply if you fork and re-simulate.
+        </div>
+      )}
+
+      {/* Data source legend (only shown for bootstrapped sessions) */}
+      {bootstrapConfidence && Object.keys(bootstrapConfidence).length > 0 && (
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+          <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--success, #22c55e)', marginRight: 4, verticalAlign: 'middle' }} />From real data</span>
+          <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--color-yellow, #eab308)', marginRight: 4, verticalAlign: 'middle' }} />Estimated from data</span>
+          <span style={{ opacity: 0.7 }}>No dot = default value</span>
         </div>
       )}
 
@@ -481,6 +523,7 @@ export default function EconomyTab({
                   <div style={{ marginBottom: '0.5rem' }}>
                     <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                       Budget Allocation
+                      <ConfidenceDot level={bootstrapConfidence?.['budgetAllocation']} />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.5rem' }}>
                       {BUDGET_CATEGORIES.map(cat => (
@@ -528,6 +571,7 @@ export default function EconomyTab({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', position: 'relative' }}>
                           <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                             {meta.label}
+                            <ConfidenceDot level={bootstrapConfidence?.[String(meta.key)]} />
                           </label>
                           <span
                             style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'help' }}

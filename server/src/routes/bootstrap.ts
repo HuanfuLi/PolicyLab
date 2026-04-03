@@ -216,7 +216,10 @@ router.post('/:id/bootstrap', async (req, res) => {
     }
 
     // 5c: Generate agent roster from employment data
-    const blueprints = generateAgentRoster(profile, clampedAgentCount, 100);
+    // Scale base fiat from GDP per capita (normalized: $10k GDP → 100 fiat baseline)
+    const gdpPerCapita = profile.economics.gdpPerCapita?.value ?? 10000;
+    const baseFiat = Math.max(20, Math.min(500, Math.round(gdpPerCapita / 100)));
+    const blueprints = generateAgentRoster(profile, clampedAgentCount, baseFiat);
 
     // 5d: Generate agent backgrounds via LLM (batch call)
     try {

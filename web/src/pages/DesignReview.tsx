@@ -389,6 +389,7 @@ const DesignReview = () => {
                   economyConfig={session.config.economyConfig ?? {}}
                   budgetAllocation={session.config.budgetAllocation ?? DEFAULT_BUDGET_ALLOCATION}
                   onConfigChange={(patch) => updateEconomyConfig(id!, patch)}
+                  bootstrapConfidence={(session.config as Record<string, unknown>).bootstrapConfidence as Record<string, string> | undefined}
                   onBudgetChange={(budget) => {
                     saveBudgetAllocation(id!, budget);
                   }}

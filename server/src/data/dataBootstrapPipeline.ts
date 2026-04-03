@@ -106,6 +106,32 @@ export function profileToEconomyConfig(profile: LocationProfile): {
     : fiscalConfidences.includes('medium') ? 'medium' : 'high';
   confidence['budgetAllocation'] = lowestConfidence;
 
+  // --- Inflation mapping (from real CPI inflation rate) ---
+  const inflationCPI = profile.economics.inflationRate?.value;
+  let inflationAmmThreshold = 0.005; // default
+  let inflationAmmCap = 0.02; // default
+  if (inflationCPI != null) {
+    // Higher real inflation → loosen the AMM threshold so prices can move more freely
+    const annualInflation = inflationCPI / 100;
+    inflationAmmThreshold = Math.max(0.002, Math.min(0.02, annualInflation / ITERATIONS_PER_YEAR));
+    inflationAmmCap = Math.max(0.01, Math.min(0.05, annualInflation * 2 / ITERATIONS_PER_YEAR));
+    confidence['inflationAmmThreshold'] = profile.economics.inflationRate!.confidence;
+    confidence['inflationAmmCap'] = profile.economics.inflationRate!.confidence;
+  } else {
+    confidence['inflationAmmThreshold'] = 'low';
+    confidence['inflationAmmCap'] = 'low';
+  }
+
+  // --- Productivity growth estimate (from real GDP growth rate) ---
+  const gdpGrowth = profile.economics.gdpGrowth?.value;
+  let productivityGrowthEstimate = 0.01; // default 1% per iteration
+  if (gdpGrowth != null) {
+    productivityGrowthEstimate = Math.max(0.001, Math.min(0.05, gdpGrowth / 100 / ITERATIONS_PER_YEAR));
+    confidence['productivityGrowthEstimate'] = profile.economics.gdpGrowth!.confidence;
+  } else {
+    confidence['productivityGrowthEstimate'] = 'low';
+  }
+
   const config: Partial<EconomyConfig> = {
     bankingEnabled: true,
     capitalMarketsEnabled: true,
@@ -115,6 +141,9 @@ export function profileToEconomyConfig(profile: LocationProfile): {
     baseLoanInterestRate,
     depositInterestRate,
     budgetSpendingRate,
+    inflationAmmThreshold,
+    inflationAmmCap,
+    productivityGrowthEstimate,
     // Keep other defaults from DEFAULT_ECONOMY_CONFIG
     defaultLoanTermIterations: 20,
     defaultThresholdIterations: 3,
