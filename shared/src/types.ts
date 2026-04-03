@@ -758,3 +758,69 @@ export {
 
 export { distributeProRata } from './math.js';
 
+// ── Phase 7: Real-World Scenario Bootstrap ────────────────────────────────
+export type DataSource = 'api' | 'web' | 'llm';
+export type ConfidenceLevel = 'high' | 'medium' | 'low';
+
+export interface DataPoint<T = number> {
+  value: T;
+  year?: number;
+  source: DataSource;
+  confidence: ConfidenceLevel;
+  sourceNote?: string;
+}
+
+export interface LocationProfile {
+  locationName: string;
+  countryCode: string;
+  countryName: string;
+  coordinates: { lat: number; lon: number };
+  fetchedAt: string;
+  demographics: {
+    population?: DataPoint;
+    urbanPopulationPct?: DataPoint;
+    lifeExpectancy?: DataPoint;
+    ageDepRatio?: DataPoint;
+    unemploymentRate?: DataPoint;
+    sectorEmployment?: {
+      agriculture?: DataPoint;
+      industry?: DataPoint;
+      services?: DataPoint;
+    };
+  };
+  economics: {
+    gdpPerCapita?: DataPoint;
+    gdpGrowth?: DataPoint;
+    giniIndex?: DataPoint;
+    inflationRate?: DataPoint;
+    realInterestRate?: DataPoint;
+  };
+  fiscal: {
+    taxRevenuePctGdp?: DataPoint;
+    govExpensePctGdp?: DataPoint;
+    militaryExpPctGdp?: DataPoint;
+    healthExpPctGdp?: DataPoint;
+    educationExpPctGdp?: DataPoint;
+  };
+  governance?: DataPoint<string>;
+  infrastructure?: DataPoint<string>;
+}
+
+export interface ScenarioTab {
+  id: string;
+  name: string;
+  isBaseline: boolean;
+  economyConfig: Partial<EconomyConfig>;
+  budgetAllocation?: BudgetAllocation;
+  deltas?: Record<string, { from: number | boolean; to: number | boolean }>;
+}
+
+export interface BootstrapProgressEvent {
+  type: 'step_start' | 'step_done' | 'step_fallback' | 'complete' | 'error' | 'heartbeat';
+  step?: 'geocoding' | 'demographics' | 'economics' | 'governance' | 'infrastructure' | 'generation';
+  stepIndex?: number;
+  totalSteps?: number;
+  fallbackSource?: DataSource;
+  message?: string;
+}
+
