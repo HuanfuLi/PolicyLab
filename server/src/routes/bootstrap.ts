@@ -134,6 +134,12 @@ router.post('/:id/bootstrap', async (req, res) => {
     // Patch countryName from location if geocoder provided it
     profile.countryName = location;
 
+    // Log fetched data for debugging
+    const pop = profile.demographics.population?.value;
+    const gdp = profile.economics.gdpPerCapita?.value;
+    const gini = profile.economics.giniIndex?.value;
+    console.log(`[bootstrap] Data for ${countryCode}: pop=${pop}, gdp=${gdp}, gini=${gini}`);
+
     sendEvent({ type: 'step_done', step: 'demographics', stepIndex: 1 });
 
     // Step 2: Economics (already fetched as part of profile)
@@ -253,12 +259,39 @@ router.post('/:id/bootstrap', async (req, res) => {
       console.warn('[bootstrap] Law generation failed:', err);
     }
 
-    // 5f: Generate society overview
-    const societyOverview = `A data-driven simulation based on ${location} (${countryCode}). `
-      + `Population: ${profile.demographics.population?.value?.toLocaleString() ?? 'unknown'}. `
-      + `GDP per capita: $${profile.economics.gdpPerCapita?.value?.toFixed(0) ?? 'unknown'}. `
-      + `Gini index: ${profile.economics.giniIndex?.value?.toFixed(1) ?? 'unknown'}. `
-      + (scenario ? `Policy scenario: ${scenario}` : '');
+    // 5f: Generate society overview via LLM (richer than a template string)
+    let societyOverview: string;
+    let societyTitle = location;
+    try {
+      const provider = getProvider();
+      const overviewRaw = await withRetry(() =>
+        provider.chat([
+          { role: 'system', content: 'You are a policy analyst. Respond with ONLY valid JSON: {"title": "string", "overview": "string"}' },
+          { role: 'user', content: `Write a 3-paragraph overview for a policy simulation based on ${location} (${countryCode}).
+
+Real-world data:
+- Population: ${profile.demographics.population?.value?.toLocaleString() ?? 'N/A'}
+- GDP per capita: $${profile.economics.gdpPerCapita?.value?.toFixed(0) ?? 'N/A'}
+- Gini index: ${profile.economics.giniIndex?.value?.toFixed(1) ?? 'N/A'}
+- Inflation: ${profile.economics.inflationRate?.value?.toFixed(1) ?? 'N/A'}%
+- Unemployment: ${profile.demographics.unemploymentRate?.value?.toFixed(1) ?? 'N/A'}%
+- Government expense: ${profile.fiscal.govExpensePctGdp?.value?.toFixed(1) ?? 'N/A'}% of GDP
+${scenario ? `\nPolicy scenario to explore: ${scenario}` : ''}
+
+The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "Detroit Economic Recovery Model"). The overview should describe the economic context, key challenges, and what this simulation will explore. Use real numbers from the data above.` },
+        ], { maxTokens: 2048 }),
+      );
+      const overviewData = parseJSON<{ title: string; overview: string }>(overviewRaw);
+      societyTitle = overviewData.title || location;
+      societyOverview = overviewData.overview;
+    } catch {
+      // Fallback to template if LLM fails
+      societyOverview = `A data-driven simulation based on ${location} (${countryCode}). `
+        + `Population: ${profile.demographics.population?.value?.toLocaleString() ?? 'unknown'}. `
+        + `GDP per capita: $${profile.economics.gdpPerCapita?.value?.toFixed(0) ?? 'unknown'}. `
+        + `Gini index: ${profile.economics.giniIndex?.value?.toFixed(1) ?? 'unknown'}. `
+        + (scenario ? `Policy scenario: ${scenario}` : '');
+    }
 
     sendEvent({ type: 'step_done', step: 'generation', stepIndex: 5 });
 
@@ -318,6 +351,7 @@ router.post('/:id/bootstrap', async (req, res) => {
       .update(sessions)
       .set({
         stage: 'design-review' as Stage,
+        title: societyTitle,
         law,
         societyOverview: societyOverview,
         config: JSON.stringify(updatedConfig),
