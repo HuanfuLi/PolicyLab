@@ -12,6 +12,7 @@ import reviewRouter from './routes/review.js';
 import artifactsRouter from './routes/artifacts.js';
 import compareRouter from './routes/compare.js';
 import importExportRouter from './routes/importexport.js';
+import bootstrapRouter from './routes/bootstrap.js';
 
 const app = express();
 
@@ -26,6 +27,10 @@ app.use('/api/sessions/:id/iterations', iterationsRouter);
 app.use('/api/sessions/:id/reflect', reflectRouter);
 app.use('/api/sessions/:id/review', reviewRouter);
 app.use('/api/sessions/:id/artifacts', artifactsRouter);
+// Phase 7: bootstrap SSE route (must be before sessionsRouter)
+app.use('/api/sessions', bootstrapRouter);
+// Phase 7: location search (mounted under /api for GET /api/locations/search)
+app.use('/api', bootstrapRouter);
 // Phase 5: import/export (must be before sessionsRouter to catch POST /import)
 app.use('/api/sessions', importExportRouter);
 app.use('/api/sessions', sessionsRouter);
