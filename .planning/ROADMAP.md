@@ -123,7 +123,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -133,16 +133,29 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 4. Inflation Loop | 0/3 | Not started | - |
 | 5. Economic Dashboard | 1/2 | In Progress|  |
 | 6. Scenario Entry | 4/4 | Complete   | 2026-04-02 |
+| 7. Real-World Scenario Bootstrap | 0/5 | Not started | - |
 
 ### Phase 7: Real-World Scenario Bootstrap — location-based data-driven society design for policymakers
 
-**Goal:** Replace the freeform society design flow with a data-driven bootstrap: policymakers enter a real-world location (city/state/province), the central agent fetches demographics, economic indicators, governance structures, and political constraints via web search, then auto-generates a simulation starting point that mirrors reality — including numeric economic parameters, agent role distributions, and institutional rules — giving policymakers an accurate baseline to experiment against
-**Requirements**: TBD
+**Goal:** Policymakers enter a real-world location, the system fetches demographics, economic indicators, governance structures, and infrastructure data via World Bank API (with web scraping/LLM fallback), then auto-generates a simulation starting point that mirrors reality — including numeric economic parameters, agent role distributions with Gini-based wealth inequality, and institutional rules — giving policymakers an accurate baseline to experiment against with a tab-based scenario builder for A/B policy comparison
+**Requirements**: RWB-01, RWB-02, RWB-03, RWB-04, RWB-05, RWB-06, RWB-07
 **Depends on:** Phase 6
-**Plans:** 0 plans
+**Success Criteria** (what must be TRUE):
+  1. IdeaInput page shows two parallel modes: "Describe a Society" (existing creative brainstorming) and "Mirror a Real Location" (new data-driven flow); existing flow is fully preserved
+  2. Policymaker can search for a real-world location with autocomplete (Photon geocoding), set agent count (20-150), and optionally describe a policy scenario
+  3. Bootstrap pipeline fetches all 4 data categories (demographics, economics, governance, infrastructure) from World Bank API with SSE progress events; LLM fallback for missing data
+  4. Auto-generated EconomyConfig uses real economic data with correct unit conversions (annual rates / 12 for per-iteration); agent roster reflects real sector employment distribution with Gini-distributed wealth
+  5. Design Review shows scenario builder with tab-based UI: Baseline + N scenario tabs with inline diff markers showing parameter divergence from baseline
+  6. "Run All Scenarios" creates fork sessions, starts simulations, and auto-navigates to comparison view
+  7. Data confidence indicators (API/web/LLM + high/medium/low) are shown per parameter
+**Plans:** 5 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 7 to break down)
+- [ ] 07-01-PLAN.md — Shared types (LocationProfile, DataPoint, ScenarioTab), World Bank API client, Photon geocoder, location cache, Gini distribution algorithm
+- [ ] 07-02-PLAN.md — Location data service orchestrator, data-to-simulation bootstrap pipeline, SSE bootstrap route, LLM prompts
+- [ ] 07-03-PLAN.md — IdeaInput dual-mode UI, LocationSearch autocomplete, bootstrap progress panel, bootstrapStore
+- [ ] 07-04-PLAN.md — ScenarioTabs component, DiffMarker, scenarioStore, DesignReview integration
+- [ ] 07-05-PLAN.md — End-to-end integration wiring, polish, human verification
 
 ### Phase 8: Live Scenario Comparison — real-time overlaid economic charts during parallel simulation runs
 
