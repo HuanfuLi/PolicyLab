@@ -423,7 +423,7 @@ const IdeaInput = () => {
         </div>
 
         <div className="glass-card" style={{ width: '100%', maxWidth: '700px', padding: '2rem' }}>
-          <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ marginBottom: '1.5rem', position: 'relative', zIndex: 10 }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text)', fontWeight: 500 }}>
               Location
             </label>
