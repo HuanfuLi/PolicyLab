@@ -25,7 +25,6 @@ export default function ScenarioTabs({
   const {
     tabs,
     activeTabId,
-    baselineConfig,
     runningScenarios,
     initFromSession,
     addScenario,

@@ -10,7 +10,7 @@ interface DiffMarkerProps {
  * Inline diff display showing baseline vs current value.
  * Renders nothing when values are equal.
  */
-export default function DiffMarker({ baselineValue, currentValue, label }: DiffMarkerProps) {
+export default function DiffMarker({ baselineValue, currentValue }: DiffMarkerProps) {
   if (baselineValue === currentValue) return null;
 
   const isNumeric = typeof baselineValue === 'number' && typeof currentValue === 'number';

@@ -2,8 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Send, FileText, Users, Scale, Play, Loader2, AlertCircle, Bot, GitFork, RefreshCw, SlidersHorizontal, DollarSign } from 'lucide-react';
 import { useSessionDetailStore } from '../stores/sessionDetailStore';
+import { useScenarioStore } from '../stores/scenarioStore';
 import MarkdownText from '../components/MarkdownText';
 import EconomyTab from '../components/EconomyTab';
+import ScenarioTabs from '../components/ScenarioTabs';
 import { DEFAULT_BUDGET_ALLOCATION } from '@policylab/shared';
 import type { BudgetAllocation } from '@policylab/shared';
 
@@ -55,9 +57,12 @@ const DesignReview = () => {
     reset,
   } = useSessionDetailStore();
 
+  const scenarioStore = useScenarioStore();
+
   useEffect(() => {
     if (!id) return;
     reset();
+    scenarioStore.reset();
     loadSession(id);
   }, [id]);
 
@@ -158,6 +163,25 @@ const DesignReview = () => {
     const updated = checked ? [...lockedVariables, key] : lockedVariables.filter(v => v !== key);
     setLockedVariables(updated);
     await updateLockedVariables(id, updated);
+  };
+
+  // Detect location-bootstrapped sessions
+  const isLocationSession = !!(session?.config as Record<string, unknown> | null)?.locationProfile;
+
+  const handleRunAllScenarios = async () => {
+    if (!id) return;
+    try {
+      const forkIds = await scenarioStore.runAllScenarios(id);
+      // Navigate to comparison view after completion
+      if (forkIds.length === 1) {
+        navigate(`/session/${id}/compare/${forkIds[0]}`);
+      } else if (forkIds.length > 1) {
+        // Navigate to first pair comparison for now
+        navigate(`/session/${id}/compare/${forkIds[0]}`);
+      }
+    } catch (err) {
+      console.error('Run all scenarios failed:', err);
+    }
   };
 
   const filteredAgents = agents.filter(a =>
@@ -349,15 +373,28 @@ const DesignReview = () => {
             )}
 
             {activeTab === 'economy' && session?.config && (
-              <EconomyTab
-                sessionId={id!}
-                economyConfig={session.config.economyConfig ?? {}}
-                budgetAllocation={session.config.budgetAllocation ?? DEFAULT_BUDGET_ALLOCATION}
-                onConfigChange={(patch) => updateEconomyConfig(id!, patch)}
-                onBudgetChange={(budget) => {
-                  saveBudgetAllocation(id!, budget);
-                }}
-              />
+              isLocationSession ? (
+                <ScenarioTabs
+                  sessionId={id!}
+                  economyConfig={session.config.economyConfig ?? {}}
+                  budgetAllocation={session.config.budgetAllocation ?? DEFAULT_BUDGET_ALLOCATION}
+                  onConfigChange={(patch) => updateEconomyConfig(id!, patch)}
+                  onBudgetChange={(budget) => {
+                    saveBudgetAllocation(id!, budget);
+                  }}
+                  onRunAll={handleRunAllScenarios}
+                />
+              ) : (
+                <EconomyTab
+                  sessionId={id!}
+                  economyConfig={session.config.economyConfig ?? {}}
+                  budgetAllocation={session.config.budgetAllocation ?? DEFAULT_BUDGET_ALLOCATION}
+                  onConfigChange={(patch) => updateEconomyConfig(id!, patch)}
+                  onBudgetChange={(budget) => {
+                    saveBudgetAllocation(id!, budget);
+                  }}
+                />
+              )
             )}
           </div>
         </div>
