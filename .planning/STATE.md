@@ -118,6 +118,7 @@ Recent decisions affecting current work:
 ### Roadmap Evolution
 
 - Phase 6 added: Scenario Entry — policymakers configure economic parameters and initial conditions at session design time
+- Phase 7 added: Real-World Scenario Bootstrap — location-based data-driven society design for policymakers
 
 ### Pending Todos
 

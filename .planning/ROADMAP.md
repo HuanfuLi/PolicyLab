@@ -133,3 +133,23 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 4. Inflation Loop | 0/3 | Not started | - |
 | 5. Economic Dashboard | 1/2 | In Progress|  |
 | 6. Scenario Entry | 4/4 | Complete   | 2026-04-02 |
+
+### Phase 7: Real-World Scenario Bootstrap — location-based data-driven society design for policymakers
+
+**Goal:** Replace the freeform society design flow with a data-driven bootstrap: policymakers enter a real-world location (city/state/province), the central agent fetches demographics, economic indicators, governance structures, and political constraints via web search, then auto-generates a simulation starting point that mirrors reality — including numeric economic parameters, agent role distributions, and institutional rules — giving policymakers an accurate baseline to experiment against
+**Requirements**: TBD
+**Depends on:** Phase 6
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 7 to break down)
+
+### Phase 8: Live Scenario Comparison — real-time overlaid economic charts during parallel simulation runs
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 7
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 8 to break down)
