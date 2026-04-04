@@ -337,7 +337,7 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
         id: uuidv4(),
         sessionId: id,
         name: `${location} Central Bank`,
-        role: 'banker',
+        role: 'bank',
         background: `The central banking institution of ${location}, responsible for monetary policy, reserve management, and lending operations.`,
         initialStats: JSON.stringify({
           wealth: bankWealth,
@@ -433,9 +433,19 @@ function createFallbackProfile(
       },
     },
     economics: {
+      gdpPerCapita: { value: 10000, source: 'llm' as const, confidence: 'low' as const },
+      gdpGrowth: { value: 3.0, source: 'llm' as const, confidence: 'low' as const },
       giniIndex: { value: 40, source: 'llm', confidence: 'low' },
+      inflationRate: { value: 4.0, source: 'llm' as const, confidence: 'low' as const },
+      lendingInterestRate: { value: 10.0, source: 'llm' as const, confidence: 'low' as const },
+      depositInterestRate: { value: 4.0, source: 'llm' as const, confidence: 'low' as const },
     },
-    fiscal: {},
+    fiscal: {
+      govExpensePctGdp: { value: 30, source: 'llm' as const, confidence: 'low' as const },
+      militaryExpPctGdp: { value: 2.0, source: 'llm' as const, confidence: 'low' as const },
+      healthExpPctGdp: { value: 7.0, source: 'llm' as const, confidence: 'low' as const },
+      educationExpPctGdp: { value: 5.0, source: 'llm' as const, confidence: 'low' as const },
+    },
     governance: { value: 'Unknown', source: 'llm', confidence: 'low' },
     infrastructure: { value: 'Unknown', source: 'llm', confidence: 'low' },
   };

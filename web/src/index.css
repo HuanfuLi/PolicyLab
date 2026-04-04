@@ -22,6 +22,11 @@
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --border-radius: 12px;
 
+  /* Aliases for Phase 7 components (map to canonical theme variables) */
+  --text: var(--text-main);
+  --bg-card: var(--panel-alpha-05);
+  --border: var(--glass-border);
+
   /* Theme mappings for inline styles */
   --color-bright: #fff;
   --color-info: #93c5fd;
@@ -90,6 +95,10 @@
   --text-main: #0f172a;
   --text-muted: #475569;
   --text-dim: #94a3b8;
+
+  --text: var(--text-main);
+  --bg-card: var(--panel-alpha-05);
+  --border: var(--glass-border);
 
   --color-bright: #0f172a;
   --color-info: #1d4ed8;

@@ -1548,7 +1548,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           const ownedEnterprise = [...enterpriseRegistry.values()].find(enterprise => enterprise.ownerId === agent.id);
           const personalStatus = buildPersonalStatus(sessionId, agent.id, ownedEnterprise?.id, agent.currentStats.wealth);
           const inflationContext = iterInflationContext;
-          const centralBankContext = agent.role === 'central_bank' && iterInflationState
+          const centralBankContext = (agent.role === 'central_bank' || agent.type === 'bank') && iterInflationState
             ? {
                 cpi: iterInflationState.cpi,
                 inflationRate: iterInflationState.inflationRate,
@@ -1566,10 +1566,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           if (iterEconomyConfig.bankingEnabled) {
             const deposit = iterBankingDeposits.find(d => d.ownerAgentId === agent.id);
             const bankAgent = iterBankAgents[0]; // primary bank
-            if (deposit && bankAgent) {
+            // H6 fix: provide banking context even without deposits (iteration 1 cold start)
+            if (bankAgent && agent.type !== 'bank') {
               const agentLoans = iterBankingLoans.filter(l => l.borrowerAgentId === agent.id && l.status === 'active');
               citizenBankingContext = {
-                depositBalance: deposit.balance,
+                depositBalance: deposit?.balance ?? 0,
                 bankName: bankAgent.name,
                 outstandingLoans: agentLoans.map(l => ({
                   remainingBalance: l.remainingBalance,
@@ -1626,15 +1627,17 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           }
 
           // Build fiscal context
+          // H5 fix: use DEFAULT_PUBLIC_GOODS_INITIAL when no DB row yet (iteration 1)
+          const pg = iterPublicGoods ?? DEFAULT_PUBLIC_GOODS_INITIAL;
           const citizenFiscalContext: CitizenFiscalContext | undefined =
-            iterBudgetAllocation && iterPublicGoods
+            iterBudgetAllocation
               ? {
                   budgetAllocation: iterBudgetAllocation,
                   publicGoodsQuality: {
-                    infrastructure: iterPublicGoods.infrastructureQuality,
-                    education: iterPublicGoods.educationQuality,
-                    defense: iterPublicGoods.defenseQuality,
-                    welfare: iterPublicGoods.welfareQuality,
+                    infrastructure: pg.infrastructureQuality,
+                    education: pg.educationQuality,
+                    defense: pg.defenseQuality,
+                    welfare: pg.welfareQuality,
                   },
                 }
               : undefined;

@@ -171,12 +171,9 @@ const DesignReview = () => {
     if (!id) return;
     try {
       const forkIds = await scenarioStore.runAllScenarios(id, iterations);
-      // Navigate to comparison view after completion
-      if (forkIds.length === 1) {
-        navigate(`/session/${id}/compare/${forkIds[0]}`);
-      } else if (forkIds.length > 1) {
-        // Navigate to first pair comparison for now
-        navigate(`/session/${id}/compare/${forkIds[0]}`);
+      // Navigate to comparison page after all scenarios complete
+      if (forkIds.length > 0) {
+        navigate('/compare');
       }
     } catch (err) {
       console.error('Run all scenarios failed:', err);

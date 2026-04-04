@@ -504,6 +504,9 @@ export interface EconomyConfig {
 
 export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   bankingEnabled: true,
+  capitalMarketsEnabled: false,
+  fiscalEnabled: false,
+  inflationEnabled: false,
   reserveRequirement: 0.10,
   baseLoanInterestRate: 0.005,
   defaultLoanTermIterations: 20,
@@ -522,6 +525,10 @@ export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   inflationAmmCap: 2.0,
   centralBankEnabled: false,
   cpiBasePrices: {},
+  // Capital markets defaults
+  dividendPayoutRatio: 0.05,
+  govBondCouponRate: 0.004,
+  govBondTermIterations: 10,
   // Fiscal defaults — active when fiscalEnabled is true
   budgetSpendingRate: 0.10,
   infrastructureMultiplier: 0.005,

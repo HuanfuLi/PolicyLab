@@ -21,6 +21,7 @@ interface BootstrapState {
   currentStepIndex: number;
   errorMessage: string | null;
   sessionId: string | null;
+  _abortController: AbortController | null;
 
   setSelectedLocation: (loc: BootstrapState['selectedLocation']) => void;
   setAgentCount: (n: number) => void;
@@ -50,6 +51,7 @@ const initialState = {
   currentStepIndex: 0,
   errorMessage: null,
   sessionId: null,
+  _abortController: null as AbortController | null,
 };
 
 export const useBootstrapStore = create<BootstrapState>((set, get) => ({
@@ -65,12 +67,17 @@ export const useBootstrapStore = create<BootstrapState>((set, get) => ({
     const { selectedLocation, agentCount, scenario } = get();
     if (!selectedLocation) return;
 
+    // H7 fix: abort any prior SSE stream before starting a new one
+    get()._abortController?.abort();
+    const abortController = new AbortController();
+
     set({
       mode: 'bootstrapping',
       steps: initialSteps(),
       currentStepIndex: 0,
       errorMessage: null,
       sessionId,
+      _abortController: abortController,
     });
 
     try {
@@ -84,6 +91,7 @@ export const useBootstrapStore = create<BootstrapState>((set, get) => ({
           scenario: scenario || undefined,
           agentCount,
         }),
+        signal: abortController.signal,
       });
 
       if (!res.ok) {
@@ -183,5 +191,8 @@ export const useBootstrapStore = create<BootstrapState>((set, get) => ({
     }
   },
 
-  reset: () => set({ ...initialState, steps: initialSteps() }),
+  reset: () => {
+    get()._abortController?.abort();
+    set({ ...initialState, steps: initialSteps() });
+  },
 }));
