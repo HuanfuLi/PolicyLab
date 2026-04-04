@@ -254,6 +254,7 @@ export default function ScenarioTabs({
             onConfigChange={handleTabConfigChange}
             onBudgetChange={handleTabBudgetChange}
             bootstrapConfidence={bootstrapConfidence}
+            tabId={activeTabId}
           />
         </div>
       )}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Info } from 'lucide-react';
 import type { EconomyConfig, BudgetAllocation } from '@policylab/shared';
 import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
@@ -190,6 +190,8 @@ interface EconomyTabProps {
   onBudgetChange: (budget: BudgetAllocation) => void;
   /** Confidence metadata from bootstrap — maps param key → 'high' | 'medium' | 'low' */
   bootstrapConfidence?: Record<string, string>;
+  /** When rendered inside ScenarioTabs, identifies the active tab for state reset */
+  tabId?: string;
 }
 
 /** Small inline badge showing data source confidence for bootstrapped values */
@@ -226,6 +228,7 @@ export default function EconomyTab({
   onConfigChange,
   onBudgetChange,
   bootstrapConfidence,
+  tabId,
 }: EconomyTabProps) {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     banking: true,
@@ -237,6 +240,12 @@ export default function EconomyTab({
   // Local pending values — changes are staged here until blur/mouseUp
   const [pendingValues, setPendingValues] = useState<Partial<Record<keyof EconomyConfig, number>>>({});
   const [pendingBudget, setPendingBudget] = useState<BudgetAllocation>({ ...budgetAllocation });
+
+  // H2 fix: Reset pending state when scenario tab changes (prevents value bleed between tabs)
+  useEffect(() => {
+    setPendingValues({});
+    setPendingBudget({ ...budgetAllocation });
+  }, [tabId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Soft-limit warning: only set in event handlers, never on mount
   const [softWarning, setSoftWarning] = useState<{

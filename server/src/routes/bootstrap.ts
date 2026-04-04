@@ -12,6 +12,7 @@ import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { sessions, agents } from '../db/schema.js';
+import * as fiscalRepo from '../db/repos/fiscalRepo.js';
 import { fetchLocationData } from '../data/locationDataService.js';
 import {
   profileToEconomyConfig,
@@ -303,8 +304,8 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
     // Clear existing agents for this session
     await db.delete(agents).where(eq(agents.sessionId, id));
 
-    // Insert agent roster
-    const agentRows = blueprints.map(bp => ({
+    // Insert agent roster (citizens + bank agent)
+    const citizenRows = blueprints.map(bp => ({
       id: uuidv4(),
       sessionId: id,
       name: bp.name,
@@ -329,8 +330,42 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
       personalityTraits: JSON.stringify([]),
     }));
 
-    for (let i = 0; i < agentRows.length; i += 25) {
-      await db.insert(agents).values(agentRows.slice(i, i + 25));
+    // C2 fix: Insert a bank agent when bankingEnabled (required for banking subsystem)
+    if (finalConfig.bankingEnabled) {
+      const bankWealth = baseFiat * clampedAgentCount * 0.5; // bank starts with 50% of total economy fiat
+      citizenRows.push({
+        id: uuidv4(),
+        sessionId: id,
+        name: `${location} Central Bank`,
+        role: 'banker',
+        background: `The central banking institution of ${location}, responsible for monetary policy, reserve management, and lending operations.`,
+        initialStats: JSON.stringify({
+          wealth: bankWealth,
+          health: 100,
+          happiness: 50,
+          cortisol: 10,
+          dopamine: 50,
+        }),
+        currentStats: JSON.stringify({
+          wealth: bankWealth,
+          health: 100,
+          happiness: 50,
+          cortisol: 10,
+          dopamine: 50,
+        }),
+        type: 'bank',
+        status: 'alive',
+        personalityTraits: JSON.stringify(['analytical']),
+      });
+    }
+
+    for (let i = 0; i < citizenRows.length; i += 25) {
+      await db.insert(agents).values(citizenRows.slice(i, i + 25));
+    }
+
+    // C1 fix: Seed fiscal_budgets table (simulationRunner reads from DB, not session.config)
+    if (finalConfig.fiscalEnabled) {
+      fiscalRepo.createBudget(id, budget);
     }
 
     // Update session: config (partial merge), law, overview, stage

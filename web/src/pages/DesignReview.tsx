@@ -170,7 +170,7 @@ const DesignReview = () => {
   const handleRunAllScenarios = async () => {
     if (!id) return;
     try {
-      const forkIds = await scenarioStore.runAllScenarios(id);
+      const forkIds = await scenarioStore.runAllScenarios(id, iterations);
       // Navigate to comparison view after completion
       if (forkIds.length === 1) {
         navigate(`/session/${id}/compare/${forkIds[0]}`);

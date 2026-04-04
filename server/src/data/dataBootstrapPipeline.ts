@@ -112,15 +112,17 @@ export function profileToEconomyConfig(profile: LocationProfile): {
 
   // --- Inflation AMM params ---
   // These are PERCENTAGE-SCALE thresholds (default 0.5 and 2.0), NOT per-iteration decimals!
-  // inflationAmmThreshold: minimum inflation expectation % before AMM feedback triggers
-  // inflationAmmCap: max AMM price change per iteration in %
+  // inflationAmmThreshold: minimum inflation expectation % before AMM feedback triggers (softRange 0.2–1.0)
+  // inflationAmmCap: max AMM price change per iteration in % (softRange 1.0–5.0)
+  // CPI inflation values: typical range 2–10%, high-inflation 10–30%
   const inflationCPI = profile.economics.inflationRate?.value; // annual CPI inflation %
   let inflationAmmThreshold: number;
   let inflationAmmCap: number;
   if (inflationCPI != null) {
-    // Scale: threshold ~ CPI/12 (monthly equivalent), clamped to param's expected range
-    inflationAmmThreshold = Math.max(0.2, Math.min(1.5, inflationCPI / ITERATIONS_PER_YEAR));
-    inflationAmmCap = Math.max(1.0, Math.min(5.0, inflationCPI / ITERATIONS_PER_YEAR * 3));
+    // Map CPI range [2..10] → threshold range [0.3..1.0], CPI range [10..30] → [1.0..1.5]
+    inflationAmmThreshold = Math.max(0.2, Math.min(1.5, inflationCPI / 6));
+    // Map CPI range [2..10] → cap range [1.0..3.3], CPI range [10..30] → [3.3..5.0]
+    inflationAmmCap = Math.max(1.0, Math.min(5.0, inflationCPI / 3));
     confidence['inflationAmmThreshold'] = profile.economics.inflationRate!.confidence;
     confidence['inflationAmmCap'] = profile.economics.inflationRate!.confidence;
   } else {

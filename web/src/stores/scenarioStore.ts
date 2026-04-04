@@ -17,7 +17,7 @@ interface ScenarioState {
   setActiveTab: (tabId: string) => void;
   updateScenarioConfig: (tabId: string, patch: Partial<EconomyConfig>) => void;
   updateScenarioBudget: (tabId: string, budget: BudgetAllocation) => void;
-  runAllScenarios: (baseSessionId: string) => Promise<string[]>;
+  runAllScenarios: (baseSessionId: string, iterations?: number) => Promise<string[]>;
   reset: () => void;
 }
 
@@ -38,7 +38,7 @@ function computeDeltas(
   const fullTab = { ...defaults, ...tabConfig } as Record<string, unknown>;
   const deltas: Record<string, { from: number | boolean; to: number | boolean }> = {};
 
-  for (const key of Object.keys(fullBaseline)) {
+  for (const key of new Set([...Object.keys(fullBaseline), ...Object.keys(fullTab)])) {
     const baseVal = fullBaseline[key];
     const tabVal = fullTab[key];
     if (
@@ -160,7 +160,7 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
     }));
   },
 
-  runAllScenarios: async (baseSessionId: string): Promise<string[]> => {
+  runAllScenarios: async (baseSessionId: string, iterations?: number): Promise<string[]> => {
     const { tabs } = get();
     const nonBaseline = tabs.filter(t => !t.isBaseline);
     if (nonBaseline.length === 0) return [];
@@ -199,20 +199,24 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
       set({ scenarioSessionIds: sessionIds });
 
       // Step 2: Start simulations sequentially (per Research open question 3)
+      const simBody = iterations ? { iterations } : {};
+
       // Start baseline first
-      await fetch(`/api/sessions/${baseSessionId}/simulate`, {
+      const baseSimRes = await fetch(`/api/sessions/${baseSessionId}/simulate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify(simBody),
       });
+      if (!baseSimRes.ok) throw new Error('Failed to start baseline simulation');
 
       // Then each fork
       for (const forkId of allForkIds) {
-        await fetch(`/api/sessions/${forkId}/simulate`, {
+        const forkSimRes = await fetch(`/api/sessions/${forkId}/simulate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify(simBody),
         });
+        if (!forkSimRes.ok) throw new Error(`Failed to start simulation for fork ${forkId}`);
       }
 
       set({ runningScenarios: false });
