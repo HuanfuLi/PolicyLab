@@ -165,7 +165,7 @@ const DesignReview = () => {
   };
 
   // Detect location-bootstrapped sessions
-  const isLocationSession = !!(session?.config as Record<string, unknown> | null)?.locationProfile;
+  const isLocationSession = !!session?.config?.locationProfile;
 
   const handleRunAllScenarios = async () => {
     if (!id) return;
@@ -259,7 +259,7 @@ const DesignReview = () => {
             {activeTab === 'agents' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'center' }}>
-                  <h3 style={{ fontSize: '1.1rem' }}>Agent Roster ({agents.length} agents)</h3>
+                  <h3 style={{ fontSize: '1.1rem' }}>Agent Roster ({agents.filter(a => a.type !== 'bank').length} citizens{agents.some(a => a.type === 'bank') ? ' + 1 bank' : ''})</h3>
                   <input
                     type="text"
                     placeholder="Search by name or role..."
@@ -336,13 +336,29 @@ const DesignReview = () => {
                           </td>
                         );
                       };
+                      const isBank = a.type === 'bank';
                       return (
-                        <tr key={a.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                          <td style={{ padding: '0.75rem' }}>{a.name}</td>
+                        <tr key={a.id} style={{ borderBottom: '1px solid var(--glass-border)', opacity: isBank ? 0.7 : 1 }}>
+                          <td style={{ padding: '0.75rem' }}>
+                            {a.name}
+                            {isBank && (
+                              <span style={{ marginLeft: '0.5rem', fontSize: '0.65rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: 'var(--primary-glow)', color: 'var(--primary)', fontWeight: 600, verticalAlign: 'middle' }}>SYSTEM</span>
+                            )}
+                          </td>
                           <td style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>{a.role}</td>
-                          {mkStatCell('wealth', 'var(--warning)', 9999)}
-                          {mkStatCell('health', 'var(--success)')}
-                          {mkStatCell('happiness', 'var(--primary)')}
+                          {isBank ? (
+                            <>
+                              <td style={{ padding: '0.4rem 0.75rem', color: 'var(--text-dim)' }}>{a.initialStats.wealth?.toFixed(0) ?? 0}</td>
+                              <td style={{ padding: '0.4rem 0.75rem', color: 'var(--text-dim)' }}>—</td>
+                              <td style={{ padding: '0.4rem 0.75rem', color: 'var(--text-dim)' }}>—</td>
+                            </>
+                          ) : (
+                            <>
+                              {mkStatCell('wealth', 'var(--warning)', 9999)}
+                              {mkStatCell('health', 'var(--success)')}
+                              {mkStatCell('happiness', 'var(--primary)')}
+                            </>
+                          )}
                         </tr>
                       );
                     })}
@@ -380,6 +396,7 @@ const DesignReview = () => {
                   }}
                   onRunAll={handleRunAllScenarios}
                   bootstrapConfidence={session.config.bootstrapConfidence}
+                  bootstrapSources={session.config.bootstrapSources}
                 />
               ) : (
                 <EconomyTab

@@ -199,7 +199,7 @@ router.post('/:id/bootstrap', async (req, res) => {
     sendEvent({ type: 'step_start', step: 'generation', stepIndex: 5, totalSteps: 6 });
 
     // 5a: Convert profile to EconomyConfig + BudgetAllocation
-    const { config: economyConfig, budget, confidence } = profileToEconomyConfig(profile);
+    const { config: economyConfig, budget, confidence, sources: dataSources } = profileToEconomyConfig(profile);
 
     // 5b: Apply scenario parameter deltas if provided (D-12)
     let finalConfig = { ...economyConfig };
@@ -388,6 +388,7 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
       budgetAllocation: budget,
       locationProfile: profile,
       bootstrapConfidence: confidence,
+      bootstrapSources: dataSources,
     };
 
     await db

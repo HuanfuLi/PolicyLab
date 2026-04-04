@@ -136,6 +136,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({ onSelect, disabled }) =
           maxHeight: '280px',
           overflowY: 'auto',
           boxShadow: '0 8px 24px var(--panel-dark-10, rgba(0,0,0,0.2))',
+          backdropFilter: 'blur(12px)',
         }}>
           {results.map((loc, i) => (
             <div

@@ -1096,7 +1096,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     let latestMarketBoard: MarketBoardEntry[] = [];
 
     // ── Phase 1: Initialize economy state for all agents ──────────────────
-    const citizenAgents = agents.filter(a => a.isAlive && !a.isCentralAgent);
+    const citizenAgents = agents.filter(a => a.isAlive && !a.isCentralAgent && a.type !== 'bank');
     await economyRepo.initializeForSession(
       sessionId,
       citizenAgents.map(a => ({ id: a.id, role: a.role }))

@@ -66,7 +66,6 @@ export async function fetchLocationData(
   progress?.onStep('demographics', 1, TOTAL_STEPS);
   const demographicCodes = [
     WB_INDICATORS.population,
-    WB_INDICATORS.populationGrowth,
     WB_INDICATORS.urbanPopulationPct,
     WB_INDICATORS.lifeExpectancy,
     WB_INDICATORS.ageDepRatio,
@@ -74,7 +73,7 @@ export async function fetchLocationData(
     WB_INDICATORS.employmentAgriculture,
     WB_INDICATORS.employmentIndustry,
     WB_INDICATORS.employmentServices,
-    WB_INDICATORS.laborForceParticipation,
+    // populationGrowth and laborForceParticipation removed — fetched but never mapped to LocationProfile
   ];
   const demoResults = await fetchIndicatorBatch(countryCode, demographicCodes);
 

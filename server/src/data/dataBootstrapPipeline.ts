@@ -14,6 +14,7 @@ import type {
   EconomyConfig,
   BudgetAllocation,
   ConfidenceLevel,
+  DataSource,
 } from '@policylab/shared';
 import { distributeWealth } from './giniDistribution.js';
 
@@ -42,16 +43,29 @@ export function profileToEconomyConfig(profile: LocationProfile): {
   config: Partial<EconomyConfig>;
   budget: BudgetAllocation;
   confidence: Record<string, ConfidenceLevel>;
+  sources: Record<string, DataSource>;
 } {
   const confidence: Record<string, ConfidenceLevel> = {};
+  const sources: Record<string, DataSource> = {};
 
-  // Helper: pick best available data point and track confidence
-  function pickAndTrack(key: string, dp: { value: number; confidence: ConfidenceLevel } | undefined, fallback: number): number {
+  // Helper: pick best available data point and track confidence + source
+  function pickAndTrack(key: string, dp: { value: number; confidence: ConfidenceLevel; source?: DataSource } | undefined, fallback: number): number {
     if (dp != null) {
       confidence[key] = dp.confidence;
+      sources[key] = dp.source ?? 'api';
       return dp.value;
     }
     return fallback;
+  }
+
+  /** Track confidence + source for a derived param */
+  function track(key: string, dp: { confidence: ConfidenceLevel; source?: DataSource } | undefined) {
+    if (dp) {
+      confidence[key] = dp.confidence;
+      sources[key] = dp.source ?? 'api';
+    } else {
+      confidence[key] = 'low';
+    }
   }
 
   // --- Lending interest rate ---
@@ -203,7 +217,22 @@ export function profileToEconomyConfig(profile: LocationProfile): {
     defaultThresholdIterations: 3,
   };
 
-  return { config, budget, confidence };
+  // Derive sources from the primary DataPoint that contributed to each param
+  const src = (dp: { source?: DataSource } | undefined): DataSource => dp?.source ?? 'llm';
+  sources['baseLoanInterestRate'] = src(lendingSrc);
+  sources['depositInterestRate'] = src(profile.economics.depositInterestRate ?? lendingSrc);
+  sources['reserveRequirement'] = src(profile.economics.gdpPerCapita);
+  sources['budgetSpendingRate'] = src(profile.fiscal.govExpensePctGdp);
+  sources['budgetAllocation'] = src(profile.fiscal.militaryExpPctGdp);
+  sources['inflationAmmThreshold'] = src(profile.economics.inflationRate);
+  sources['inflationAmmCap'] = src(profile.economics.inflationRate);
+  sources['productivityGrowthEstimate'] = src(profile.economics.gdpGrowth);
+  sources['m1InflationCoeff'] = src(profile.economics.inflationRate);
+  sources['govBondCouponRate'] = src(lendingSrc);
+  sources['dividendPayoutRatio'] = src(profile.economics.stockMarketCap);
+  sources['defaultLoanTermIterations'] = src(profile.economics.gdpPerCapita);
+
+  return { config, budget, confidence, sources };
 }
 
 // --- Role pools per sector ---

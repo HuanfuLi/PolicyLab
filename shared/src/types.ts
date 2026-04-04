@@ -438,6 +438,10 @@ export interface SessionConfig {
   budgetAllocation?: BudgetAllocation;        // per D-01: fiscal budget split across categories
   /** Phase 7: confidence metadata from bootstrap — maps param key → 'high' | 'medium' | 'low' */
   bootstrapConfidence?: Record<string, string>;
+  /** Phase 7: data source metadata from bootstrap — maps param key → 'api' | 'web' | 'llm' */
+  bootstrapSources?: Record<string, string>;
+  /** Phase 7: location profile from real-world data bootstrap (presence indicates location session) */
+  locationProfile?: LocationProfile;
 }
 
 // ── v1.0 Economy Types (Phase 1: Banking Foundation) ─────────────────────

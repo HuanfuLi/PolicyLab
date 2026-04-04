@@ -13,6 +13,7 @@ interface ScenarioTabsProps {
   onBudgetChange: (budget: BudgetAllocation) => void;
   onRunAll: () => void;
   bootstrapConfidence?: Record<string, string>;
+  bootstrapSources?: Record<string, string>;
 }
 
 export default function ScenarioTabs({
@@ -23,6 +24,7 @@ export default function ScenarioTabs({
   onBudgetChange,
   onRunAll,
   bootstrapConfidence,
+  bootstrapSources,
 }: ScenarioTabsProps) {
   const {
     tabs,
@@ -262,6 +264,7 @@ export default function ScenarioTabs({
             onConfigChange={handleTabConfigChange}
             onBudgetChange={handleTabBudgetChange}
             bootstrapConfidence={bootstrapConfidence}
+            bootstrapSources={bootstrapSources}
             tabId={activeTabId}
           />
         </div>

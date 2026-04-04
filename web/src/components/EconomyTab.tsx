@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import DataConfidenceBadge from './DataConfidenceBadge';
+import type { DataSource, ConfidenceLevel } from '@policylab/shared';
 import { ChevronDown, ChevronRight, Info } from 'lucide-react';
 import type { EconomyConfig, BudgetAllocation } from '@policylab/shared';
 import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
@@ -190,34 +192,22 @@ interface EconomyTabProps {
   onBudgetChange: (budget: BudgetAllocation) => void;
   /** Confidence metadata from bootstrap — maps param key → 'high' | 'medium' | 'low' */
   bootstrapConfidence?: Record<string, string>;
+  /** Data source metadata from bootstrap — maps param key → 'api' | 'web' | 'llm' */
+  bootstrapSources?: Record<string, string>;
   /** When rendered inside ScenarioTabs, identifies the active tab for state reset */
   tabId?: string;
 }
 
-/** Small inline badge showing data source confidence for bootstrapped values */
-function ConfidenceDot({ level }: { level?: string }) {
-  if (!level) return null;
-  const color = level === 'high' ? 'var(--success, #22c55e)'
-    : level === 'medium' ? 'var(--color-yellow, #eab308)'
-    : 'var(--text-dim)';
-  const label = level === 'high' ? 'From real data'
-    : level === 'medium' ? 'Estimated from data'
-    : 'Default value';
-  return (
-    <span
-      title={label}
-      style={{
-        display: 'inline-block',
-        width: 8,
-        height: 8,
-        borderRadius: '50%',
-        background: color,
-        marginLeft: 6,
-        verticalAlign: 'middle',
-        cursor: 'help',
-      }}
-    />
-  );
+/** Render a DataConfidenceBadge for a param if bootstrap data exists for it */
+function ParamBadge({ paramKey, confidence, sources }: {
+  paramKey: string;
+  confidence?: Record<string, string>;
+  sources?: Record<string, string>;
+}) {
+  const conf = confidence?.[paramKey] as ConfidenceLevel | undefined;
+  const src = sources?.[paramKey] as DataSource | undefined;
+  if (!conf || !src) return null;
+  return <DataConfidenceBadge source={src} confidence={conf} />;
 }
 
 // ── EconomyTab ───────────────────────────────────────────────────────────────
@@ -228,6 +218,7 @@ export default function EconomyTab({
   onConfigChange,
   onBudgetChange,
   bootstrapConfidence,
+  bootstrapSources,
   tabId,
 }: EconomyTabProps) {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -383,10 +374,10 @@ export default function EconomyTab({
 
       {/* Data source legend (only shown for bootstrapped sessions) */}
       {bootstrapConfidence && Object.keys(bootstrapConfidence).length > 0 && (
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-          <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--success, #22c55e)', marginRight: 4, verticalAlign: 'middle' }} />From real data</span>
-          <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--color-yellow, #eab308)', marginRight: 4, verticalAlign: 'middle' }} />Estimated from data</span>
-          <span style={{ opacity: 0.7 }}>No dot = default value</span>
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', fontSize: '0.75rem', color: 'var(--text-dim)', alignItems: 'center', flexWrap: 'wrap' }}>
+          <DataConfidenceBadge source="api" confidence="high" /> From real data
+          <DataConfidenceBadge source="api" confidence="medium" /> Estimated from data
+          <span style={{ opacity: 0.7 }}>No badge = default value</span>
         </div>
       )}
 
@@ -532,7 +523,7 @@ export default function EconomyTab({
                   <div style={{ marginBottom: '0.5rem' }}>
                     <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                       Budget Allocation
-                      <ConfidenceDot level={bootstrapConfidence?.['budgetAllocation']} />
+                      <ParamBadge paramKey="budgetAllocation" confidence={bootstrapConfidence} sources={bootstrapSources} />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.5rem' }}>
                       {BUDGET_CATEGORIES.map(cat => (
@@ -580,7 +571,7 @@ export default function EconomyTab({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', position: 'relative' }}>
                           <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                             {meta.label}
-                            <ConfidenceDot level={bootstrapConfidence?.[String(meta.key)]} />
+                            <ParamBadge paramKey={String(meta.key)} confidence={bootstrapConfidence} sources={bootstrapSources} />
                           </label>
                           <span
                             style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'help' }}
