@@ -108,6 +108,11 @@ router.post('/:id/bootstrap', async (req, res) => {
   const now = () => new Date().toISOString();
   const clampedAgentCount = Math.min(150, Math.max(20, Math.round(agentCount)));
 
+  // M17 fix: step name → index mapping for step_fallback events
+  const STEP_INDEX: Record<string, number> = {
+    geocoding: 0, demographics: 1, economics: 2, governance: 3, infrastructure: 4, generation: 5,
+  };
+
   try {
     // Step 0: Geocoding already done by frontend
     sendEvent({ type: 'step_done', step: 'geocoding', stepIndex: 0, totalSteps: 6 });
@@ -122,12 +127,12 @@ router.post('/:id/bootstrap', async (req, res) => {
           // Internal progress from locationDataService — we let SSE events cover top-level
         },
         onFallback: (step, source) => {
-          sendEvent({ type: 'step_fallback', step: step as BootstrapProgressEvent['step'], fallbackSource: source });
+          sendEvent({ type: 'step_fallback', step: step as BootstrapProgressEvent['step'], stepIndex: STEP_INDEX[step] ?? 0, fallbackSource: source });
         },
       });
     } catch (err) {
       console.error('[bootstrap] Data fetch error:', err);
-      sendEvent({ type: 'step_fallback', step: 'demographics', fallbackSource: 'llm', message: 'World Bank data unavailable, using estimates' });
+      sendEvent({ type: 'step_fallback', step: 'demographics', stepIndex: 1, fallbackSource: 'llm', message: 'World Bank data unavailable, using estimates' });
       // Create a minimal profile with defaults for LLM estimation
       profile = createFallbackProfile(location, countryCode, coordinates);
     }
@@ -165,7 +170,7 @@ router.post('/:id/bootstrap', async (req, res) => {
       };
     } catch {
       // Keep fallback governance
-      sendEvent({ type: 'step_fallback', step: 'governance', fallbackSource: 'llm' });
+      sendEvent({ type: 'step_fallback', step: 'governance', stepIndex: 3, fallbackSource: 'llm' });
     }
     sendEvent({ type: 'step_done', step: 'governance', stepIndex: 3 });
 
@@ -186,7 +191,7 @@ router.post('/:id/bootstrap', async (req, res) => {
         confidence: 'medium',
       };
     } catch {
-      sendEvent({ type: 'step_fallback', step: 'infrastructure', fallbackSource: 'llm' });
+      sendEvent({ type: 'step_fallback', step: 'infrastructure', stepIndex: 4, fallbackSource: 'llm' });
     }
     sendEvent({ type: 'step_done', step: 'infrastructure', stepIndex: 4 });
 

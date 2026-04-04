@@ -11,6 +11,7 @@ interface ScenarioState {
   scenarioSessionIds: Record<string, string>; // tab.id -> forked session ID
 
   initFromSession: (config: Partial<EconomyConfig>, budget: BudgetAllocation) => void;
+  syncBaseline: (config: Partial<EconomyConfig>, budget: BudgetAllocation) => void;
   addScenario: (name: string) => void;
   removeScenario: (tabId: string) => void;
   renameScenario: (tabId: string, name: string) => void;
@@ -88,6 +89,22 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
       baselineConfig: { ...fullConfig },
       baselineBudget: { ...budget },
     });
+  },
+
+  // M23 fix: re-sync baseline if session config changes after init (e.g., refinement chat)
+  syncBaseline: (config: Partial<EconomyConfig>, budget: BudgetAllocation) => {
+    const { tabs } = get();
+    if (tabs.length === 0) return; // not initialized yet
+    const fullConfig: Partial<EconomyConfig> = { ...DEFAULT_ECONOMY_CONFIG, ...config };
+    set(state => ({
+      baselineConfig: { ...fullConfig },
+      baselineBudget: { ...budget },
+      tabs: state.tabs.map(t =>
+        t.isBaseline
+          ? { ...t, economyConfig: { ...fullConfig }, budgetAllocation: { ...budget } }
+          : t,
+      ),
+    }));
   },
 
   addScenario: (name: string) => {

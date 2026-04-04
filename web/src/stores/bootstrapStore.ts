@@ -184,6 +184,8 @@ export const useBootstrapStore = create<BootstrapState>((set, get) => ({
         set({ mode: 'error', errorMessage: 'Stream ended unexpectedly' });
       }
     } catch (err) {
+      // M16 fix: silently ignore abort errors (user navigated away or reset)
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       set({
         mode: 'error',
         errorMessage: err instanceof Error ? err.message : 'Bootstrap connection failed',

@@ -29,6 +29,7 @@ export default function ScenarioTabs({
     activeTabId,
     runningScenarios,
     initFromSession,
+    syncBaseline,
     addScenario,
     removeScenario,
     renameScenario,
@@ -46,6 +47,13 @@ export default function ScenarioTabs({
       initFromSession(economyConfig, budgetAllocation);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // M23 fix: re-sync baseline if session config changes after initialization
+  useEffect(() => {
+    if (tabs.length > 0) {
+      syncBaseline(economyConfig, budgetAllocation);
+    }
+  }, [economyConfig, budgetAllocation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeTab = tabs.find(t => t.id === activeTabId);
   const hasNonBaseline = tabs.some(t => !t.isBaseline);

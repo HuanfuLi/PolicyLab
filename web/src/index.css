@@ -24,8 +24,15 @@
 
   /* Aliases for Phase 7 components (map to canonical theme variables) */
   --text: var(--text-main);
-  --bg-card: var(--panel-alpha-05);
+  --bg-card: var(--panel-alpha-10);
   --border: var(--glass-border);
+  --primary-alpha: rgba(79, 70, 229, 0.1);
+
+  /* Semantic color tokens */
+  --color-green: #22c55e;
+  --color-yellow: #eab308;
+  --color-blue: #3b82f6;
+  --color-red: #ef4444;
 
   /* Theme mappings for inline styles */
   --color-bright: #fff;
@@ -97,8 +104,15 @@
   --text-dim: #94a3b8;
 
   --text: var(--text-main);
-  --bg-card: var(--panel-alpha-05);
+  --bg-card: var(--panel-alpha-10);
   --border: var(--glass-border);
+  --primary-alpha: rgba(79, 70, 229, 0.08);
+
+  /* Semantic color tokens (light-calibrated) */
+  --color-green: #16a34a;
+  --color-yellow: #ca8a04;
+  --color-blue: #2563eb;
+  --color-red: #dc2626;
 
   --color-bright: #0f172a;
   --color-info: #1d4ed8;

@@ -271,8 +271,10 @@ function computeSystemFiatTotal(
   depositBalances: number = 0,
   collateralEscrow: number = 0,
 ): number {
+  // M18 fix: exclude bank agents from fiat sum — bank reserves are already
+  // represented via depositBalances + collateralEscrow to avoid double-counting
   const agentFiat = agents
-    .filter(agent => agent.isAlive)
+    .filter(agent => agent.isAlive && agent.type !== 'bank')
     .reduce((sum, agent) => sum + (wealthOverrides?.get(agent.id) ?? agent.currentStats.wealth), 0);
   const multiAMMFiat = multiAMMs
     ? [...multiAMMs.values()].reduce((sum, pool) => sum + pool.currentFiatReserve, 0)
@@ -1548,7 +1550,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           const ownedEnterprise = [...enterpriseRegistry.values()].find(enterprise => enterprise.ownerId === agent.id);
           const personalStatus = buildPersonalStatus(sessionId, agent.id, ownedEnterprise?.id, agent.currentStats.wealth);
           const inflationContext = iterInflationContext;
-          const centralBankContext = (agent.role === 'central_bank' || agent.type === 'bank') && iterInflationState
+          const centralBankContext = agent.role === 'central_bank' && iterInflationState
             ? {
                 cpi: iterInflationState.cpi,
                 inflationRate: iterInflationState.inflationRate,

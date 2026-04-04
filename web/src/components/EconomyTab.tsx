@@ -245,7 +245,7 @@ export default function EconomyTab({
   useEffect(() => {
     setPendingValues({});
     setPendingBudget({ ...budgetAllocation });
-  }, [tabId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tabId, budgetAllocation]);
 
   // Soft-limit warning: only set in event handlers, never on mount
   const [softWarning, setSoftWarning] = useState<{

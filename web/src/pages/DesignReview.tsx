@@ -548,7 +548,7 @@ const DesignReview = () => {
                 position: 'absolute',
                 bottom: 'calc(100% + 8px)',
                 right: 0,
-                background: 'var(--panel-bg, #1a1a2e)',
+                background: 'var(--bg-color)',
                 border: '1px solid var(--glass-border)',
                 borderRadius: '10px',
                 padding: '1rem',
