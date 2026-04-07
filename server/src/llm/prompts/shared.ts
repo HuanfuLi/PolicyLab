@@ -16,147 +16,146 @@ interface ActionSchema {
 
 export const ACTION_SCHEMAS: Partial<Record<ActionCode, ActionSchema>> = {
   REST: {
-    description: 'Rest for the week — recover health, reduce stress.',
+    description: 'Take it easy this week -- rest your body, let the stress drain away (REST).',
     params: '{}',
   },
   PRODUCE_AND_SELL: {
-    description: 'Produce goods and sell to the Global Market AMM for immediate fiat. No buyer needed.',
+    description: 'Farm your land and sell the harvest directly to the market (PRODUCE_AND_SELL). You produce about 20 units -- enough to feed yourself for 3-4 weeks and pocket the profits.',
     params: '{ "itemType": "food" | "raw_materials" | "luxury_goods", "quantity": number, "price": number }',
   },
   POST_BUY_ORDER: {
-    description: 'Buy goods from the Global Market AMM. Trade executes immediately.',
+    description: 'Go to the market and buy what you need (POST_BUY_ORDER). Goods change hands immediately at market price.',
     params: '{ "itemType": "food" | "raw_materials" | "luxury_goods" | "tools", "quantity": number, "price": number }',
   },
   POST_SELL_ORDER: {
-    description: 'Sell goods on the Global Market.',
+    description: 'List your goods for sale on the market at the price you set (POST_SELL_ORDER).',
     params: '{ "itemType": "food" | "raw_materials" | "luxury_goods" | "tools", "quantity": number, "price": number }',
   },
   WORK_AT_ENTERPRISE: {
-    description: 'Work your shift at your current employer and collect your wage.',
+    description: 'Show up for your shift at work and collect your wage (WORK_AT_ENTERPRISE).',
     params: '{ "enterprise_id": string }',
   },
   APPLY_FOR_JOB: {
-    description: 'Apply to an enterprise on the Employment Board.',
+    description: 'Walk up to a business and ask for a job (APPLY_FOR_JOB). Check the employment board first.',
     params: '{ "enterprise_id": string }',
   },
   QUIT_JOB: {
-    description: 'Resign from your current employer immediately.',
+    description: 'Walk away from your job -- hand in your resignation and leave (QUIT_JOB).',
     params: '{ "enterprise_id": string }',
   },
   FOUND_ENTERPRISE: {
-    description: 'Start a new private enterprise (costs 40 Wealth upfront). Hire workers, set wages, and keep all profits.',
+    description: 'Put up 40 fiat to start your own business -- hire workers, set wages, keep the profits (FOUND_ENTERPRISE).',
     params: '{ "industry": "food" | "raw_materials" | "luxury_goods" | "manufacturing" | "services" }',
   },
   POST_JOB_OFFER: {
-    description: 'Publish a job opening at your enterprise.',
+    description: 'Put the word out that your enterprise is hiring (POST_JOB_OFFER). Set the wage and minimum skill level.',
     params: '{ "enterprise_id": string, "wage": number, "min_skill": number }',
   },
   HIRE_EMPLOYEE: {
-    description: 'Accept an applicant into your enterprise.',
+    description: 'Bring someone on board at your enterprise -- accept their application (HIRE_EMPLOYEE).',
     params: '{ "agent_id": string }',
   },
   FIRE_EMPLOYEE: {
-    description: 'Remove an employee from your enterprise.',
+    description: 'Let someone go from your enterprise (FIRE_EMPLOYEE).',
     params: '{ "agent_id": string }',
   },
   STEAL: {
-    description: 'Attempt to steal wealth from another citizen (illegal — high stress, legal risk).',
+    description: 'Try to rob another citizen -- risky, illegal, and the stress alone might kill you (STEAL).',
     params: '{ "target": string }',
   },
   HELP: {
-    description: 'Aid another citizen at personal wealth cost (+happiness, -cortisol).',
+    description: 'Lend a hand to someone in need -- costs you money, but eases your conscience (HELP).',
     params: '{ "target": string }',
   },
   INVEST: {
-    description: 'Save or speculate for future returns (-10 Wealth now, possible future gain).',
+    description: 'Set aside 10 fiat as a speculative investment -- might pay off down the road (INVEST).',
     params: '{}',
   },
   STRIKE: {
-    description: 'Refuse to work — collective protest or industrial action.',
+    description: 'Refuse to work this week -- a collective protest against the way things are (STRIKE).',
     params: '{}',
   },
   SABOTAGE: {
-    description: 'Disrupt another person\'s enterprise (dangerous — physical health risk).',
+    description: 'Wreck someone else\'s enterprise -- dangerous, and your body pays the price too (SABOTAGE).',
     params: '{ "target": string }',
   },
   EMBEZZLE: {
-    description: '[ELITE PRIVILEGE ONLY] Skim funds from the communal treasury (+20 Wealth, extreme legal risk).',
+    description: 'Skim funds from the communal treasury -- only those with political power can get away with this (EMBEZZLE). Extreme legal risk.',
     params: '{}',
   },
   ADJUST_TAX: {
-    description: '[ELITE PRIVILEGE ONLY] Forcibly extract wealth from lower classes via tax policy.',
+    description: 'Use your political authority to extract wealth from the lower classes through tax policy (ADJUST_TAX). Only those in power can do this.',
     params: '{}',
   },
   SUPPRESS: {
-    description: '[ELITE PRIVILEGE ONLY] Deploy enforcement to penalise a specific citizen.',
+    description: 'Deploy enforcement against a specific citizen -- a tool of the powerful (SUPPRESS).',
     params: '{ "target": string }',
   },
   // Capital Markets actions
   BUY_SHARES: {
-    description: 'Buy shares in an enterprise to receive dividends and capital gains. Specify the enterprise owner as target.',
+    description: 'Buy shares in an enterprise to earn dividends and a piece of the profits (BUY_SHARES). Specify the enterprise owner.',
     params: '{ "target": string, "quantity": number }',
   },
   SELL_SHARES: {
-    description: 'Sell shares you hold in an enterprise back to the market. Specify the enterprise owner as target.',
+    description: 'Sell off your shares in an enterprise and cash out (SELL_SHARES). Specify the enterprise owner.',
     params: '{ "target": string, "quantity": number }',
   },
   BUY_BOND: {
-    description: 'Buy a government or corporate bond for fixed coupon income. Use target "treasury" for gov bond or enterprise owner name for corp bond.',
+    description: 'Buy a bond for steady coupon income (BUY_BOND). Use target "treasury" for government bonds or the enterprise owner name for corporate bonds.',
     params: '{ "target": string, "amount": number }',
   },
   ISSUE_GOV_BOND: {
-    description: '[ELITE PRIVILEGE ONLY] Issue government bonds to raise treasury funding. Sets face value via amount.',
+    description: 'Issue government bonds to raise funds for the treasury (ISSUE_GOV_BOND). Only those in power can do this.',
     params: '{ "amount": number }',
   },
   // Banking Foundation actions
   DEPOSIT: {
-    description: 'Move cash from your wallet into your bank deposit account for safe-keeping.',
+    description: 'Put your cash in the bank for safekeeping -- it earns interest there (DEPOSIT).',
     params: '{ "amount": number }',
   },
   WITHDRAW: {
-    description: 'Move fiat from your bank deposit account back into your cash wallet.',
+    description: 'Pull your money out of the bank and back into your pocket (WITHDRAW).',
     params: '{ "amount": number }',
   },
   TAKE_LOAN: {
-    description: 'Borrow fiat from the bank. Creates a deposit in your name (M1 expansion). Requires collateral.',
+    description: 'Borrow money from the bank -- you will owe interest and need collateral (TAKE_LOAN).',
     params: '{ "principal": number }',
   },
   REPAY_LOAN: {
-    description: 'Make a repayment on your outstanding loan. Reduces M1.',
+    description: 'Make a payment on your loan -- chip away at what you owe (REPAY_LOAN).',
     params: '{ "loan_id": string, "amount": number }',
   },
   ISSUE_LOAN: {
-    description: '[BANK ONLY] Issue a loan to a requesting citizen. Must maintain reserve requirement.',
+    description: 'Issue a loan to a requesting citizen -- only the bank can do this (ISSUE_LOAN). Must maintain reserve requirements.',
     params: '{ "borrower_id": string, "principal": number }',
   },
   SET_INTEREST_RATE: {
-    description: '[BANK ONLY] Adjust the lending interest rate for new loans.',
+    description: 'Adjust the lending interest rate for new loans -- only the bank can do this (SET_INTEREST_RATE).',
     params: '{ "rate": number }',
   },
   NONE: {
-    description: 'Do nothing useful this week (-1 Health, +2 Cortisol penalty).',
+    description: 'Do nothing. Sitting idle eats at you -- your body weakens and anxiety builds (NONE).',
     params: '{}',
   },
 };
 
 /**
- * Build the [AVAILABLE ACTIONS] dictionary block injected into citizen prompts.
+ * Build the action dictionary block injected into citizen prompts.
  * Filters to the role-allowed action set when provided.
  */
 export function buildActionDictionary(allowedActions?: readonly ActionCode[]): string {
   const codes = allowedActions ?? (Object.keys(ACTION_SCHEMAS) as ActionCode[]);
   const lines = [
-    '[AVAILABLE ACTIONS]',
-    'You can ONLY choose up to 3 actions per week from this exact list.',
-    'Hallucinated codes not on this list are silently dropped — wasting your turn.',
+    'What you can do this week:',
+    'Choose up to 3 of these actions. Each costs you time and energy -- choose wisely.',
+    'Hallucinated codes not on this list are silently dropped -- wasting your turn.',
     '',
   ];
   let idx = 1;
   for (const code of codes) {
     const schema = ACTION_SCHEMAS[code];
     if (!schema) continue;
-    lines.push(`${idx}. "${code}"`);
-    lines.push(`   ${schema.description}`);
+    lines.push(`${idx}. ${schema.description}`);
     lines.push(`   Params: ${schema.params}`);
     idx++;
   }
