@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Agent, EconomyConfig } from '@policylab/shared';
 import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
-import { buildNaturalIntentPrompt } from '../llm/prompts.js';
+import { buildNaturalIntentPrompt } from '../llm/prompts/index.js';
 import { resolveAction } from '../mechanics/physicsEngine.js';
 import { computeInflation } from '../mechanics/inflationEngine.js';
 import { AutomatedMarketMaker } from '../mechanics/automatedMarketMaker.js';

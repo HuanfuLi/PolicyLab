@@ -1624,7 +1624,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             citizenFiscalContext,
             inflationContext,
             centralBankContext,
-            subconsciousDrive,
           );
 
           // throwOnExhaustion: true — after all retries, throw instead of silently defaulting to REST.
