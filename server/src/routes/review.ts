@@ -13,7 +13,7 @@ import { chatMessages, sessions, agents, reflections } from '../db/schema.js';
 import { v4 as uuidv4 } from 'uuid';
 import { getProvider } from '../llm/gateway.js';
 import { readSettings } from '../settings.js';
-import { buildReviewChatPrompt } from '../llm/prompts.js';
+import { buildReviewChatPrompt } from '../llm/prompts/index.js';
 import { agentRepo } from '../db/repos/agentRepo.js';
 import type { ChatMessage } from '@policylab/shared';
 

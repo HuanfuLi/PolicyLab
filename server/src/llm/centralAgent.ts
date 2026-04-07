@@ -22,7 +22,7 @@ import {
   buildLawMessages,
   buildAgentRosterMessages,
   buildRefineMessages,
-} from './prompts.js';
+} from './prompts/index.js';
 import { parseJSON } from '../parsers/json.js';
 import type { ChatMessage, DesignProgressEvent, BrainstormChecklist, SessionConfig } from '@policylab/shared';
 

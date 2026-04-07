@@ -26,7 +26,7 @@ import {
   buildLocationAgentRosterMessages,
   buildLocationLawMessages,
   buildScenarioInterpretationMessages,
-} from '../llm/prompts.js';
+} from '../llm/prompts/index.js';
 import { parseJSON } from '../parsers/json.js';
 import type { BootstrapProgressEvent, LocationProfile, Stage } from '@policylab/shared';
 

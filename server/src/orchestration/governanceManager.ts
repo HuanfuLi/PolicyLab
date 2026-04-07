@@ -18,8 +18,8 @@ import {
   buildBallotPrompt,
   buildVotePrompt,
   buildFranchiseSizePrompt,
-} from '../llm/prompts.js';
-import type { GovernancePolicyProposal, GovernanceBallotItem } from '../llm/prompts.js';
+} from '../llm/prompts/index.js';
+import type { GovernancePolicyProposal, GovernanceBallotItem } from '../llm/prompts/index.js';
 import { sessionRepo } from '../db/repos/sessionRepo.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────

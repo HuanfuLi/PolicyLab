@@ -20,7 +20,7 @@ import {
   buildAgentReflectionPrompt,
   buildAgentReflection2Prompt,
   buildEvaluationPrompt,
-} from '../llm/prompts.js';
+} from '../llm/prompts/index.js';
 import {
   parseAgentReflection,
   parseAgentReflection2,

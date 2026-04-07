@@ -42,7 +42,7 @@ import {
   type BankOperationsContext,
   type CitizenCapitalMarketContext,
   type CitizenFiscalContext,
-} from '../llm/prompts.js';
+} from '../llm/prompts/index.js';
 import {
   parseResolutionStrict,
   parseGroupResolutionStrict,

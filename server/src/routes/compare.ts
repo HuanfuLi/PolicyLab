@@ -13,7 +13,7 @@ import { sessions, agents, iterations, chatMessages } from '../db/schema.js';
 import { v4 as uuidv4 } from 'uuid';
 import { getProvider } from '../llm/gateway.js';
 import { readSettings } from '../settings.js';
-import { buildComparisonMessages, buildComparisonChatMessages } from '../llm/prompts.js';
+import { buildComparisonMessages, buildComparisonChatMessages } from '../llm/prompts/index.js';
 import { parseJSON } from '../parsers/json.js';
 import type { ComparisonResult, ChatMessage, EconomyParamDiff } from '@policylab/shared';
 
