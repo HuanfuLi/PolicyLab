@@ -29,7 +29,22 @@ const AgentReview = () => {
   const [search, setSearch] = useState('');
 
   const { agents, agentReflections, loadAgents, loadReflections } = useReflectionStore();
-  const { session, loadSession } = useSessionDetailStore();
+  const { loadSession } = useSessionDetailStore();
+
+  const loadChatHistory = async (agentId: string) => {
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/sessions/${id}/review/${agentId}/messages`);
+      if (!res.ok) return;
+      const data = await res.json() as { messages: Array<{ role: string; content: string }> };
+      setChatsByAgent(prev => ({
+        ...prev,
+        [agentId]: data.messages
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => ({ role: m.role === 'assistant' ? 'agent' : 'user', content: m.content })),
+      }));
+    } catch { /* ignore */ }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -60,21 +75,6 @@ const AgentReview = () => {
       }
     }
   }, [agents]);
-
-  const loadChatHistory = async (agentId: string) => {
-    if (!id) return;
-    try {
-      const res = await fetch(`/api/sessions/${id}/review/${agentId}/messages`);
-      if (!res.ok) return;
-      const data = await res.json() as { messages: Array<{ role: string; content: string }> };
-      setChatsByAgent(prev => ({
-        ...prev,
-        [agentId]: data.messages
-          .filter(m => m.role === 'user' || m.role === 'assistant')
-          .map(m => ({ role: m.role === 'assistant' ? 'agent' : 'user', content: m.content })),
-      }));
-    } catch { /* ignore */ }
-  };
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });

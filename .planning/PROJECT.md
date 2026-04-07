@@ -10,15 +10,20 @@ Forked from the Ideal World project with a sharper focus on economic realism and
 
 The deterministic economic engine must be realistic enough that simulation outcomes are meaningful for understanding real-world policy trade-offs — not just entertaining narratives, but grounded macro-economic dynamics that policymakers can use to preview policy effects.
 
-## Current Milestone: v1.0 Real Economy Engine
+## Current Milestone: v1.0 Real Economy Engine — FEATURE COMPLETE
 
 **Goal:** Transform the simulation from a cash/barter economy into a modern economic system with banking, capital markets, fiscal policy, and inflation dynamics — enabling realistic macro-economic behavior and policy experimentation.
 
-**Target features:**
+**Status:** All 7 phases complete (Phases 1-7). Post-implementation audit done (65 issues fixed across 5 rounds). Modularity refactoring complete (Phase A+B). See `MODULE_MAP.md` for current architecture.
+
+**Delivered features:**
 - Fractional reserve banking (bank agents, central bank, money creation through lending)
 - Full capital markets (enterprise equity, government & corporate bonds)
 - Fiscal spending with multipliers and persistent public goods quality
 - Inflation feedback loop (CPI tracking, money supply effects, agent cognition integration)
+- Real-time economic dashboard (CPI, money supply, fiscal, bond yields)
+- Scenario builder with tab-based A/B comparison
+- Real-world location bootstrap from World Bank data (23 indicators)
 
 ## Requirements
 
@@ -45,29 +50,33 @@ The deterministic economic engine must be realistic enough that simulation outco
 - ✓ Session comparison with LLM analysis — v0
 - ✓ Import/export, reflection, and review flows — v0
 - ✓ SFC conservation law enforcement (total fiat audit) — v0
+- ✓ Fractional reserve banking with bank agent role and central bank — Phase 1
+- ✓ Loan contracts with interest rates, terms, and repayment schedules — Phase 1
+- ✓ Default and bankruptcy mechanics for unpaid loans — Phase 1
+- ✓ Deposit accounts with interest returns — Phase 1
+- ✓ M1/M2 money supply tracking (updated SFC invariant) — Phase 1
+- ✓ Enterprise equity — buy/sell shares, dividend distribution — Phase 2
+- ✓ Government bonds — treasury issues debt, pays coupon interest — Phase 2
+- ✓ Corporate bonds — enterprises issue debt for capital — Phase 2
+- ✓ Budget categories configurable at session design time — Phase 3
+- ✓ Spending multipliers — each category affects simulation stats — Phase 3
+- ✓ Public goods quality scores — Phase 3
+- ✓ CPI calculation from market price data — Phase 4
+- ✓ Money supply → price level feedback — Phase 4
+- ✓ Inflation expectations injected into agent cognition — Phase 4
+- ✓ Real-time economic dashboard (CPI, M1/M2, fiscal, bond yields) — Phase 5
+- ✓ Scenario builder with A/B comparison — Phase 6
+- ✓ Real-world location bootstrap from World Bank data — Phase 7
+- ✓ EconomyConfig type holding all tunable parameters as session-level config — Phase 1
 
 ### Active
 
-<!-- Current scope. Building toward these in v1.0. -->
+<!-- Current scope — post-milestone quality and architecture work. -->
 
-- [ ] Fractional reserve banking with bank agent role and central bank
-- [ ] Loan contracts with interest rates, terms, and repayment schedules
-- [ ] Default and bankruptcy mechanics for unpaid loans
-- [ ] Deposit accounts with interest returns
-- [ ] M1/M2 money supply tracking (updated SFC invariant)
-- [ ] Central bank agent that adjusts reserve ratio and base rate based on CPI/M1
-- [ ] Enterprise equity — buy/sell shares, dividend distribution
-- [ ] Government bonds — treasury issues debt, pays coupon interest
-- [ ] Corporate bonds — enterprises issue debt for capital
-- [ ] Fix INVEST action with real return mechanism
-- [ ] Budget categories (infrastructure, education, defense, welfare) configurable at session design time
-- [ ] Spending multipliers — each category affects simulation stats
-- [ ] Public goods quality scores that compound with spending and decay without it
-- [ ] CPI calculation from market price data
-- [ ] Money supply → price level feedback (inflation/deflation dynamics)
-- [ ] Inflation expectations injected into agent cognition
-- [ ] Agent behavioral adaptation to inflation (saving, wage demands, hoarding)
-- [ ] EconomyConfig type holding all tunable parameters as session-level config
+- [ ] Test coverage expansion (26% → target 60%+) — see MODULE_MAP.md Wave 1-6
+- [ ] SimulationRunner subsystem tick extraction (Phase B1 deferred)
+- [ ] Frontend API layer standardization (Phase C)
+- [ ] Full centralAgent DB write extraction (Phase A2 deferred)
 
 ### Out of Scope
 
@@ -127,4 +136,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-02 after Phase 6 (Scenario Entry) completion*
+*Last updated: 2026-04-05 after v1.0 milestone feature completion + post-implementation audit + modularity refactoring*

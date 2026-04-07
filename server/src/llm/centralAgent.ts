@@ -4,7 +4,6 @@ import { db } from '../db/index.js';
 import {
   sessions,
   agents,
-  chatMessages,
   agentIntents,
   resolvedActions,
   iterations,
@@ -14,6 +13,9 @@ import {
   economySnapshots,
   marketPrices,
 } from '../db/schema.js';
+// NOTE: centralAgent still uses direct db access for design-time operations.
+// This is a known coupling — see MODULE_MAP.md Phase A2 for the full extraction plan.
+// The chatMessages table import was removed; chat persistence is handled by routes.
 import { getProvider } from './gateway.js';
 import { withRetry } from './retry.js';
 import {
@@ -25,6 +27,7 @@ import {
 } from './prompts/index.js';
 import { parseJSON } from '../parsers/json.js';
 import type { ChatMessage, DesignProgressEvent, BrainstormChecklist, SessionConfig } from '@policylab/shared';
+import { DEFAULT_ECONOMY_CONFIG, DEFAULT_BUDGET_ALLOCATION } from '@policylab/shared';
 
 interface BrainstormResult {
   reply: string;
@@ -252,6 +255,47 @@ export async function generateDesign(
   for (let i = 0; i < agentRows.length; i += 25) {
     const batch = agentRows.slice(i, i + 25);
     await db.insert(agents).values(batch);
+  }
+
+  // Inject default economy config for creative-mode sessions so all subsystems
+  // are available (banking, fiscal, capital markets, inflation). Bootstrap-mode
+  // sessions already have a data-driven config from the World Bank pipeline.
+  let existingConfig: Record<string, unknown> = {};
+  if (session.config) {
+    try { existingConfig = JSON.parse(session.config); } catch { /* ignore */ }
+  }
+  if (!existingConfig.economyConfig) {
+    const economyConfig = { ...DEFAULT_ECONOMY_CONFIG };
+    const budgetAllocation = { ...DEFAULT_BUDGET_ALLOCATION };
+    const updatedConfig = JSON.stringify({
+      ...existingConfig,
+      economyConfig,
+      budgetAllocation,
+    });
+    await db.update(sessions)
+      .set({ config: updatedConfig, updatedAt: now() })
+      .where(eq(sessions.id, session.id));
+
+    // Insert a bank agent when banking is enabled (mirrors bootstrap flow)
+    if (economyConfig.bankingEnabled) {
+      const totalAgentWealth = agentRows.reduce((sum, a) => {
+        try { return sum + (JSON.parse(a.initialStats).wealth ?? 50); } catch { return sum + 50; }
+      }, 0);
+      const bankWealth = Math.round(totalAgentWealth * 0.5);
+      const bankStats = JSON.stringify({ wealth: bankWealth, health: 100, happiness: 100, cortisol: 0, dopamine: 50 });
+      await db.insert(agents).values({
+        id: uuidv4(),
+        sessionId: session.id,
+        name: 'Central Bank',
+        role: 'Central Banker',
+        background: 'System bank agent providing fractional reserve banking services.',
+        initialStats: bankStats,
+        currentStats: bankStats,
+        type: 'bank',
+        status: 'alive',
+        personalityTraits: JSON.stringify(['analytical']),
+      });
+    }
   }
 
   await db

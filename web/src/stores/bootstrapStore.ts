@@ -59,7 +59,7 @@ export const useBootstrapStore = create<BootstrapState>((set, get) => ({
 
   setSelectedLocation: (loc) => set({ selectedLocation: loc }),
 
-  setAgentCount: (n) => set({ agentCount: n }),
+  setAgentCount: (n) => set({ agentCount: Math.max(5, Math.min(200, Math.round(n))) }),
 
   setScenario: (s) => set({ scenario: s }),
 

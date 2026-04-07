@@ -104,8 +104,6 @@ export function getMetCategory(
     // ── Rest / Recovery ───────────────────────────────────────────────────
     case 'REST':
       return 'REST';
-    case 'SLEEP': // If SLEEP is ever added as an action code
-      return 'SLEEP';
     case 'NONE':
       return 'REST'; // Idle agents rest
 
@@ -115,7 +113,6 @@ export function getMetCategory(
     case 'INVEST':
     case 'POST_BUY_ORDER':
     case 'POST_SELL_ORDER':
-    case 'SET_WAGE':
     case 'EMBEZZLE':
     case 'ADJUST_TAX':
     case 'APPLY_FOR_JOB':
@@ -123,6 +120,20 @@ export function getMetCategory(
     case 'HIRE_EMPLOYEE':
     case 'FIRE_EMPLOYEE':
     case 'FOUND_ENTERPRISE':
+    // Banking actions (administrative/financial tasks)
+    case 'DEPOSIT':
+    case 'WITHDRAW':
+    case 'TAKE_LOAN':
+    case 'REPAY_LOAN':
+    case 'ISSUE_LOAN':
+    case 'SET_INTEREST_RATE':
+    case 'SET_RESERVE_RATIO':
+    case 'SET_BASE_RATE':
+    // Capital market actions (administrative/financial tasks)
+    case 'BUY_SHARES':
+    case 'SELL_SHARES':
+    case 'BUY_BOND':
+    case 'ISSUE_GOV_BOND':
       return 'WORK_COGNITIVE';
 
     case 'SUPPRESS':
@@ -135,7 +146,6 @@ export function getMetCategory(
       return 'WORK_LIGHT_MANUAL';
 
     // ── Moderate Manual ───────────────────────────────────────────────────
-    case 'PRODUCE':
     case 'PRODUCE_AND_SELL':
     case 'SABOTAGE':
       return 'WORK_MODERATE_MANUAL';
@@ -393,8 +403,9 @@ export class AllostaticEngine {
     if (this.load >= physicsConfig.loadDiseaseThreshold) return 0;
     if (!this.strain || this.strain <= physicsConfig.strainElasticityLimit) return null;
     const loadRatePerTick = (this.strain - physicsConfig.strainElasticityLimit) * physicsConfig.loadAccumulationRate;
-    if (loadRatePerTick <= 0) return null;
-    return Math.ceil((physicsConfig.loadDiseaseThreshold - this.load) / loadRatePerTick);
+    if (loadRatePerTick <= 1e-10) return null;
+    const ticks = Math.ceil((physicsConfig.loadDiseaseThreshold - this.load) / loadRatePerTick);
+    return Number.isFinite(ticks) ? ticks : null;
   }
 
   /**

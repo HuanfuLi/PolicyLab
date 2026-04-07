@@ -101,9 +101,16 @@ router.post('/:id/bootstrap', async (req, res) => {
   };
 
   // Heartbeat timer (per Pitfall 6 — send every 10 seconds during long fetches)
+  let clientDisconnected = false;
   const heartbeatInterval = setInterval(() => {
-    sendEvent({ type: 'heartbeat' });
+    if (!clientDisconnected) sendEvent({ type: 'heartbeat' });
   }, 10_000);
+
+  // Clean up heartbeat if client disconnects mid-bootstrap
+  req.on('close', () => {
+    clientDisconnected = true;
+    clearInterval(heartbeatInterval);
+  });
 
   const now = () => new Date().toISOString();
   const clampedAgentCount = Math.min(150, Math.max(20, Math.round(agentCount)));

@@ -59,7 +59,7 @@ const initialState = {
   agents: [] as Agent[],
 };
 
-export const useReflectionStore = create<ReflectionStore>((set, get) => ({
+export const useReflectionStore = create<ReflectionStore>((set) => ({
   ...initialState,
 
   reset: () => set(initialState),

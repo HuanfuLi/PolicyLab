@@ -7,15 +7,9 @@
  * based on price/time priority, dynamically establishing supply-demand equilibrium.
  *
  * This module is fully deterministic and LLM-independent.
- *
- * REL-01 / BUG-02: Open orders are now persisted to the `order_book` DB table so
- * they survive server restarts.  Filled / cancelled orders are updated atomically
- * inside matchOrders().
+ * DB persistence is handled via db/repos/orderBookRepo.ts (injected).
  */
 import { v4 as uuidv4 } from 'uuid';
-import { db, sqlite } from '../db/index.js';
-import { orderBook as orderBookTable } from '../db/schema.js';
-import { eq, and } from 'drizzle-orm';
 import type {
     ItemType,
     MarketOrder,
@@ -24,6 +18,7 @@ import type {
     MarketState,
 } from '@policylab/shared';
 import { ITEM_TYPES } from '@policylab/shared';
+import * as orderBookRepo from '../db/repos/orderBookRepo.js';
 
 // ── Order Book Data Structure ────────────────────────────────────────────────
 
@@ -52,16 +47,7 @@ export class OrderBook {
      * Called once during simulation initialisation (after server restart).
      */
     loadFromDB(): void {
-        const rows = db
-            .select()
-            .from(orderBookTable)
-            .where(
-                and(
-                    eq(orderBookTable.sessionId, this.sessionId),
-                    eq(orderBookTable.status, 'open'),
-                ),
-            )
-            .all();
+        const rows = orderBookRepo.loadOpenOrders(this.sessionId);
 
         this.buyOrders = [];
         this.sellOrders = [];
@@ -71,8 +57,8 @@ export class OrderBook {
                 id: row.id,
                 sessionId: row.sessionId,
                 agentId: row.agentId,
-                side: row.side as 'buy' | 'sell',
-                itemType: row.itemType as ItemType,
+                side: row.side,
+                itemType: row.itemType,
                 price: row.price,
                 quantity: row.quantity,
                 filledQuantity: row.filledQuantity,
@@ -115,21 +101,7 @@ export class OrderBook {
         };
 
         // Persist immediately (synchronous via better-sqlite3 under the hood)
-        sqlite.transaction(() => {
-            db.insert(orderBookTable).values({
-                id: fullOrder.id,
-                sessionId: fullOrder.sessionId,
-                agentId: fullOrder.agentId,
-                side: fullOrder.side,
-                itemType: fullOrder.itemType,
-                price: fullOrder.price,
-                quantity: fullOrder.quantity,
-                filledQuantity: 0,
-                iterationPlaced: fullOrder.iterationPlaced,
-                status: 'open',
-                createdAt: new Date().toISOString(),
-            }).run();
-        })();
+        orderBookRepo.insertOrder(fullOrder);
 
         if (order.side === 'buy') {
             this.buyOrders.push(fullOrder);
@@ -218,26 +190,17 @@ export class OrderBook {
 
         // Atomically persist fill state for all matched orders
         if (matches.length > 0) {
-            sqlite.transaction(() => {
-                const filledOrderIds = new Set<string>();
-                for (const match of matches) {
-                    filledOrderIds.add(match.buyOrderId);
-                    filledOrderIds.add(match.sellOrderId);
-                }
+            const filledOrderIds = new Set<string>();
+            for (const match of matches) {
+                filledOrderIds.add(match.buyOrderId);
+                filledOrderIds.add(match.sellOrderId);
+            }
 
-                // Update filledQuantity and status for every order touched
-                const allOrders = [...this.buyOrders, ...this.sellOrders];
-                for (const order of allOrders) {
-                    if (!filledOrderIds.has(order.id)) continue;
-                    db.update(orderBookTable)
-                        .set({
-                            filledQuantity: order.filledQuantity,
-                            status: order.filled ? 'filled' : 'open',
-                        })
-                        .where(eq(orderBookTable.id, order.id))
-                        .run();
-                }
-            })();
+            const touchedOrders = [...this.buyOrders, ...this.sellOrders]
+                .filter(o => filledOrderIds.has(o.id))
+                .map(o => ({ id: o.id, filledQuantity: o.filledQuantity, filled: o.filled }));
+
+            orderBookRepo.updateMatchedOrders(touchedOrders);
         }
 
         this.tradeHistory.push(...matches);
@@ -311,18 +274,8 @@ export class OrderBook {
     removeAgentOrders(agentId: string): void {
         const agentBuyIds = this.buyOrders.filter(o => o.agentId === agentId).map(o => o.id);
         const agentSellIds = this.sellOrders.filter(o => o.agentId === agentId).map(o => o.id);
-        const allIds = [...agentBuyIds, ...agentSellIds];
 
-        if (allIds.length > 0) {
-            sqlite.transaction(() => {
-                for (const id of allIds) {
-                    db.update(orderBookTable)
-                        .set({ status: 'cancelled' })
-                        .where(eq(orderBookTable.id, id))
-                        .run();
-                }
-            })();
-        }
+        orderBookRepo.cancelAgentOrders([...agentBuyIds, ...agentSellIds]);
 
         this.buyOrders = this.buyOrders.filter(o => o.agentId !== agentId);
         this.sellOrders = this.sellOrders.filter(o => o.agentId !== agentId);

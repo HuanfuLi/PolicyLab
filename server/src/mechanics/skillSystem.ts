@@ -178,9 +178,10 @@ export function processSkills(
             entry.experience = Math.max(0, entry.experience - XP_DECAY_PER_ITERATION);
         }
 
-        // Level decay for unused skills only
+        // Level decay for unused skills only (proportional to current level)
         if (!isExercised) {
-            entry.level = Math.max(MIN_LEVEL, entry.level - LEVEL_DECAY_RATE);
+            const decay = (entry.level - MIN_LEVEL) * (LEVEL_DECAY_RATE / MAX_LEVEL);
+            entry.level = Math.max(MIN_LEVEL, entry.level - decay);
         }
     }
 

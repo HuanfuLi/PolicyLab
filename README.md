@@ -43,6 +43,27 @@ When bootstrapping from a location, PolicyLab fetches 23 economic indicators fro
 
 Each parameter in the Economy tab shows a confidence badge (API = from real data, Estimate = derived) so policymakers know what's grounded vs. approximated.
 
+## Architecture
+
+The server is organized into 12 distinct modules with strict dependency rules. See [MODULE_MAP.md](MODULE_MAP.md) for a complete registry of every module, its exports, tests, and how to work on it in isolation.
+
+```
+shared/          — Zero-dep TypeScript types (50+ interfaces)
+server/
+  mechanics/     — Pure deterministic game engines (banking, capital markets, fiscal, inflation, AMM, physics)
+  db/            — SQLite schema (26 tables) + repository pattern
+  llm/           — Multi-provider LLM gateway + prompt builders
+  cognition/     — Per-agent memory, reflection, recursive planning
+  parsers/       — LLM response extraction
+  data/          — World Bank bootstrap pipeline
+  orchestration/ — Simulation loop coordinator
+  routes/        — Express API (47 endpoints)
+web/
+  stores/        — 8 Zustand stores (zero cross-store coupling)
+  pages/         — 11 route pages
+  components/    — 10+ reusable UI components (90% pure presentation)
+```
+
 ## Tech Stack
 
 - **Frontend**: React 19, Vite, Zustand, React Router, Recharts, lucide-react
@@ -51,21 +72,33 @@ Each parameter in the Economy tab shows a confidence badge (API = from real data
 - **LLM**: Multi-provider gateway (Anthropic, OpenAI, Google Gemini/Vertex, Ollama)
 - **Realtime**: Server-Sent Events for live simulation and bootstrap progress streaming
 - **Data**: World Bank Open Data API v2, Photon geocoder (OpenStreetMap)
+- **Testing**: Vitest (195 tests — SFC invariants, engine unit tests, data pipeline tests)
 
 ## Development
 
 ```bash
 npm install
-npm run dev          # Full app (server + web concurrently)
+npm run dev            # Full app (server + web concurrently)
 npm run dev -w server  # Backend only
 npm run dev -w web     # Frontend only
-npm run build        # Build all packages in dependency order
+npm run build          # Build all packages in dependency order
 npm run test -w server # Run server tests (vitest)
+npm run lint -w web    # Lint frontend
 ```
 
 Configuration: `~/.policylab/config.json` (LLM API keys, provider selection)
 Database: `~/.policylab/policylab.db` (SQLite, auto-migrated)
 Location cache: `~/.policylab/cache/` (30-day TTL per country)
+
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | AI assistant guidance — architecture, commands, conventions |
+| [MODULE_MAP.md](MODULE_MAP.md) | Complete module registry with exports, tests, dependencies, and isolation guide |
+| [.planning/ROADMAP.md](.planning/ROADMAP.md) | Phase-by-phase implementation roadmap |
+| [.planning/REQUIREMENTS.md](.planning/REQUIREMENTS.md) | Functional requirements with traceability |
+| [.planning/PROJECT.md](.planning/PROJECT.md) | Project scope, constraints, key decisions |
 
 ## License
 

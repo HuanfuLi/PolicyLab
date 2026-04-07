@@ -40,6 +40,8 @@ export interface FiscalDelta {
   updatedPublicGoods: Omit<PublicGoodsState, 'id' | 'sessionId'>;
   /** Multiplier effects derived from updated quality scores */
   multiplierEffects: MultiplierEffects;
+  /** Per-category spending amounts for telemetry */
+  categorySpending: { infrastructure: number; education: number; defense: number; welfare: number };
   /** Physics trace log entries for narrative grounding */
   trace: string[];
 }
@@ -95,6 +97,21 @@ export function getMultiplierEffects(params: {
     enforcementBonus: publicGoods.defenseQuality * (economyConfig.defenseMultiplier ?? 0.003),
     welfarePerAgent,
   };
+}
+
+/**
+ * Convenience: rebuild multiplier effects from quality scores alone (for resume/restore).
+ * Uses welfarePerAgent=0 since we don't have the spending context from a prior iteration.
+ */
+export function getMultiplierEffectsFromQuality(
+  quality: { infrastructureQuality: number; educationQuality: number; defenseQuality: number; welfareQuality: number },
+  economyConfig: EconomyConfig,
+): MultiplierEffects {
+  return getMultiplierEffects({
+    publicGoods: { iterationNumber: 0, ...quality },
+    economyConfig,
+    welfarePerAgent: 0,
+  });
 }
 
 // ── Main function ─────────────────────────────────────────────────────────────
@@ -188,6 +205,7 @@ export function executeBudget(params: {
       agentPayments,
       updatedPublicGoods,
       multiplierEffects,
+      categorySpending: { infrastructure: 0, education: 0, defense: 0, welfare: 0 },
       trace,
     };
   }
@@ -284,11 +302,10 @@ export function executeBudget(params: {
       `(${paymentPerAgent.toFixed(2)} each); welfare portion ${welfarePerAgent.toFixed(4)}/agent`
     );
   } else {
-    // No alive agents — spending is still removed from treasury (government overhead),
-    // but no agent payments are made. This maintains SFC: the money is consumed.
-    // In the empty-agent case we still deduct from treasury but no payments go out.
-    // This is an edge case (society extinct) — trace it clearly.
-    trace.push(`[Fiscal] No alive agents — treasury spent ${totalSpending.toFixed(2)} with no recipients`);
+    // No alive agents — do NOT spend treasury (SFC: money cannot be destroyed).
+    // Quality scores still decay, but treasury balance is preserved.
+    totalSpending = 0;
+    trace.push(`[Fiscal] No alive agents — treasury preserved (no spending without recipients)`);
   }
 
   // ── Step 6: Compute multiplier effects from updated quality scores ────────
@@ -306,13 +323,19 @@ export function executeBudget(params: {
 
   // ── Step 7: Compute treasury delta ────────────────────────────────────────
   // SFC check: treasuryDelta + sum(agentPayments) must equal 0 (when agents exist)
-  const treasuryDelta = -totalSpending;
+  const treasuryDelta = totalSpending === 0 ? 0 : -totalSpending;
 
   return {
     treasuryDelta,
     agentPayments,
     updatedPublicGoods,
     multiplierEffects,
+    categorySpending: {
+      infrastructure: infraSpend,
+      education: educSpend,
+      defense: defSpend,
+      welfare: welfareSpend,
+    },
     trace,
   };
 }

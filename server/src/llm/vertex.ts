@@ -53,7 +53,7 @@ export class VertexProvider implements LLMProvider {
             contents: mappedContents,
             systemInstruction,
             generationConfig: {
-                maxOutputTokens: options.maxTokens ?? 4096,
+                maxOutputTokens: options.maxTokens ?? 16384,
                 temperature: options.temperature,
             }
         };
@@ -80,7 +80,15 @@ export class VertexProvider implements LLMProvider {
         }
 
         const data = await res.json() as any;
-        return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+        const finishReason = data?.candidates?.[0]?.finishReason;
+        if (finishReason === 'MAX_TOKENS') {
+            throw new Error('LLM response truncated (hit maxOutputTokens). Respond more concisely.');
+        }
+        const content = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+        if (!content.trim()) {
+            throw new Error(`LLM returned empty response (finishReason: ${finishReason ?? 'unknown'})`);
+        }
+        return content;
     }
 
     async *chatStream(messages: LLMMessage[], options: LLMOptions = {}): AsyncIterable<string> {

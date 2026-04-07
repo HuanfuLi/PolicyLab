@@ -180,15 +180,21 @@ export function parseResolutionStrict(text: string): ParsedResolution {
   if (!narrativeSummary) throw new Error('Missing or empty "narrativeSummary" field');
 
   const rawOutcomes = Array.isArray(raw.agentOutcomes) ? raw.agentOutcomes : [];
-  const agentOutcomes: ParsedAgentOutcome[] = rawOutcomes.map((o: Record<string, unknown>) => ({
-    agentId: String(o.agentId ?? ''),
-    outcome: String(o.outcome ?? '').trim(),
-    wealthDelta: 0,
-    healthDelta: 0,
-    happinessDelta: 0,
-    died: o.died === true,
-    newRole: o.newRole ? String(o.newRole) : null,
-  }));
+  const agentOutcomes: ParsedAgentOutcome[] = rawOutcomes
+    .map((o: Record<string, unknown>) => {
+      const agentId = String(o.agentId ?? '').trim();
+      if (!agentId) return null; // Skip outcomes with empty agentId
+      return {
+        agentId,
+        outcome: String(o.outcome ?? '').trim(),
+        wealthDelta: clampDelta(o.wealthDelta),
+        healthDelta: clampDelta(o.healthDelta),
+        happinessDelta: clampDelta(o.happinessDelta),
+        died: o.died === true,
+        newRole: o.newRole ? String(o.newRole) : null,
+      };
+    })
+    .filter((o): o is ParsedAgentOutcome => o !== null);
 
   const rawEvents = Array.isArray(raw.lifecycleEvents) ? raw.lifecycleEvents : [];
   const lifecycleEvents: ParsedLifecycleEvent[] = rawEvents.map((e: Record<string, unknown>) => ({
@@ -231,15 +237,21 @@ export function parseGroupResolutionStrict(text: string): ParsedGroupResolution 
   if (!groupSummary) throw new Error('Missing or empty "groupSummary" field');
 
   const rawOutcomes = Array.isArray(raw.agentOutcomes) ? raw.agentOutcomes : [];
-  const agentOutcomes: ParsedAgentOutcome[] = rawOutcomes.map((o: Record<string, unknown>) => ({
-    agentId: String(o.agentId ?? ''),
-    outcome: String(o.outcome ?? '').trim(),
-    wealthDelta: 0,
-    healthDelta: 0,
-    happinessDelta: 0,
-    died: o.died === true,
-    newRole: o.newRole ? String(o.newRole) : null,
-  }));
+  const agentOutcomes: ParsedAgentOutcome[] = rawOutcomes
+    .map((o: Record<string, unknown>) => {
+      const agentId = String(o.agentId ?? '').trim();
+      if (!agentId) return null;
+      return {
+        agentId,
+        outcome: String(o.outcome ?? '').trim(),
+        wealthDelta: clampDelta(o.wealthDelta),
+        healthDelta: clampDelta(o.healthDelta),
+        happinessDelta: clampDelta(o.happinessDelta),
+        died: o.died === true,
+        newRole: o.newRole ? String(o.newRole) : null,
+      };
+    })
+    .filter((o): o is ParsedAgentOutcome => o !== null);
 
   const rawEvents = Array.isArray(raw.lifecycleEvents) ? raw.lifecycleEvents : [];
   const lifecycleEvents: ParsedLifecycleEvent[] = rawEvents.map((e: Record<string, unknown>) => ({

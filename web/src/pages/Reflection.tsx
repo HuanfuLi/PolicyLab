@@ -53,6 +53,21 @@ const Reflection = () => {
   // Use agents from simulation store if reflection store hasn't loaded yet
   const displayAgents = agents.length > 0 ? agents : simAgents;
 
+  const loadSocietyStats = async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/iterations?full=true`);
+      if (!res.ok) {
+        console.warn(`Failed to load society stats: HTTP ${res.status}`);
+        return;
+      }
+      const iters = await res.json() as Array<{ statistics?: IterationStats }>;
+      const stats = iters.filter(it => it.statistics).map(it => it.statistics!);
+      setSocietyStats(stats);
+    } catch (err) {
+      console.warn('Failed to load society stats:', err);
+    }
+  };
+
   useEffect(() => {
     if (!id) return;
     reset();
@@ -62,25 +77,20 @@ const Reflection = () => {
     loadSocietyStats(id);
   }, [id]);
 
-  const loadSocietyStats = async (sessionId: string) => {
-    try {
-      const res = await fetch(`/api/sessions/${sessionId}/iterations?full=true`);
-      if (!res.ok) return;
-      const iters = await res.json() as Array<{ statistics?: IterationStats }>;
-      const stats = iters.filter(it => it.statistics).map(it => it.statistics!);
-      setSocietyStats(stats);
-    } catch { /* ignore */ }
-  };
-
   const loadAgentStats = async (sessionId: string) => {
     if (agentStatsLoaded) return;
     try {
       const res = await fetch(`/api/sessions/${sessionId}/iterations/agent-stats`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.warn(`Failed to load agent stats: HTTP ${res.status}`);
+        return;
+      }
       const data = await res.json() as { agents: Record<string, AgentStatsHistory> };
       setAgentStatsMap(data.agents);
       setAgentStatsLoaded(true);
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.warn('Failed to load agent stats:', err);
+    }
   };
 
   // Auto-start reflection if stage is 'reflecting' (just came from simulation)
@@ -94,7 +104,7 @@ const Reflection = () => {
     } else if (session.stage === 'reflection-complete' || session.stage === 'reviewing' || session.stage === 'completed') {
       loadReflections(id);
     }
-  }, [session?.stage]);
+  }, [session?.stage, id]);
 
   useEffect(() => {
     return () => {

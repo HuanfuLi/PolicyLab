@@ -38,8 +38,8 @@ Requirements for the Real Economy Engine milestone. Each maps to roadmap phases.
 
 - [x] **INFL-01**: CPI calculated per iteration from AMM/market price data using weighted basket
 - [x] **INFL-02**: M1 growth rate feeds back into price levels via AMM reserve scaling
-- [ ] **INFL-03**: Inflation expectations injected into agent cognition prompts with CPI trend data
-- [ ] **INFL-04**: Agents adapt behavior in response to inflation (hoarding, wage demands, saving shifts)
+- [x] **INFL-03**: Inflation expectations injected into agent cognition prompts with CPI trend data
+- [x] **INFL-04**: Agents adapt behavior in response to inflation (hoarding, wage demands, saving shifts) — via LLM emergence through prompt context injection
 
 ### Configuration
 
@@ -114,15 +114,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FISC-04 | Phase 3 | Complete |
 | INFL-01 | Phase 4 | Complete |
 | INFL-02 | Phase 4 | Complete |
-| INFL-03 | Phase 4 | Pending |
-| INFL-04 | Phase 4 | Pending |
-| BANK-07 | Phase 4 | Pending |
+| INFL-03 | Phase 4 | Complete |
+| INFL-04 | Phase 4 | Complete |
+| BANK-07 | Phase 4 | Partial — central bank observes CPI/M1 and responds via action codes; full autonomous policy agent deferred |
 
 **Coverage:**
 - v1.0 requirements: 25 total
-- Mapped to phases: 25
+- Complete: 24
+- Partial: 1 (BANK-07)
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-01*
-*Last updated: 2026-04-01 after roadmap creation*
+*Last updated: 2026-04-05 after v1.0 milestone completion*

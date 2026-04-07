@@ -27,6 +27,8 @@ export const agents = sqliteTable('agents', {
   status: text('status').notNull().default('alive'),
   bornAtIteration: integer('born_at_iteration'),
   diedAtIteration: integer('died_at_iteration'),
+  age: integer('age'),
+  weightKg: real('weight_kg'),
   allostaticStrain: real('allostatic_strain').notNull().default(0),
   allostaticLoad: real('allostatic_load').notNull().default(0),
   personalityTraits: text('personality_traits').notNull().default('[]'),

@@ -18,11 +18,6 @@ import { getActionMultiplier } from './skillSystem.js';
 import { getToolMultiplier } from './inventorySystem.js';
 import { physicsConfig } from './physicsConfig.js';
 
-export interface PhysicsQueuedAction {
-  actionCode: ActionCode;
-  parameters?: Record<string, unknown>;
-}
-
 export interface PhysicsInput {
   agent: Agent;
   actionCode: ActionCode;
@@ -59,17 +54,6 @@ export interface PhysicsInput {
   };
 }
 
-export interface PhysicsQueueInput {
-  agent: Agent;
-  actionQueue: PhysicsQueuedAction[];
-  allAgents: Agent[];
-  skills?: SkillMatrix;
-  inventory?: Inventory;
-  economyDeltasByAction?: Array<PhysicsInput['economyDeltas'] | undefined>;
-  isSabotaged?: boolean;
-  isSuppressed?: boolean;
-}
-
 export interface PhysicsOutput {
   wealthDelta: number;
   healthDelta: number;
@@ -84,16 +68,6 @@ export interface PhysicsOutput {
    * Use the /api/settings/trace-physics endpoint to retrieve this for the Lab UI.
    */
   trace: string[];
-}
-
-export interface PhysicsQueueOutput extends PhysicsOutput {
-  actionsAttempted: number;
-  actionsExecuted: number;
-  interrupted: boolean;
-  interruptedReason: 'starvation' | 'mental_breakdown' | null;
-  executedActions: PhysicsQueuedAction[];
-  skippedActions: PhysicsQueuedAction[];
-  foodConsumed: number;
 }
 
 /**
@@ -636,115 +610,3 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
   };
 }
 
-export function resolveActionQueue(input: PhysicsQueueInput): PhysicsQueueOutput {
-  const {
-    agent,
-    actionQueue,
-    allAgents,
-    skills,
-    inventory,
-    economyDeltasByAction,
-    isSabotaged,
-    isSuppressed,
-  } = input;
-
-  const queue = actionQueue.slice(0, 3);
-  const runningStats = {
-    wealth: agent.currentStats.wealth,
-    health: agent.currentStats.health,
-    happiness: agent.currentStats.happiness,
-    cortisol: agent.currentStats.cortisol ?? 20,
-    dopamine: agent.currentStats.dopamine ?? 50,
-  };
-
-  let wealthDelta = 0;
-  let healthDelta = 0;
-  let happinessDelta = 0;
-  let cortisolDelta = 0;
-  let dopamineDelta = 0;
-  let interrupted = false;
-  let interruptedReason: PhysicsQueueOutput['interruptedReason'] = null;
-
-  const executedActions: PhysicsQueuedAction[] = [];
-  const skippedActions: PhysicsQueuedAction[] = [];
-
-  for (let index = 0; index < queue.length; index += 1) {
-    const queued = queue[index];
-    const targetCandidate = queued.parameters?.target ?? queued.parameters?.agent_id;
-    const targetId = typeof targetCandidate === 'string' ? targetCandidate : undefined;
-
-    const effect = resolveAction({
-      agent: {
-        ...agent,
-        currentStats: {
-          ...agent.currentStats,
-          wealth: runningStats.wealth,
-          health: runningStats.health,
-          happiness: runningStats.happiness,
-          cortisol: runningStats.cortisol,
-          dopamine: runningStats.dopamine,
-        },
-      },
-      actionCode: queued.actionCode,
-      actionParameters: queued.parameters,
-      actionTarget: targetId,
-      allAgents,
-      skills,
-      inventory,
-      economyDeltas: economyDeltasByAction?.[index],
-      isSabotaged,
-      isSuppressed,
-    });
-
-    wealthDelta += effect.wealthDelta;
-    healthDelta += effect.healthDelta;
-    happinessDelta += effect.happinessDelta;
-    cortisolDelta += effect.cortisolDelta;
-    dopamineDelta += effect.dopamineDelta;
-
-    runningStats.wealth = Math.max(0, runningStats.wealth + effect.wealthDelta);
-    runningStats.health = Math.max(0, Math.min(100, runningStats.health + effect.healthDelta));
-    runningStats.happiness = Math.max(0, Math.min(100, runningStats.happiness + effect.happinessDelta));
-    runningStats.cortisol = Math.max(0, Math.min(100, runningStats.cortisol + effect.cortisolDelta));
-    runningStats.dopamine = Math.max(0, Math.min(100, runningStats.dopamine + effect.dopamineDelta));
-
-    executedActions.push(queued);
-
-    if (runningStats.health < physicsConfig.starvationHealthInterrupt) {
-      interrupted = true;
-      interruptedReason = 'starvation';
-    } else if (runningStats.cortisol > physicsConfig.mentalBreakdownCortisolInterrupt) {
-      interrupted = true;
-      interruptedReason = 'mental_breakdown';
-    }
-
-    if (interrupted) {
-      skippedActions.push(...queue.slice(index + 1));
-      break;
-    }
-  }
-
-  // NOTE: Food consumption and starvation penalties are handled exclusively by
-  // applyMETMetabolism in simulationRunner.ts (MET-based physiology). This function
-  // must NOT apply its own starvation penalty — that would cause double-counting.
-  const foodConsumed = 0;
-
-  // NOTE: Individual resolveAction calls already clamp each delta to ±clampDeltaMax.
-  // Do NOT re-clamp the sum here — that would cap a 3-action queue to the same range
-  // as a single action, making multi-action queues pointless for stat accumulation.
-  return {
-    wealthDelta,
-    healthDelta,
-    happinessDelta,
-    cortisolDelta,
-    dopamineDelta,
-    actionsAttempted: queue.length,
-    actionsExecuted: executedActions.length,
-    interrupted,
-    interruptedReason,
-    executedActions,
-    skippedActions,
-    foodConsumed,
-    trace: [], // queue-level aggregation: see individual resolveAction calls for per-action traces
-  };
-}

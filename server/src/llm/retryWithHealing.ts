@@ -8,7 +8,7 @@
  */
 import type { LLMMessage, LLMOptions, LLMProvider } from './types.js';
 
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 3;
 
 interface RetryWithHealingOptions<T> {
   /** The LLM provider to call */
@@ -28,10 +28,19 @@ interface RetryWithHealingOptions<T> {
    * Use this when the caller needs to handle exhaustion explicitly (e.g. to pause the simulation).
    */
   throwOnExhaustion?: boolean;
+  /**
+   * Optional callback checked before each retry attempt. When it returns true,
+   * the retry loop exits immediately with the fallback (or throws if throwOnExhaustion).
+   * Use this to stop wasting LLM tokens when the simulation has been paused or aborted.
+   */
+  shouldAbort?: () => boolean;
 }
 
 /** Patterns that indicate a network/transport failure rather than a bad LLM response. */
 const CONNECTION_ERROR_RE = /channel error|econnreset|econnrefused|socket hang up|network error|fetch failed|connection reset|etimedout|epipe/i;
+
+/** Patterns that indicate the LLM response was truncated (hit token limit). */
+const TRUNCATION_RE = /truncated|hit max_tokens|hit max_completion_tokens|hit maxOutputTokens/i;
 
 /**
  * Calls the LLM, parses the result. On parse failure, appends the error
@@ -49,12 +58,21 @@ export async function retryWithHealing<T>({
   fallback,
   label,
   throwOnExhaustion,
+  shouldAbort,
 }: RetryWithHealingOptions<T>): Promise<T> {
   let lastRaw = '';
   // Build a mutable copy of the conversation for JSON-healing rounds only
   const conversation = [...messages];
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    // Check abort before each attempt (including the first) to avoid wasting LLM tokens
+    // when the simulation has been paused/aborted while other agents were being processed.
+    if (attempt > 0 && shouldAbort?.()) {
+      if (label) console.warn(`[retryWithHealing] ${label} aborting retries — simulation paused/aborted`);
+      if (throwOnExhaustion) throw new Error('Retry aborted: simulation paused or aborted');
+      return fallback;
+    }
+
     let chatError: Error | null = null;
 
     // ── Step 1: call the LLM ───────────────────────────────────────────────
@@ -77,9 +95,19 @@ export async function retryWithHealing<T>({
           // Network error: do NOT touch the conversation. Wait briefly and retry
           // the original messages so the provider can establish a fresh connection.
           await new Promise(resolve => setTimeout(resolve, 800 * (attempt + 1)));
+        } else if (TRUNCATION_RE.test(errorMsg)) {
+          // Truncation: do NOT append the broken response — it wastes context and
+          // makes truncation more likely on the next attempt. Ask for concise output.
+          conversation.push({
+            role: 'user',
+            content: 'Your previous response was too long and got cut off before the JSON was complete. Please respond with ONLY the JSON object — no prose, no markdown fences. Use shorter text values (keep narratives under 100 words). Output valid, complete JSON.',
+          });
         } else {
           // Non-network chat error (unusual). Treat like a parse failure.
-          conversation.push({ role: 'assistant', content: lastRaw });
+          // Only append assistant content if we actually got a response
+          if (lastRaw) {
+            conversation.push({ role: 'assistant', content: lastRaw });
+          }
           conversation.push({
             role: 'user',
             content: `Your previous response caused an error: ${errorMsg}\n\nPlease respond with valid JSON following the exact schema specified above.`,

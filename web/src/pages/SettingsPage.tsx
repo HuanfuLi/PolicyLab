@@ -180,11 +180,11 @@ const SettingsPage = () => {
       } else {
         // JSON.stringify drops undefined, so backend never clears these fields.
         // We use null to forcefully overwrite them in the backend merge.
-        (updates as any).citizenProvider = null;
-        (updates as any).citizenApiKey = null;
-        (updates as any).citizenBaseUrl = null;
-        (updates as any).citizenVertexProjectId = null;
-        (updates as any).citizenVertexLocation = null;
+        (updates as Record<string, unknown>).citizenProvider = null;
+        (updates as Record<string, unknown>).citizenApiKey = null;
+        (updates as Record<string, unknown>).citizenBaseUrl = null;
+        (updates as Record<string, unknown>).citizenVertexProjectId = null;
+        (updates as Record<string, unknown>).citizenVertexLocation = null;
       }
 
       await updateSettings(updates as Parameters<typeof updateSettings>[0]);
@@ -214,7 +214,6 @@ const SettingsPage = () => {
     }
   };
 
-  const needsApiKey = provider !== 'local' && provider !== 'vertex';
   const citizenNeedsApiKey = citizenProvider !== 'local' && citizenProvider !== 'vertex';
 
   const modelOptions = getModelOptions(provider);
@@ -295,8 +294,7 @@ const SettingsPage = () => {
                 </div>
               </div>
             );
-            const savedKeysMap = (settings as any)?.savedApiKeys ?? {};
-            const hasSavedKey = Boolean(savedKeysMap[provider] && !apiKey);
+            const hasSavedKey = Boolean(settings?.hasApiKey && !apiKey);
             return (
               <div>
                 <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
@@ -428,7 +426,6 @@ const SettingsPage = () => {
 
               {/* Citizen API key */}
               {citizenNeedsApiKey && (() => {
-                const savedKeysMap = (settings as any)?.savedApiKeys ?? {};
                 const hasSavedKey = Boolean(settings?.hasCitizenApiKey && !citizenApiKey);
                 return (
                   <div>

@@ -203,6 +203,20 @@ export function runMigrations() {
     sqlite.exec(`ALTER TABLE agents ADD COLUMN personality_traits TEXT NOT NULL DEFAULT '[]';`);
   } catch { /* column already exists */ }
 
+  // Agent demographics: age and weight for MET metabolism personalization
+  try {
+    sqlite.exec(`ALTER TABLE agents ADD COLUMN age INTEGER;`);
+  } catch { /* column already exists */ }
+  try {
+    sqlite.exec(`ALTER TABLE agents ADD COLUMN weight_kg REAL;`);
+  } catch { /* column already exists */ }
+
+  // Performance indexes for frequently queried columns
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_agent_intents_agent ON agent_intents(agent_id);`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_resolved_actions_agent ON resolved_actions(agent_id);`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_chat_messages_session_context ON chat_messages(session_id, context);`);
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_public_goods_state_session_iter ON public_goods_state(session_id, iteration_number);`);
+
   // Order Book persistence: survive server restarts (REL-01 / BUG-02)
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS order_book (

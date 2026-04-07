@@ -303,6 +303,18 @@ router.post('/chat', async (req, res) => {
   }
 });
 
+// DELETE /api/compare/:id — delete a comparison result
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.delete(chatMessages).where(eq(chatMessages.id, id));
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('DELETE /api/compare/:id error:', err);
+    return res.status(500).json({ error: 'Failed to delete comparison' });
+  }
+});
+
 // GET /api/compare/history
 router.get('/history', async (req, res) => {
   try {

@@ -16,7 +16,7 @@
  */
 import { v4 as uuidv4 } from 'uuid';
 import { db, sqlite } from '../db/index.js';
-import { agentIntents, resolvedActions, iterations as iterationsTable, ammSnapshots as ammSnapshotsTable } from '../db/schema.js';
+import { agentIntents, resolvedActions, iterations as iterationsTable, ammSnapshots as ammSnapshotsTable, roleChanges } from '../db/schema.js';
 import { asc, eq, sql } from 'drizzle-orm';
 import { agentRepo } from '../db/repos/agentRepo.js';
 import { sessionRepo } from '../db/repos/sessionRepo.js';
@@ -50,6 +50,7 @@ import {
   parseFinalReport,
   parseSinglePassIntent,
 } from '../parsers/simulation.js';
+import { parseJSON } from '../parsers/json.js';
 import { runWithConcurrency } from './concurrencyPool.js';
 import { asyncLogFlusher } from '../db/asyncLogFlusher.js';
 import { resolveAction, clampHappinessByPhysiology } from '../mechanics/physicsEngine.js';
@@ -57,6 +58,7 @@ import { physicsConfig } from '../mechanics/physicsConfig.js';
 import { type ActionCode, getAllowedActions, getRoleTier } from '../mechanics/actionCodes.js';
 import { clusterByRole } from './clustering.js';
 import { retryWithHealing } from '../llm/retryWithHealing.js';
+import { getSubconsciousDrive } from '../mechanics/historicalRAG.js';
 // Banking Foundation imports (Phase 1: Banking Foundation)
 import * as bankingEngine from '../mechanics/bankingEngine.js';
 import * as bankingRepo from '../db/repos/bankingRepo.js';
@@ -133,14 +135,15 @@ function gini(values: number[]): number {
   if (values.length < 2) return 0;
   const n = values.length;
   const mean = values.reduce((s, v) => s + v, 0) / n;
-  if (mean === 0) return 0;
+  if (!Number.isFinite(mean) || mean <= 0) return 0;
   let sum = 0;
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
       sum += Math.abs(values[i] - values[j]);
     }
   }
-  return Math.round((sum / (2 * n * n * mean)) * 1000) / 1000;
+  const result = sum / (2 * n * n * mean);
+  return Number.isFinite(result) ? Math.round(result * 1000) / 1000 : 0;
 }
 
 function computeStats(agents: Agent[], iterationNumber: number): IterationStats {
@@ -183,25 +186,20 @@ function computeStats(agents: Agent[], iterationNumber: number): IterationStats 
   };
 }
 
-interface EnterpriseRecord {
-  id: string;
-  ownerId: string;
-  ownerName: string;
-  industry: string;
-  employees: Set<string>;
-  applicants: Set<string>;
-  wage: number;
-  minSkill: number;
-}
-
-interface EmploymentRecord {
-  enterpriseId: string;
-  employerId: string;
-  employeeId: string;
-  wage: number;
-  minSkill: number;
-  startedAt: number;
-}
+// Session state registries — extracted to simulationState.ts for modularity.
+// Re-import the Maps and types so they remain accessible in this file.
+import {
+  type EnterpriseRecord,
+  type EmploymentRecord,
+  sessionEnterpriseRegistry, sessionEmploymentRegistry, sessionPriceHistory,
+  sessionAMMRegistry, sessionMultiAMMRegistry, sessionAllostaticStates,
+  sessionLastActionResults, sessionIterationMetrics, sessionTelemetryLogs,
+  sessionInflationState, sessionSFCTracking, sessionStateTreasury,
+  sessionLastPhysicsTraces, sessionFiscalMultipliers,
+  appendTrace,
+  getEnterpriseRegistry, getEmploymentRegistry,
+  cleanupSessionState,
+} from './simulationState.js';
 
 /** Per-enterprise ledger: tracks revenue from labor sales vs. wage obligations this iteration. */
 interface EnterpriseLedger {
@@ -234,33 +232,7 @@ interface AgentWeekState {
   failedActionCount: number;
 }
 
-const sessionEnterpriseRegistry = new Map<string, Map<string, EnterpriseRecord>>();
-const sessionEmploymentRegistry = new Map<string, Map<string, EmploymentRecord>>();
-const sessionPriceHistory = new Map<string, Map<ItemType, number>>();
-// AMM: one AutomatedMarketMaker instance per session, persisted across iterations
-const sessionAMMRegistry = new Map<string, AutomatedMarketMaker>();
-// Multi-commodity AMM pools for non-food items (raw_materials, luxury_goods)
-const sessionMultiAMMRegistry = new Map<string, Map<MultiAMMItemType, AutomatedMarketMaker>>();
-// Allostatic states: per-agent strain/load, persisted across iterations
-const sessionAllostaticStates = new Map<string, Map<string, AllostaticState>>();
-// Task 4: last iteration's resolved action events per agent, used for feedback injection
-const sessionLastActionResults = new Map<string, Map<string, string>>();
-// Macro-level employment metrics from the previous iteration (for survivorship bias fix)
-const sessionIterationMetrics = new Map<string, string>();
-// Per-session telemetry snapshots (one per completed iteration)
-const sessionTelemetryLogs = new Map<string, TelemetryLog[]>();
-const sessionInflationState = new Map<string, InflationState>();
-// Stock-Flow Consistency (SFC) tracking: detect fiat leaks/minting between iterations.
-// The economy is fully closed-loop — no state fiat injection. Total must remain constant.
-const sessionSFCTracking = new Map<string, { initialFiat: number }>();
-// D1: State Treasury — funds standalone WORK income. Initialized at session start.
-// Treasury is SFC-compliant: included in the SFC assertion so total fiat is conserved.
-const sessionStateTreasury = new Map<string, number>();
-// D4: Last iteration's physics trace log — injected into next iteration's resolution prompt.
-const sessionLastPhysicsTraces = new Map<string, string>();
-// Fiscal Policy: multiplier effects from the previous iteration's public goods state.
-// Provides a 1-iteration lag (realistic: infrastructure improvement takes time to take effect).
-const sessionFiscalMultipliers = new Map<string, fiscalEngine.MultiplierEffects>();
+// All session* Maps are now imported from ./simulationState.ts above.
 
 function computeSystemFiatTotal(
   agents: Agent[],
@@ -301,48 +273,11 @@ function computeSystemFiatTotal(
  *  2. If a SimulationPausedError fires before the telemetry block the in-memory
  *     map is empty, but DB still has all previously committed iterations.
  */
-export function getSessionTelemetry(sessionId: string): TelemetryLog[] {
-  // Always load committed history from DB
-  const dbLogs: TelemetryLog[] = [];
-  try {
-    const rows = sqlite.prepare(
-      `SELECT statistics FROM iterations WHERE session_id = ? ORDER BY iteration_number ASC`
-    ).all(sessionId) as Array<{ statistics: string }>;
+// Telemetry retrieval — extracted to telemetryCollector.ts (Phase B3).
+// Re-export so existing importers (routes/simulate.ts, routes/importexport.ts) don't break.
+export { getSessionTelemetry } from './telemetryCollector.js';
 
-    for (const row of rows) {
-      try {
-        const parsed = JSON.parse(row.statistics) as Record<string, unknown>;
-        if (parsed._telemetry) dbLogs.push(parsed._telemetry as TelemetryLog);
-      } catch { /* skip malformed rows */ }
-    }
-  } catch { /* ignore DB errors */ }
-
-  // Merge in-memory entries not yet committed (e.g. current in-flight iteration)
-  const inMemory = sessionTelemetryLogs.get(sessionId) ?? [];
-  if (inMemory.length === 0) return dbLogs;
-
-  const dbIterNums = new Set(dbLogs.map(l => l.iterationNumber));
-  const uncommitted = inMemory.filter(l => !dbIterNums.has(l.iterationNumber));
-  return uncommitted.length > 0 ? [...dbLogs, ...uncommitted] : dbLogs;
-}
-
-function getEnterpriseRegistry(sessionId: string): Map<string, EnterpriseRecord> {
-  let registry = sessionEnterpriseRegistry.get(sessionId);
-  if (!registry) {
-    registry = new Map();
-    sessionEnterpriseRegistry.set(sessionId, registry);
-  }
-  return registry;
-}
-
-function getEmploymentRegistry(sessionId: string): Map<string, EmploymentRecord> {
-  let registry = sessionEmploymentRegistry.get(sessionId);
-  if (!registry) {
-    registry = new Map();
-    sessionEmploymentRegistry.set(sessionId, registry);
-  }
-  return registry;
-}
+// getEnterpriseRegistry / getEmploymentRegistry imported from simulationState.ts
 
 function normalizeItemType(raw: unknown): ItemType {
   const normalized = String(raw ?? 'food').trim().toLowerCase().replace(/[\s-]+/g, '_');
@@ -392,12 +327,14 @@ function buildEmploymentBoardEntries(sessionId: string): EmploymentBoardEntry[] 
 }
 
 function buildPersonalStatus(sessionId: string, agentId: string, enterpriseOwnerId?: string, agentWealth?: number): PersonalStatusBoard {
+  // Ownership takes priority — an owner-entrepreneur who is also employed elsewhere
+  // should see their ownership status so the prompt builds the capitalist identity block.
+  if (enterpriseOwnerId) {
+    return { employed: false, enterprise_id: enterpriseOwnerId, enterprise_role: 'owner', agentWealth };
+  }
   const employment = getEmploymentRegistry(sessionId).get(agentId);
   if (employment) {
     return { employed: true, enterprise_id: employment.enterpriseId, enterprise_role: 'employee', agentWealth };
-  }
-  if (enterpriseOwnerId) {
-    return { employed: false, enterprise_id: enterpriseOwnerId, enterprise_role: 'owner', agentWealth };
   }
   return { employed: false, enterprise_id: null, enterprise_role: null, agentWealth };
 }
@@ -425,11 +362,13 @@ function createAgentWeekState(econState?: AgentEconomyState): AgentWeekState {
 }
 
 function clampStat(value: number): number {
+  if (!Number.isFinite(value)) return 50;
   return Math.max(0, Math.min(100, value));
 }
 
 // Wealth has no upper bound — only floored at 0. No rounding: rounding destroys fractional fiat.
 function clampWealth(value: number): number {
+  if (!Number.isFinite(value)) return 0;
   return Math.max(0, value);
 }
 
@@ -1061,7 +1000,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     let sessionPolicy: SessionPolicy = getSessionPolicy(session.config?.policy);
 
     /** Round to 4 decimal places to prevent IEEE-754 drift in SFC accounting. */
-    const r4 = (v: number): number => Math.round(v * 10000) / 10000;
+    const r4 = (v: number): number => Number.isFinite(v) ? Math.round(v * 10000) / 10000 : 0;
 
     /** SFC tracker — tracks total fiat supply between iterations to detect drift. */
     let sfcPrevTotalFiat: number | null = null;
@@ -1264,6 +1203,39 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       restoreOrderBook(sessionId);
     }
 
+    // ── Restore session state lost between pause/resume or server restart ──
+    // These maps are in-memory only and not persisted per-iteration, so they
+    // must be rebuilt from DB state when the runner starts cold.
+    if (startIter > 1) {
+      // Inflation state: restore CPI and inflation expectations from latest macro snapshot
+      if (!sessionInflationState.has(sessionId)) {
+        const latestMacro = macroSnapshotRepo.getLatestSnapshot(db, sessionId);
+        if (latestMacro) {
+          sessionInflationState.set(sessionId, {
+            cpi: latestMacro.cpi ?? 100,
+            inflationRate: latestMacro.inflationRate ?? 0,
+            inflationExpectations: latestMacro.inflationExpectations ?? 0,
+          });
+        }
+      }
+
+      // Fiscal multipliers: rebuild from current public goods quality
+      if (!sessionFiscalMultipliers.has(sessionId)) {
+        const economyConfig = getEconomyConfig(session.config as Record<string, unknown> | null);
+        if (economyConfig.fiscalEnabled) {
+          const currentPublicGoods = fiscalRepo.getPublicGoodsState(sessionId);
+          if (currentPublicGoods) {
+            sessionFiscalMultipliers.set(sessionId, fiscalEngine.getMultiplierEffectsFromQuality({
+              infrastructureQuality: currentPublicGoods.infrastructureQuality,
+              educationQuality: currentPublicGoods.educationQuality,
+              defenseQuality: currentPublicGoods.defenseQuality,
+              welfareQuality: currentPublicGoods.welfareQuality,
+            }, economyConfig));
+          }
+        }
+      }
+    }
+
     // Load previous summaries for final report if continuing
     if (startIter > 1) {
       const prevIters = await db.select({
@@ -1329,15 +1301,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         asyncLogFlusher.stop();
         clearOrderBook(sessionId);
         cleanupSessionCognition(sessionId);
-        sessionAMMRegistry.delete(sessionId);
-        sessionMultiAMMRegistry.delete(sessionId);
-        sessionAllostaticStates.delete(sessionId);
-        sessionIterationMetrics.delete(sessionId);
-        sessionInflationState.delete(sessionId);
-        sessionSFCTracking.delete(sessionId);
-        sessionStateTreasury.delete(sessionId);
-        sessionLastPhysicsTraces.delete(sessionId);
-        sessionFiscalMultipliers.delete(sessionId);
+        cleanupSessionState(sessionId);
         if (simulationManager.isResetRequested(sessionId)) {
           // The abort-reset endpoint already cleaned the DB and set the stage.
           // Just exit — do not overwrite the stage with 'simulation-complete'.
@@ -1370,15 +1334,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           asyncLogFlusher.stop();
           clearOrderBook(sessionId);
           cleanupSessionCognition(sessionId);
-          sessionAMMRegistry.delete(sessionId);
-          sessionMultiAMMRegistry.delete(sessionId);
-          sessionAllostaticStates.delete(sessionId);
-          sessionIterationMetrics.delete(sessionId);
-          sessionInflationState.delete(sessionId);
-          sessionSFCTracking.delete(sessionId);
-          sessionStateTreasury.delete(sessionId);
-          sessionLastPhysicsTraces.delete(sessionId);
-          sessionFiscalMultipliers.delete(sessionId);
+          cleanupSessionState(sessionId);
           if (simulationManager.isResetRequested(sessionId)) {
             simulationManager.broadcast(sessionId, { type: 'aborted-reset' });
           } else {
@@ -1647,6 +1603,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           // Single-pass: one LLM call returns structured JSON with narrative + actionCode.
           // Phase 3: pass role-restricted action set so elite agents see privileged actions.
           const lastActionResults = sessionLastActionResults.get(sessionId)?.get(agent.id);
+          const subconsciousDrive = getSubconsciousDrive(
+            agent.currentStats.cortisol ?? 20,
+            agent.currentStats.wealth,
+            agent.currentStats.health,
+          );
           const messages = buildNaturalIntentPrompt(
             agent, session, previousSummary, iterNum,
             economyContext, cognitiveContext, isFirstIteration, aliveAgentNames,
@@ -1663,6 +1624,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             citizenFiscalContext,
             inflationContext,
             centralBankContext,
+            subconsciousDrive,
           );
 
           // throwOnExhaustion: true — after all retries, throw instead of silently defaulting to REST.
@@ -1791,8 +1753,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           }));
           const legalityMessages = buildLegalityCheckPrompt(legalityInput, session.law, session.societyOverview ?? null);
           const rawLegality = await provider.chat(legalityMessages, { model: settings.centralAgentModel });
-          const cleanLegality = rawLegality.replace(/^```json?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-          const parsedLegality = JSON.parse(cleanLegality) as { illegalAgents?: Array<{ agentId: string; actionCode: string; reason: string }> };
+          const parsedLegality = parseJSON<{ illegalAgents?: Array<{ agentId: string; actionCode: string; reason: string }> }>(rawLegality);
           if (Array.isArray(parsedLegality?.illegalAgents)) {
             for (const entry of parsedLegality.illegalAgents) {
               if (typeof entry.agentId === 'string' && typeof entry.actionCode === 'string') {
@@ -1985,6 +1946,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       const actionRowByAgentId = new Map<string, typeof resolvedActions.$inferInsert>();
       const economyUpdates: Array<{ agentId: string; sessionId: string; skills: SkillMatrix; inventory: Inventory; lastUpdated: number }> = [];
       const humiliatedAgentIds = new Set<string>();
+      const pendingSuppressPenalties: string[] = [];
       // Phase B: per-enterprise revenue/wage ledger for this iteration
       const enterpriseLedgerMap = new Map<string, EnterpriseLedger>();
       // Phase Sheriff C: accumulated seized wealth to redistribute as UBI at end of iteration
@@ -2484,18 +2446,52 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
       }
 
+      // ── Background Farming: guaranteed food production from agricultural agents ──
+      // Agents whose role implies farming (farmer/gatherer/herder) automatically
+      // produce a baseline food quantity even when the LLM doesn't choose
+      // PRODUCE_AND_SELL. This prevents the death spiral where zero production
+      // drains the AMM and collapses the economy. Agents who already produced
+      // food this iteration are skipped (no double production).
+      // The farmer earns fiat revenue from the sale, maintaining economic realism.
+      {
+        const bgAMM = sessionAMMRegistry.get(sessionId);
+        if (bgAMM) {
+          const BACKGROUND_FARM_QUANTITY = 10; // half of BASE_PRODUCE_QUANTITY (20)
+          const farmerPattern = /farmer|gatherer|herder/i;
+          for (const agent of aliveAgents) {
+            if (!farmerPattern.test(agent.role)) continue;
+            const weekState = weekStateMap.get(agent.id);
+            if (!weekState) continue;
+            // Skip if agent already produced food this iteration
+            const alreadyProduced = weekState.executedActions.some(
+              a => a.actionCode === 'PRODUCE_AND_SELL' && (a.parameters?.itemType === 'food' || !a.parameters?.itemType)
+            );
+            if (alreadyProduced) continue;
+
+            const skillMult = getActionMultiplier(weekState.skills, 'PRODUCE_AND_SELL');
+            const quantity = Math.max(BACKGROUND_FARM_QUANTITY, Math.round(BACKGROUND_FARM_QUANTITY * skillMult));
+            const receipt = bgAMM.executeSell(quantity, iterNum);
+            if (receipt.success && 'fiatOut' in receipt.quote) {
+              const fiatReceived = receipt.quote.fiatOut;
+              weekState.wealthDelta += fiatReceived;
+              weekState.caloriesProduced += quantity;
+              weekState.events.push(`Background farming: produced ${quantity} food → sold to market (+${fiatReceived.toFixed(1)} fiat)`);
+            }
+          }
+        }
+      }
+
       // ── AMM Famine Reserve: ensure minimum food supply before metabolism ───
-      // Equivalent to the "sys_farm" in the physics sandbox: injects a small
-      // background food production into the AMM so the auto-buy in applyMETMetabolism
-      // always finds some supply, preventing complete market deadlock.
-      // Injection = 1 food unit per alive agent (baseline subsistence floor).
+      // Emergency floor injection when AMM food drops critically low.
+      // Threshold set to 6× alive agents to cover roughly one iteration of
+      // metabolic demand, preventing complete market deadlock.
       // SFC fix: withdraw matching fiat from the AMM to keep k constant, and fund
       // the withdrawn fiat into the treasury so total system fiat is conserved.
       {
         const primaryAMM = sessionAMMRegistry.get(sessionId);
         if (primaryAMM && aliveAgents.length > 0) {
           const foodReserve = primaryAMM.currentFoodReserve;
-          const minReserve = aliveAgents.length * 2;
+          const minReserve = aliveAgents.length * 6;
           if (foodReserve < minReserve) {
             const injection = minReserve - foodReserve;
             // Add food to AMM without changing k: sell food into the AMM at market rate.
@@ -2790,11 +2786,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           }
           if (action.actionCode === 'SUPPRESS' && targetAgent) {
             suppressRegistry.set(targetAgent.id, 2);
-            const targetUpdate = statUpdates.find(u => u.id === targetAgent.id);
-            if (targetUpdate) {
-              targetUpdate.cortisol = clampStat(targetUpdate.cortisol + 25);
-              targetUpdate.happiness = clampStat(targetUpdate.happiness - 10);
-            }
+            // Collect suppress penalties — applied after all agents are processed
+            // to avoid ordering-dependent bug where target's statUpdate doesn't exist yet
+            pendingSuppressPenalties.push(targetAgent.id);
           }
         }
 
@@ -2833,6 +2827,16 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         };
         actionRows.push(actionRow);
         actionRowByAgentId.set(agent.id, actionRow);
+      }
+
+      // ── Apply deferred SUPPRESS penalties ────────────────────────────────
+      // Applied after ALL agents have statUpdates, avoiding ordering-dependent bug
+      for (const targetId of pendingSuppressPenalties) {
+        const targetUpdate = statUpdates.find(u => u.id === targetId);
+        if (targetUpdate) {
+          targetUpdate.cortisol = clampStat(targetUpdate.cortisol + 25);
+          targetUpdate.happiness = clampStat(targetUpdate.happiness - 10);
+        }
       }
 
       // ── Phase Sheriff C: redistribute seized wealth (SFC-safe) ────────────
@@ -3011,7 +3015,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       let bankingTotalDeposits = 0;
       let bankingCollateralEscrow = 0;
       let bankingLoansOutstanding = 0;
-      let inflationTelemetry: Pick<TelemetryLog, 'cpi' | 'inflationRate' | 'inflationExpectations'> | null = null;
+      let inflationTelemetry: Pick<TelemetryLog, 'cpi' | 'inflationRate' | 'inflationExpectations'> = {
+        cpi: 100,
+        inflationRate: 0,
+        inflationExpectations: 0,
+      };
 
       if (economyConfig.bankingEnabled) {
         const bankAgents = agents.filter(a => a.type === 'bank' && a.isAlive);
@@ -3056,9 +3064,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
         // Append banking traces to physics trace log
         if (bankingDelta.trace.length > 0) {
-          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
-          sessionLastPhysicsTraces.set(sessionId,
-            existingTrace + '\n' + bankingDelta.trace.join('\n'));
+          appendTrace(sessionId, bankingDelta.trace.join('\n'));
         }
 
         // Get banking totals for SFC audit and telemetry
@@ -3132,9 +3138,31 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
         // Append capital market traces to physics trace log
         if (cmktDelta.trace.length > 0) {
-          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
-          sessionLastPhysicsTraces.set(sessionId,
-            existingTrace + '\n' + cmktDelta.trace.join('\n'));
+          appendTrace(sessionId, cmktDelta.trace.join('\n'));
+        }
+      }
+
+      // ── Bond yield telemetry ──────────────────────────────────────────────
+      // Compute weighted avg coupon rates for gov/corp bonds from active holdings.
+      let bondYieldsTelemetry: { governmentYield?: number; corporateYield?: number } | null = null;
+      if (cmktEconomyConfig.capitalMarketsEnabled) {
+        const activeBonds = capitalMarketRepo.getActiveBondHoldingsBySession(sessionId);
+        if (activeBonds.length > 0) {
+          let govWeightedCoupon = 0, govTotalFace = 0;
+          let corpWeightedCoupon = 0, corpTotalFace = 0;
+          for (const b of activeBonds) {
+            if (b.bondType === 'government') {
+              govWeightedCoupon += b.couponRate * b.faceValue;
+              govTotalFace += b.faceValue;
+            } else {
+              corpWeightedCoupon += b.couponRate * b.faceValue;
+              corpTotalFace += b.faceValue;
+            }
+          }
+          bondYieldsTelemetry = {
+            ...(govTotalFace > 0 ? { governmentYield: Math.round((govWeightedCoupon / govTotalFace) * 10000) / 10000 } : {}),
+            ...(corpTotalFace > 0 ? { corporateYield: Math.round((corpWeightedCoupon / corpTotalFace) * 10000) / 10000 } : {}),
+          };
         }
       }
 
@@ -3143,6 +3171,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // updates public goods quality, applies welfare payments to agents.
       // SFC: all spending flows from treasury to agents (direct transfers).
       let fiscalPublicGoodsQuality: { infrastructureQuality: number; educationQuality: number; defenseQuality: number; welfareQuality: number } | null = null;
+      let fiscalCategorySpending: { infrastructure: number; education: number; defense: number; welfare: number } | null = null;
       if (economyConfig.fiscalEnabled) {
         const budgetAllocation = fiscalRepo.getActiveBudget(sessionId) ?? DEFAULT_BUDGET_ALLOCATION;
         const currentPublicGoods = fiscalRepo.getPublicGoodsState(sessionId);
@@ -3165,8 +3194,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           iterationNumber: iterNum,
         });
 
-        // Lift quality scores to outer scope for iterTelemetry population
+        // Lift quality scores and spending to outer scope for iterTelemetry population
         fiscalPublicGoodsQuality = fiscalDelta.updatedPublicGoods;
+        fiscalCategorySpending = fiscalDelta.categorySpending;
 
         // Apply treasury delta (spending removed from treasury)
         sessionStateTreasury.set(sessionId, treasuryBalance + fiscalDelta.treasuryDelta);
@@ -3193,9 +3223,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
         // Append fiscal traces to physics trace log
         if (fiscalDelta.trace.length > 0) {
-          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
-          sessionLastPhysicsTraces.set(sessionId,
-            existingTrace + '\n' + fiscalDelta.trace.join('\n'));
+          appendTrace(sessionId, fiscalDelta.trace.join('\n'));
         }
       }
 
@@ -3279,19 +3307,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               applyInflationFeedback(pool, inflationOutput.ammFeedbackFactor);
             }
           }
-          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
-          sessionLastPhysicsTraces.set(
-            sessionId,
-            existingTrace + '\n' + `AMM feedback: scaled goods reserves for price factor ${inflationOutput.ammFeedbackFactor.toFixed(4)}`,
-          );
+          appendTrace(sessionId, `AMM feedback: scaled goods reserves for price factor ${inflationOutput.ammFeedbackFactor.toFixed(4)}`);
         }
 
         if (inflationOutput.trace.length > 0) {
-          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
-          sessionLastPhysicsTraces.set(
-            sessionId,
-            existingTrace + '\n' + inflationOutput.trace.join('\n'),
-          );
+          appendTrace(sessionId, inflationOutput.trace.join('\n'));
         }
       }
 
@@ -3301,6 +3321,13 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         const agentIntent = intentMap.get(agent.id);
         const weekState = weekStateMap.get(agent.id)!;
         const isHumiliated = humiliatedAgentIds.has(agent.id);
+        const finalStats = finalStatsByAgentId.get(agent.id);
+        // Use final stats (after banking/fiscal/capital market ticks) for accurate deltas
+        const finalWealth = finalStats?.wealth ?? agent.currentStats.wealth;
+        const finalHealth = finalStats?.health ?? agent.currentStats.health;
+        const finalHappiness = finalStats?.happiness ?? agent.currentStats.happiness;
+        const finalCortisol = finalStats?.cortisol ?? (agent.currentStats.cortisol ?? 20);
+        const finalDopamine = finalStats?.dopamine ?? (agent.currentStats.dopamine ?? 50);
         return {
           agentId: agent.id,
           sessionId,
@@ -3309,9 +3336,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             ? `[HUMILIATION] I ran out of resources and was force-fed synthetic slop by the state. My remaining wealth was stripped. I am at the absolute bottom of society. I feel extreme rage and despair.`
             : (agentIntent?.intent ?? 'continued routine'),
           actionCode: agentIntent?.primaryActionCode ?? 'NONE',
-          wealthDelta: isHumiliated ? -agent.currentStats.wealth : (finalStatsByAgentId.get(agent.id)?.wealth ?? agent.currentStats.wealth) - agent.currentStats.wealth,
-          healthDelta: isHumiliated ? -(agent.currentStats.health - 30) : weekState.healthDelta,
-          happinessDelta: isHumiliated ? -20 : weekState.happinessDelta,
+          wealthDelta: isHumiliated ? -agent.currentStats.wealth : finalWealth - agent.currentStats.wealth,
+          healthDelta: isHumiliated ? -(agent.currentStats.health - 30) : finalHealth - agent.currentStats.health,
+          happinessDelta: isHumiliated ? -20 : finalHappiness - agent.currentStats.happiness,
+          cortisolDelta: isHumiliated ? 30 : finalCortisol - (agent.currentStats.cortisol ?? 20),
+          dopamineDelta: isHumiliated ? -20 : finalDopamine - (agent.currentStats.dopamine ?? 50),
           economyEvents: weekState.events,
           isStarving: weekState.inventory.food.quantity <= 0,
           narrativeSummary: resolution.narrativeSummary,
@@ -3445,7 +3474,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           m0: totalFiatSupply,  // base money — constant under SFC (includes depositBalances + collateral)
           m1: totalFiatSupply + bankingLoansOutstanding,  // M1 = M0 + outstanding loan principals
           loansOutstanding: bankingLoansOutstanding,
-          ...(inflationTelemetry ?? {}),
+          ...inflationTelemetry,
+          // M2 = M1 + time deposits (deposit accounts act as savings deposits in this model)
+          m2: totalFiatSupply + bankingLoansOutstanding + bankingTotalDeposits,
           // Fiscal public goods quality telemetry (absent when fiscalEnabled is false)
           ...(fiscalPublicGoodsQuality ? {
             infrastructureQuality: Math.round(fiscalPublicGoodsQuality.infrastructureQuality * 100) / 100,
@@ -3453,13 +3484,26 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             defenseQuality: Math.round(fiscalPublicGoodsQuality.defenseQuality * 100) / 100,
             welfareQuality: Math.round(fiscalPublicGoodsQuality.welfareQuality * 100) / 100,
           } : {}),
+          // Bond yield telemetry (absent when capitalMarketsEnabled is false or no bonds)
+          ...(bondYieldsTelemetry ? { bondYields: bondYieldsTelemetry } : {}),
+          // Per-category fiscal spending (absent when fiscalEnabled is false)
+          ...(fiscalCategorySpending ? { fiscalSpending: fiscalCategorySpending } : {}),
+          // Normalized public goods quality per category (0-1 scale for chart rendering)
+          ...(fiscalPublicGoodsQuality ? {
+            publicGoodsQuality: {
+              infrastructure: Math.round(fiscalPublicGoodsQuality.infrastructureQuality) / 100,
+              education: Math.round(fiscalPublicGoodsQuality.educationQuality) / 100,
+              defense: Math.round(fiscalPublicGoodsQuality.defenseQuality) / 100,
+              welfare: Math.round(fiscalPublicGoodsQuality.welfareQuality) / 100,
+            },
+          } : {}),
         };
         // Phase A: SFC drift check — warn if unaccounted fiat appears or disappears.
         // Keep a floor tolerance so extinction or tiny populations do not generate
         // meaningless warnings from sub-cent floating-point noise.
         if (sfcPrevTotalFiat !== null) {
           const sfcDrift = totalFiatSupply - sfcPrevTotalFiat;
-          const tolerance = Math.max(0.1, aliveAgents.length * 0.01);
+          const tolerance = Math.max(0.1, Math.log2(Math.max(1, aliveAgents.length)) * 0.05);
           if (Math.abs(sfcDrift) > tolerance) {
             const agentNote = aliveAgents.length === 0 ? 'with 0 alive agents' : `with ${aliveAgents.length} alive agents`;
             console.warn(`[SFC] iter=${iterNum}: drift=${sfcDrift.toFixed(6)} ${agentNote} — possible unaccounted fiat creation or destruction`);
@@ -3522,7 +3566,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           totalTools: aliveAgents.reduce((sum, agent) => sum + (weekStateMap.get(agent.id)?.inventory.tools.quantity ?? 0), 0),
           avgSkillLevel: aliveAgents.length > 0
             ? Math.round(
-              aliveAgents.reduce((sum, agent) => sum + getAgentPeakSkill(weekStateMap.get(agent.id)!.skills), 0) / aliveAgents.length
+              aliveAgents.reduce((sum, agent) => {
+                const ws = weekStateMap.get(agent.id);
+                return sum + (ws ? getAgentPeakSkill(ws.skills) : 0);
+              }, 0) / aliveAgents.length
             )
             : 0,
           activeContracts: employmentRegistry.size,
@@ -3592,13 +3639,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         asyncLogFlusher.stop();
         clearOrderBook(sessionId);
         cleanupSessionCognition(sessionId);
-        sessionAMMRegistry.delete(sessionId);
-        sessionMultiAMMRegistry.delete(sessionId);
-        sessionAllostaticStates.delete(sessionId);
-        sessionIterationMetrics.delete(sessionId);
-        sessionSFCTracking.delete(sessionId);
-        sessionStateTreasury.delete(sessionId);
-        sessionLastPhysicsTraces.delete(sessionId);
+        cleanupSessionState(sessionId);
         if (simulationManager.isResetRequested(sessionId)) {
           simulationManager.broadcast(sessionId, { type: 'aborted-reset' });
         } else {
@@ -3660,6 +3701,23 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         // 2. AMM + Treasury snapshot (co-committed with the iteration row)
         if (ammSnapshotValues) {
           db.insert(ammSnapshotsTable).values(ammSnapshotValues).run();
+        }
+
+        // 3. Persist role changes to roleChanges table (lifecycle events)
+        for (const evt of resolution.lifecycleEvents ?? []) {
+          const e = evt as { type: string; agentId?: string; detail?: string; fromRole?: string; toRole?: string };
+          if (e.type === 'role_change' && e.agentId) {
+            db.insert(roleChanges).values({
+              id: uuidv4(),
+              sessionId,
+              agentId: e.agentId,
+              fromRole: e.fromRole ?? '',
+              toRole: e.toRole ?? '',
+              reason: e.detail ?? null,
+              iterationNumber: iterNum,
+              timestamp: now,
+            }).run();
+          }
         }
       })();
 
@@ -3796,22 +3854,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     // Drain all pending log writes before finishing
     asyncLogFlusher.stop();
 
-    // Phase 1: Clean up session economy state
+    // Clean up all in-memory state
     clearOrderBook(sessionId);
-    // Phase 3: Clean up cognitive state
     cleanupSessionCognition(sessionId);
-    // Tick-based engines cleanup
-    sessionAMMRegistry.delete(sessionId);
-    sessionMultiAMMRegistry.delete(sessionId);
-    sessionAllostaticStates.delete(sessionId);
-    sessionLastActionResults.delete(sessionId);
-    sessionIterationMetrics.delete(sessionId);
-    sessionTelemetryLogs.delete(sessionId);
-    sessionInflationState.delete(sessionId);
-    sessionSFCTracking.delete(sessionId);
-    sessionStateTreasury.delete(sessionId);
-    sessionLastPhysicsTraces.delete(sessionId);
-    sessionFiscalMultipliers.delete(sessionId);
+    cleanupSessionState(sessionId);
 
     await sessionRepo.updateStage(sessionId, 'simulation-complete');
     simulationManager.broadcast(sessionId, { type: 'simulation-complete', finalReport });
@@ -3820,17 +3866,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     asyncLogFlusher.stop();
     clearOrderBook(sessionId);
     cleanupSessionCognition(sessionId);
-    sessionAMMRegistry.delete(sessionId);
-    sessionMultiAMMRegistry.delete(sessionId);
-    sessionAllostaticStates.delete(sessionId);
-    sessionLastActionResults.delete(sessionId);
-    sessionIterationMetrics.delete(sessionId);
-    sessionTelemetryLogs.delete(sessionId);
-    sessionInflationState.delete(sessionId);
-    sessionSFCTracking.delete(sessionId);
-    sessionStateTreasury.delete(sessionId);
-    sessionLastPhysicsTraces.delete(sessionId);
-    sessionFiscalMultipliers.delete(sessionId);
+    cleanupSessionState(sessionId);
 
     if (err instanceof SimulationPausedError) {
       // Structured pause: persist simulation-paused stage so the resume route can restart.
@@ -3839,13 +3875,14 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         `[SimulationRunner] Session ${sessionId} paused — ${err.reason} for agent "${err.agentName}" at iteration ${err.iterationNumber}`,
       );
       try { await sessionRepo.updateStage(sessionId, 'simulation-paused'); } catch { /* best-effort */ }
-      simulationManager.broadcast(sessionId, { type: 'error', message: err.message });
+      try { simulationManager.broadcast(sessionId, { type: 'error', message: err.message }); } catch { /* best-effort */ }
     } else {
       const message = err instanceof Error ? err.message : 'Simulation error';
-      simulationManager.broadcast(sessionId, { type: 'error', message });
+      try { simulationManager.broadcast(sessionId, { type: 'error', message }); } catch { /* best-effort */ }
       console.error(`[SimulationRunner] Session ${sessionId}:`, err);
     }
 
+    // Always mark session as finished so it never gets stuck in 'running' state
     simulationManager.finish(sessionId);
   }
 }

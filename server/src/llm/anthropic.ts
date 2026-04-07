@@ -45,7 +45,7 @@ export class AnthropicProvider implements LLMProvider {
 
     const response = await this.client.messages.create({
       model: options.model ?? this.defaultModel,
-      max_tokens: options.maxTokens ?? 4096,
+      max_tokens: options.maxTokens ?? 16384,
       system,
       messages: chatMessages.map(m => ({
         role: m.role as 'user' | 'assistant',
@@ -53,6 +53,9 @@ export class AnthropicProvider implements LLMProvider {
       })),
     });
 
+    if (response.stop_reason === 'max_tokens') {
+      throw new Error('LLM response truncated (hit max_tokens). Respond more concisely.');
+    }
     const block = response.content[0];
     if (block.type !== 'text') throw new Error('Unexpected response type');
     return block.text;
@@ -64,7 +67,7 @@ export class AnthropicProvider implements LLMProvider {
 
     const stream = this.client.messages.stream({
       model: options.model ?? this.defaultModel,
-      max_tokens: options.maxTokens ?? 4096,
+      max_tokens: options.maxTokens ?? 16384,
       system,
       messages: chatMessages.map(m => ({
         role: m.role as 'user' | 'assistant',

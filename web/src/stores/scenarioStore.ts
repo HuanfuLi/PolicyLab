@@ -34,7 +34,7 @@ function computeDeltas(
   tabConfig: Partial<EconomyConfig>,
   baselineConfig: Partial<EconomyConfig>,
 ): Record<string, { from: number | boolean; to: number | boolean }> | undefined {
-  const defaults = DEFAULT_ECONOMY_CONFIG as Record<string, unknown>;
+  const defaults = DEFAULT_ECONOMY_CONFIG as unknown as Record<string, unknown>;
   const fullBaseline = { ...defaults, ...baselineConfig } as Record<string, unknown>;
   const fullTab = { ...defaults, ...tabConfig } as Record<string, unknown>;
   const deltas: Record<string, { from: number | boolean; to: number | boolean }> = {};
@@ -178,7 +178,8 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
   },
 
   runAllScenarios: async (baseSessionId: string, iterations?: number): Promise<string[]> => {
-    const { tabs } = get();
+    const { tabs, runningScenarios } = get();
+    if (runningScenarios) return []; // Prevent concurrent calls
     const nonBaseline = tabs.filter(t => !t.isBaseline);
     if (nonBaseline.length === 0) return [];
 

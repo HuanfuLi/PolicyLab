@@ -15,6 +15,8 @@ import { db, sqlite } from '../db/index.js';
 import {
   iterations, agentIntents, resolvedActions,
   agents, economySnapshots, agentEconomy, marketPrices, roleChanges, ammSnapshots,
+  orderBook, depositAccounts, loanContracts, bankBalanceSheets, macroSnapshots,
+  equityPositions, bondHoldings, fiscalBudgets, publicGoodsState,
 } from '../db/schema.js';
 import { sessionRepo } from '../db/repos/sessionRepo.js';
 import { runSimulation, getSessionTelemetry } from '../orchestration/simulationRunner.js';
@@ -35,6 +37,15 @@ async function eraseSimulationData(sessionId: string): Promise<void> {
   await db.delete(marketPrices).where(eq(marketPrices.sessionId, sessionId));
   await db.delete(roleChanges).where(eq(roleChanges.sessionId, sessionId));
   await db.delete(ammSnapshots).where(eq(ammSnapshots.sessionId, sessionId));
+  await db.delete(orderBook).where(eq(orderBook.sessionId, sessionId));
+  await db.delete(depositAccounts).where(eq(depositAccounts.sessionId, sessionId));
+  await db.delete(loanContracts).where(eq(loanContracts.sessionId, sessionId));
+  await db.delete(bankBalanceSheets).where(eq(bankBalanceSheets.sessionId, sessionId));
+  await db.delete(macroSnapshots).where(eq(macroSnapshots.sessionId, sessionId));
+  await db.delete(equityPositions).where(eq(equityPositions.sessionId, sessionId));
+  await db.delete(bondHoldings).where(eq(bondHoldings.sessionId, sessionId));
+  await db.delete(fiscalBudgets).where(eq(fiscalBudgets.sessionId, sessionId));
+  await db.delete(publicGoodsState).where(eq(publicGoodsState.sessionId, sessionId));
 
   // Reset every agent's current_stats back to initial_stats, revive the dead,
   // and clear persisted allostatic physiology so the next run starts clean.
@@ -84,10 +95,15 @@ router.post('/', async (req, res) => {
   // cycle sees 'running' and returns 409 instead of spawning a second runner.
   simulationManager.start(id);
 
-  // Fire-and-forget: run in background
-  runSimulation(id, totalIterations).catch(err =>
-    console.error('[simulate route] unhandled error:', err)
-  );
+  // Fire-and-forget: run in background. Broadcast errors to SSE clients
+  // so the frontend knows the simulation failed (instead of hanging forever).
+  runSimulation(id, totalIterations).catch(err => {
+    console.error('[simulate route] unhandled error:', err);
+    simulationManager.broadcast(id, {
+      type: 'error',
+      message: `Simulation failed: ${err instanceof Error ? err.message : String(err)}`,
+    });
+  });
 
   return res.json({ ok: true });
 });
@@ -96,11 +112,18 @@ router.post('/', async (req, res) => {
 router.post('/pause', (req, res) => {
   const { id } = req.params as { id: string };
   const status = simulationManager.getStatus(id);
-  if (status !== 'running') {
-    return res.status(409).json({ error: 'No running simulation to pause' });
+  if (status === 'running') {
+    simulationManager.pause(id);
+    return res.json({ ok: true });
   }
-  simulationManager.pause(id);
-  return res.json({ ok: true });
+  // Already paused — treat as success so the frontend can reconcile its state.
+  if (status === 'paused') {
+    return res.json({ ok: true, alreadyPaused: true });
+  }
+  // Simulation has already stopped (error, completion, abort) but the frontend
+  // still thinks it's running (missed SSE event).  Return the actual status so
+  // the frontend can sync instead of showing an opaque 409 to the user.
+  return res.json({ ok: false, stale: true, actualStatus: 'idle' });
 });
 
 // POST /simulate/resume
@@ -140,9 +163,13 @@ router.post('/resume', async (req, res) => {
   simulationManager.start(id);
 
   // Restart runner fire-and-forget
-  runSimulation(id, remaining).catch(err =>
-    console.error('[resume route] unhandled error:', err)
-  );
+  runSimulation(id, remaining).catch(err => {
+    console.error('[resume route] unhandled error:', err);
+    simulationManager.broadcast(id, {
+      type: 'error',
+      message: `Simulation failed on resume: ${err instanceof Error ? err.message : String(err)}`,
+    });
+  });
 
   return res.json({ ok: true });
 });

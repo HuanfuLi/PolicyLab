@@ -25,6 +25,14 @@ export const compareApi = {
     return data.history;
   },
 
+  async deleteComparison(id: string): Promise<void> {
+    const res = await fetch(`/api/compare/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json() as { error: string };
+      throw new Error(err.error || 'Failed to delete comparison');
+    }
+  },
+
   async sendMessage(id1: string, id2: string, message: string): Promise<string> {
     const res = await fetch('/api/compare/chat', {
       method: 'POST',

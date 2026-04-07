@@ -426,7 +426,7 @@ describe('Edge case: no alive agents', () => {
     });
 
     expect(result.agentPayments.size).toBe(0);
-    // Treasury still decremented (government overhead)
-    expect(result.treasuryDelta).toBeLessThan(0);
+    // Treasury preserved when no agents exist (SFC: money cannot be destroyed)
+    expect(result.treasuryDelta).toBe(0);
   });
 });

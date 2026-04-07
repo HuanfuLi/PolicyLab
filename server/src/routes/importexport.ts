@@ -22,6 +22,7 @@ import {
 } from '../db/schema.js';
 import * as capitalMarketRepo from '../db/repos/capitalMarketRepo.js';
 import * as fiscalRepo from '../db/repos/fiscalRepo.js';
+import * as macroSnapshotRepo from '../db/repos/macroSnapshotRepo.js';
 import { v4 as uuidv4 } from 'uuid';
 import type { SessionExport } from '@policylab/shared';
 import { getSessionTelemetry } from '../orchestration/simulationRunner.js';
@@ -32,6 +33,7 @@ const router = Router();
 router.get('/:id/export', async (req, res) => {
   const { id } = req.params as { id: string };
 
+  try {
   const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
@@ -69,14 +71,16 @@ router.get('/:id/export', async (req, res) => {
       name: a.name,
       role: a.role,
       background: a.background,
-      initialStats: JSON.parse(a.initialStats),
-      currentStats: JSON.parse(a.currentStats),
+      initialStats: (() => { try { return JSON.parse(a.initialStats); } catch { return {}; } })(),
+      currentStats: (() => { try { return JSON.parse(a.currentStats); } catch { return {}; } })(),
       isAlive: a.status === 'alive',
       isCentralAgent: a.type === 'central' || undefined,
       status: a.status,
       type: a.type,
       bornAtIteration: a.bornAtIteration ?? null,
       diedAtIteration: a.diedAtIteration ?? null,
+      age: a.age ?? undefined,
+      weightKg: a.weightKg ?? undefined,
       personalityTraits: (() => { try { return JSON.parse(a.personalityTraits); } catch { return []; } })(),
       allostaticStrain: a.allostaticStrain ?? 0,
       allostaticLoad: a.allostaticLoad ?? 0,
@@ -166,12 +170,21 @@ router.get('/:id/export', async (req, res) => {
       const states = fiscalRepo.getPublicGoodsStateBySession(id);
       return states.length > 0 ? states : undefined;
     })(),
+    macroSnapshots: (() => {
+      const rows = macroSnapshotRepo.getSnapshotsBySession(db, id);
+      return rows.length > 0 ? rows : undefined;
+    })(),
   };
 
   const safeTitle = session.title.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 40);
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', `attachment; filename="session-${safeTitle}.json"`);
   return res.json(exportData);
+  } catch (err) {
+    console.error('GET /sessions/:id/export error:', err);
+    const detail = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({ error: 'Export failed', detail });
+  }
 });
 
 // POST /import
@@ -225,6 +238,8 @@ router.post('/import', async (req, res) => {
       status: a.status ?? 'alive',
       bornAtIteration: a.bornAtIteration ?? undefined,
       diedAtIteration: a.diedAtIteration ?? undefined,
+      age: a.age ?? undefined,
+      weightKg: a.weightKg ?? undefined,
       personalityTraits: a.personalityTraits ? JSON.stringify(a.personalityTraits) : '[]',
       allostaticStrain: a.allostaticStrain ?? 0,
       allostaticLoad: a.allostaticLoad ?? 0,
@@ -406,6 +421,22 @@ router.post('/import', async (req, res) => {
           ...state,
           id: uuidv4(),
           sessionId: newSessionId,
+        });
+      }
+    }
+
+    if (body.macroSnapshots && body.macroSnapshots.length > 0) {
+      for (const snapshot of body.macroSnapshots) {
+        macroSnapshotRepo.insertMacroSnapshot(db, {
+          sessionId: newSessionId,
+          iterationNumber: snapshot.iterationNumber,
+          m0: snapshot.m0,
+          m1: snapshot.m1,
+          cpi: snapshot.cpi,
+          inflationRate: snapshot.inflationRate,
+          inflationExpectations: snapshot.inflationExpectations,
+          totalLoansOutstanding: snapshot.totalLoansOutstanding,
+          treasuryBalance: snapshot.treasuryBalance,
         });
       }
     }

@@ -106,6 +106,9 @@ export function normalizeActionCode(raw: string): ActionCode {
   if (upper.includes('EMBEZZLE') || upper.includes('EMBEZ') || upper.includes('SKIM')) return 'EMBEZZLE';
   if (upper.includes('TAX') || upper.includes('REALLOCATE') || upper.includes('REDISTRIBUTE')) return 'ADJUST_TAX';
   if (upper.includes('SUPPRESS') || upper.includes('POLICE') || upper.includes('ENFORCE') || upper.includes('ARREST')) return 'SUPPRESS';
+  // Deprecated action code aliases (from older LLM prompts)
+  if (upper === 'TRADE' || upper === 'BARTER' || upper === 'EXCHANGE') return 'POST_BUY_ORDER';
+  if (upper === 'CONSUME' || upper === 'EAT' || upper === 'FEED') return 'REST';
   if (upper === 'WORK') return 'WORK';
   return 'NONE';
 }
@@ -186,7 +189,7 @@ const ELITE_ACTIONS: readonly ActionCode[] = [
 export function getAllowedActions(role: string): readonly ActionCode[] {
   if (role.toLowerCase() === 'bank') return BANK_ACTIONS;
   if (role.toLowerCase() === 'central_bank') {
-    return [...BASE_ACTIONS, ...BANK_ACTIONS, ...CENTRAL_BANK_ACTIONS];
+    return [...new Set([...BASE_ACTIONS, ...BANK_ACTIONS, ...CENTRAL_BANK_ACTIONS])];
   }
   const tier = getRoleTier(role);
   if (tier === 'elite') return ELITE_ACTIONS;

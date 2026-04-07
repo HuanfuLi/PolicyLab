@@ -46,29 +46,17 @@
  */
 
 import { distributeProRata } from '@policylab/shared';
+// Re-export AMMState from shared (moved there for cross-module access)
+export type { AMMState } from '@policylab/shared';
+import type { AMMState } from '@policylab/shared';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 /** Demurrage tax rate per macro-cycle. */
 const DEMURRAGE_TAX_RATE = 0.02;
 
-
-// ── AMM State ─────────────────────────────────────────────────────────────────
-
-/**
- * Serialisable snapshot of AMM reserve state.
- * Must be persisted to DB between ticks.
- */
-export interface AMMState {
-  /** Fiat (wealth units) held by the system market maker. */
-  fiatReserve: number;
-  /** Food units held by the system market maker. */
-  foodReserve: number;
-  /** Constant product k = fiatReserve × foodReserve (computed at init, never changes). */
-  k: number;
-  /** Timestamp (global tick) of last state mutation. */
-  lastUpdatedTick: number;
-}
+/** Maximum allowed price impact per trade (50%). Prevents pool-draining trades. */
+const MAX_SLIPPAGE = 0.5;
 
 // ── Demurrage Types ───────────────────────────────────────────────────────────
 
@@ -239,6 +227,11 @@ export class AutomatedMarketMaker {
     const effectivePrice = fiatAmount / effectiveFoodDispensed;
     const priceImpact = Math.abs(effectivePrice - spotBefore) / spotBefore;
 
+    if (priceImpact > MAX_SLIPPAGE) {
+      return this.rejectBuyQuote(fiatAmount, effectiveFoodDispensed, spotBefore,
+        `price impact ${(priceImpact * 100).toFixed(1)}% exceeds max slippage ${MAX_SLIPPAGE * 100}%`);
+    }
+
     return {
       fiatIn: fiatAmount,
       foodOut: effectiveFoodDispensed,
@@ -283,6 +276,11 @@ export class AutomatedMarketMaker {
     const spotAfter = newFiat / newFood;
     const effectivePrice = fiatReceived / foodAmount;
     const priceImpact = Math.abs(effectivePrice - spotBefore) / spotBefore;
+
+    if (priceImpact > MAX_SLIPPAGE) {
+      return this.rejectSellQuote(foodAmount, fiatReceived, spotBefore,
+        `price impact ${(priceImpact * 100).toFixed(1)}% exceeds max slippage ${MAX_SLIPPAGE * 100}%`);
+    }
 
     return {
       foodIn: foodAmount,
@@ -377,6 +375,18 @@ export class AutomatedMarketMaker {
   injectGoodsReserve(amount: number): void {
     if (amount <= 0) return;
     this.foodReserve += amount;
+    this.k = this.fiatReserve * this.foodReserve;
+  }
+
+  /**
+   * Withdraw goods directly from the reserve.
+   * Updates the invariant k so the nominal price level can rise without minting fiat.
+   *
+   * @param amount  Number of goods units to remove (must be > 0 and < foodReserve).
+   */
+  withdrawGoodsReserve(amount: number): void {
+    if (amount <= 0) return;
+    this.foodReserve = Math.max(0.01, this.foodReserve - amount);
     this.k = this.fiatReserve * this.foodReserve;
   }
 

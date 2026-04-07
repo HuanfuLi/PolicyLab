@@ -49,10 +49,10 @@ function SVGLineChart({
     return (
       <svg width={width} height={height} style={{ display: 'block' }}>
         <rect x={paddingLeft} y={paddingTop} width={chartW} height={chartH}
-          fill="rgba(255,255,255,0.03)" rx={4} />
+          fill="var(--panel-alpha-02)" rx={4} />
         <text x={paddingLeft + chartW / 2} y={paddingTop + chartH / 2}
           textAnchor="middle" dominantBaseline="middle"
-          fill="rgba(255,255,255,0.3)" fontSize={12}>
+          fill="var(--text-dim)" fontSize={12}>
           No data
         </text>
       </svg>
@@ -60,13 +60,13 @@ function SVGLineChart({
   }
 
   // Series 1 normalization
-  let yVals1 = data.map(d => d.y);
+  const yVals1 = data.map(d => d.y);
   let yMin1 = Math.min(...yVals1);
   let yMax1 = Math.max(...yVals1);
 
   // Series 2 normalization (independent)
   const hasSeries2 = !!data2 && data2.length > 0;
-  let yVals2 = hasSeries2 ? data2!.map(d => d.y) : [];
+  const yVals2 = hasSeries2 ? data2!.map(d => d.y) : [];
   let yMin2 = hasSeries2 ? Math.min(...yVals2) : 0;
   let yMax2 = hasSeries2 ? Math.max(...yVals2) : 1;
 
@@ -110,17 +110,17 @@ function SVGLineChart({
     <svg width={width} height={height} style={{ display: 'block' }}>
       {/* Background */}
       <rect x={paddingLeft} y={paddingTop} width={chartW} height={chartH}
-        fill="rgba(255,255,255,0.03)" rx={4} />
+        fill="var(--panel-alpha-02)" rx={4} />
 
       {/* Grid lines */}
       {gridLines.map((gy, i) => (
         <line key={i} x1={paddingLeft} y1={gy} x2={paddingLeft + chartW} y2={gy}
-          stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+          stroke="var(--glass-border)" strokeWidth={1} />
       ))}
 
       {/* Title */}
       <text x={paddingLeft + chartW / 2} y={paddingTop - 10}
-        textAnchor="middle" fill="rgba(255,255,255,0.6)" fontSize={11} fontWeight="600">
+        textAnchor="middle" fill="var(--text-muted)" fontSize={11} fontWeight="600">
         {label}{hasSeries2 && label2 ? ` vs ${label2}` : ''}
       </text>
 
@@ -186,11 +186,11 @@ function SVGLineChart({
 
       {/* X-axis labels */}
       <text x={paddingLeft} y={paddingTop + chartH + 14}
-        fill="rgba(255,255,255,0.4)" fontSize={9} textAnchor="start">
+        fill="var(--text-dim)" fontSize={9} textAnchor="start">
         iter {xMin}
       </text>
       <text x={paddingLeft + chartW} y={paddingTop + chartH + 14}
-        fill="rgba(255,255,255,0.4)" fontSize={9} textAnchor="end">
+        fill="var(--text-dim)" fontSize={9} textAnchor="end">
         iter {xMax}
       </text>
 

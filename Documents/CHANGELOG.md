@@ -1,6 +1,40 @@
-# IDEAL WORLD: ARCHITECTURE CHANGELOG (March 21, 2026)
+# PolicyLab Architecture Changelog
 
-This document tracks major architectural refinements and critical bug fixes implemented after the Phase 3/4 baseline.
+This document tracks major architectural refinements and critical bug fixes.
+
+---
+
+## v1.0 Real Economy Engine (April 1-5, 2026)
+
+7 phases delivered. 25 requirements met. 65+ bugs fixed across 7 audit rounds.
+
+### New Economic Systems
+* **Fractional Reserve Banking (Phase 1):** Bank agents, deposit accounts, loan lifecycle, reserve enforcement, M1 expansion/contraction, interest accrual, default/bankruptcy
+* **Capital Markets (Phase 2):** Enterprise equity with dividends, government/corporate bonds with coupon/maturity, secondary market share sales
+* **Fiscal Policy (Phase 3):** 4 budget categories (infrastructure, education, defense, welfare), spending multipliers, persistent public goods quality with diminishing returns
+* **Inflation Dynamics (Phase 4):** CPI from Laspeyres basket, M1-to-price feedback via AMM, central bank action codes, inflation expectations in agent cognition
+* **Economic Dashboard (Phase 5):** 4 real-time Recharts panels (CPI, Money Supply M0/M1/M2, Fiscal Budget, Bond Yields)
+* **Scenario Builder (Phase 6):** Economy parameter UI, fork-based A/B comparison, 8-dimension scoring, config diff table
+* **Real-World Bootstrap (Phase 7):** World Bank API (23 indicators), Photon geocoder, Gini-based wealth distribution, tab-based scenario builder
+
+### Architecture Improvements (Post-Milestone)
+* **Modularity refactoring:** Extracted `simulationState.ts` (14 session Maps), `telemetryCollector.ts`, `orderBookRepo.ts`; decoupled `prompts.ts` from mechanics; moved `AMMState` to shared types
+* **Module Map:** Created `MODULE_MAP.md` — 477-line module registry with exports, tests, dependencies, and isolation guide
+* **Bug fixes:** 65+ issues fixed across 5 audit rounds + 1 final comprehensive audit (see `.planning/PROBLEM_SOLVING_ROADMAP.md`)
+* **Test suite:** 195 tests across 18 files (SFC invariants, engine unit tests, data pipeline tests)
+
+### Database
+* Schema expanded from ~12 tables to 26 tables (added banking, capital markets, fiscal, macro snapshots, order book tables)
+* `asyncLogFlusher` upgraded with max retry limit (5 attempts)
+* `eraseSimulationData` now cleans all 16 simulation-generated tables (was missing 10)
+
+---
+
+## Pre-v1.0 Changes (March 2026, inherited from Ideal World)
+
+Below is the original changelog from before the PolicyLab fork.
+
+---
 
 
 ## 1. Economy and Market Enhancements

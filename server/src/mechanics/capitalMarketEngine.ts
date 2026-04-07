@@ -67,6 +67,7 @@ function addEnterpriseTreasury(delta: CapitalMarketDelta, enterpriseOwnerId: str
  */
 function calcSharePrice(enterpriseOwnerWealth: number, totalSharesOutstanding: number): number {
   if (totalSharesOutstanding === 0) return 10;
+  if (enterpriseOwnerWealth <= 0) return 0;
   return enterpriseOwnerWealth / totalSharesOutstanding;
 }
 
@@ -115,7 +116,9 @@ export function processSharePurchase(params: {
   const prevShares = existingPosition?.sharesHeld ?? 0;
   const prevCostBasis = existingPosition?.averageCostBasis ?? 0;
   const newShares = prevShares + sharesToBuy;
-  const newAvgCostBasis = (prevShares * prevCostBasis + sharesToBuy * pricePerShare) / newShares;
+  const newAvgCostBasis = newShares > 0
+    ? (prevShares * prevCostBasis + sharesToBuy * pricePerShare) / newShares
+    : pricePerShare;
 
   const position: EquityPosition = {
     id: existingPosition?.id ?? uuidv4(),
@@ -197,7 +200,9 @@ export function processShareSale(params: {
   const prevBuyerShares = buyerExistingPosition?.sharesHeld ?? 0;
   const prevBuyerCostBasis = buyerExistingPosition?.averageCostBasis ?? 0;
   const newBuyerShares = prevBuyerShares + sharesToSell;
-  const newBuyerAvgCostBasis = (prevBuyerShares * prevBuyerCostBasis + sharesToSell * pricePerShare) / newBuyerShares;
+  const newBuyerAvgCostBasis = newBuyerShares > 0
+    ? (prevBuyerShares * prevBuyerCostBasis + sharesToSell * pricePerShare) / newBuyerShares
+    : pricePerShare;
 
   const buyerPosition: EquityPosition = {
     id: buyerExistingPosition?.id ?? uuidv4(),
@@ -248,6 +253,7 @@ export function distributeDividends(params: {
     return result;
   }
 
+  if (enterpriseOwner.currentStats.wealth <= 0) return result;
   const totalDividend = Math.floor(enterpriseOwner.currentStats.wealth * economyConfig.dividendPayoutRatio);
   if (totalDividend <= 0) return result;
 
@@ -725,10 +731,16 @@ export function processIteration(params: {
     const owner = getAgent(ownerId);
     if (!owner) continue;
 
-    const ownerPositions = equityPositions.filter(p => p.enterpriseOwnerId === ownerId);
+    // Filter out owner's own shares — dividend represents profit redistribution
+    // to OTHER shareholders, not a self-payment loop.
+    const externalPositions = equityPositions.filter(
+      p => p.enterpriseOwnerId === ownerId && p.ownerAgentId !== ownerId,
+    );
+    if (externalPositions.length === 0) continue;
+
     const dividendResult = distributeDividends({
       enterpriseOwner: owner,
-      shareholderPositions: ownerPositions,
+      shareholderPositions: externalPositions,
       economyConfig,
     });
 

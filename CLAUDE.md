@@ -8,6 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Forked from the Ideal World project with a sharper focus on economic realism and policy evaluation.
 
+**Module Map:** See `MODULE_MAP.md` for a complete registry of every module, its exports, dependencies, tests, and how to work on it in isolation. Consult it before modifying any module to understand boundaries and avoid introducing cross-module coupling.
+
+**Debugging Guide:** See `Documents/DEBUGGING_GUIDE.md` for symptom-based debugging workflows. Start with the symptom, identify the owning module, fix within that boundary.
+
 ## Commands
 
 ```bash

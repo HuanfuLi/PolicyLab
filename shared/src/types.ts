@@ -531,7 +531,7 @@ export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   cpiBasePrices: {},
   // Capital markets defaults
   dividendPayoutRatio: 0.05,
-  govBondCouponRate: 0.004,
+  govBondCouponRate: 0.008,
   govBondTermIterations: 10,
   // Fiscal defaults — active when fiscalEnabled is true
   budgetSpendingRate: 0.10,
@@ -831,6 +831,18 @@ export interface ScenarioTab {
   economyConfig: Partial<EconomyConfig>;
   budgetAllocation?: BudgetAllocation;
   deltas?: Record<string, { from: number | boolean; to: number | boolean }>;
+}
+
+// ── AMM State (moved from mechanics for cross-module sharing) ───────────────
+export interface AMMState {
+  /** Fiat (wealth units) held by the system market maker. */
+  fiatReserve: number;
+  /** Food units held by the system market maker. */
+  foodReserve: number;
+  /** Constant product k = fiatReserve × foodReserve (computed at init, never changes). */
+  k: number;
+  /** Timestamp (global tick) of last state mutation. */
+  lastUpdatedTick: number;
 }
 
 export interface BootstrapProgressEvent {

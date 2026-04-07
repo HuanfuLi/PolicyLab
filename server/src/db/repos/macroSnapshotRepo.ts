@@ -6,23 +6,7 @@ import { macroSnapshots } from '../schema.js';
 type MacroSnapshotRow = typeof macroSnapshots.$inferSelect;
 type MacroSnapshotInsert = typeof macroSnapshots.$inferInsert;
 
-type QueryChain = {
-  limit: (count: number) => { all: () => MacroSnapshotRow[]; get: () => MacroSnapshotRow | undefined };
-  all: () => MacroSnapshotRow[];
-};
-
-type DbLike = {
-  insert: (table: typeof macroSnapshots) => {
-    values: (values: MacroSnapshotInsert) => { run: () => void };
-  };
-  select: () => {
-    from: (table: typeof macroSnapshots) => {
-      where: (condition: unknown) => {
-        orderBy: (...order: unknown[]) => QueryChain;
-      };
-    };
-  };
-};
+type DbLike = any;
 
 function rowToMacroSnapshot(row: MacroSnapshotRow): MacroSnapshot {
   return {

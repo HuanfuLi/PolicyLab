@@ -1,14 +1,18 @@
 # PolicyLab Codebase Overview
 
+> **Last updated:** 2026-04-05 (after v1.0 milestone completion + modularity refactoring)
+>
+> For the complete module-by-module API reference with exports, tests, and isolation guide, see [`MODULE_MAP.md`](../MODULE_MAP.md) in the project root.
+
 This document summarizes the current implemented structure of the PolicyLab repository. It is intended as a practical orientation guide for developers and agents working in the codebase now, not as a speculative design document.
 
 ## 1. Repository Structure
 
 PolicyLab is an npm workspace with three packages:
 
-- `web`
-- `server`
-- `shared`
+- `web` — React 19 + Vite frontend
+- `server` — Express + SQLite backend
+- `shared` — Zero-dependency TypeScript types
 
 Top-level supporting folders:
 
@@ -16,40 +20,50 @@ Top-level supporting folders:
 - `SimulationResult/`: exported or sample simulation result files
 - `public/`: static assets used by the frontend
 
+Top-level reference documents:
+
+- `CLAUDE.md`: AI assistant guidance (architecture, commands, conventions)
+- `MODULE_MAP.md`: Complete module registry (exports, tests, dependencies, isolation guide)
+
 ## 2. Package Responsibilities
 
 ### `shared/`
 
-`shared/src/types.ts` is the main cross-package contract surface. It defines:
+`shared/src/types.ts` (844 lines) is the single cross-package contract surface. It defines:
 
-- session stages and session metadata
-- agent and stat types
-- iteration and telemetry types
-- reflection and comparison types
-- app settings response contracts
-
-`shared/src/economyTypes.ts` defines the deterministic economy model primitives used by the server.
+- Session stages, session metadata, and session config types
+- Agent, AgentStats, and personality trait types
+- Iteration, telemetry, and lifecycle event types
+- Economy types: EconomyConfig, BudgetAllocation, LoanContract, DepositAccount, BankBalanceSheet
+- Capital market types: EquityPosition, BondHolding
+- Inflation types: InflationState, CpiBasketWeights, PriceIndex
+- Market types: AMMState, MarketOrder, TradeMatch, MarketState, Inventory, SkillMatrix
+- Location/bootstrap types: LocationProfile, DataPoint, DataConfidence
+- Comparison, reflection, and app settings contracts
+- Key constants: DEFAULT_ECONOMY_CONFIG, DEFAULT_BUDGET_ALLOCATION, DEFAULT_SKILL_MATRIX, etc.
+- Utility functions: distributeProRata()
 
 ### `server/`
 
-The backend is an Express app with these main areas:
+The backend is an Express app with 76 source files across 8 modules:
 
-- `src/routes/`: HTTP API surface
-- `src/orchestration/`: long-running workflows and managers
-- `src/mechanics/`: deterministic action, economy, and physiology systems
-- `src/llm/`: provider integrations, prompts, retries, parsing helpers
-- `src/db/`: schema, migrations, repositories, DB helpers
-- `src/cognition/`: memory and planning subsystems used during simulation
-- `src/parsers/`: parser logic for simulation and reflection outputs
+- `src/mechanics/` (14 files, 4,899 lines): Pure deterministic engines — physics, banking, capital markets, fiscal, inflation, AMM, skill system, inventory, order book
+- `src/orchestration/` (11 files, 4,843 lines): Simulation loop, state management, telemetry, reflection runner, managers
+- `src/llm/` (10 files, 3,742 lines): Multi-provider gateway, prompt builders, retry/healing, central agent
+- `src/routes/` (12 files, 3,290 lines): Express API with 47 endpoints
+- `src/db/` (14 files, 2,415 lines): SQLite schema (26 tables), repository pattern, async log flusher
+- `src/cognition/` (4 files, 1,268 lines): Per-agent memory stream, reflection tree, recursive planner
+- `src/data/` (7 files, 938 lines): World Bank API, Photon geocoder, bootstrap pipeline, location cache
+- `src/parsers/` (3 files, 398 lines): LLM response extraction (JSON, simulation, reflection)
 
 ### `web/`
 
-The frontend is a Vite + React app using Zustand stores. The main areas are:
+The frontend is a Vite + React app using Zustand stores (~30 files):
 
-- `src/pages/`: route-level screens
-- `src/components/`: reusable UI components
-- `src/stores/`: client state and live simulation state
-- `src/api/`: typed API wrappers
+- `src/stores/` (8 files): Domain-sliced Zustand stores with zero cross-store coupling
+- `src/pages/` (11 files): Route-level screens (zero page-to-page imports)
+- `src/components/` (10+ files): Reusable UI components (90% pure presentation)
+- `src/api/` (5 files): Typed API wrappers (sessions, settings, brainstorm, compare, client)
 
 ## 3. Session Lifecycle
 
@@ -168,56 +182,40 @@ The runner also supports:
 
 ## 6. Deterministic Mechanics
 
-Key files:
+All mechanics engines are pure functions (data in → delta out) with no DB or LLM dependencies. The only exception is `orderBook.ts` which uses `db/repos/orderBookRepo.ts` for persistence.
 
-- `server/src/mechanics/physicsEngine.ts`
-- `server/src/mechanics/allostaticEngine.ts`
-- `server/src/mechanics/orderBook.ts`
-- `server/src/mechanics/automatedMarketMaker.ts`
-- `server/src/mechanics/skillSystem.ts`
-- `server/src/mechanics/inventorySystem.ts`
-- `server/src/mechanics/actionCodes.ts`
-- `server/src/mechanics/physicsConfig.ts`
+| Engine | File | Purpose |
+|---|---|---|
+| Physics | `physicsEngine.ts` | Action resolution: 25+ action codes → stat deltas |
+| Allostatic | `allostaticEngine.ts` | MET metabolism, cortisol → strain → load → disease |
+| AMM | `automatedMarketMaker.ts` | Constant-product x*y=k market maker for commodities |
+| Banking | `bankingEngine.ts` | Loans, deposits, reserve enforcement, interest accrual, default |
+| Capital Markets | `capitalMarketEngine.ts` | Equity (shares/dividends), bonds (gov/corp, coupon/maturity) |
+| Fiscal | `fiscalEngine.ts` | Budget execution, public goods quality, spending multipliers |
+| Inflation | `inflationEngine.ts` | CPI from Laspeyres basket, M1 blending, expectations |
+| Skills | `skillSystem.ts` | Learning-by-doing, education multiplier, skill decay |
+| Inventory | `inventorySystem.ts` | Food/tools/luxury/raw items, spoilage, trade |
+| Order Book | `orderBook.ts` | Price/time priority matching for peer-to-peer trade |
+| Action Codes | `actionCodes.ts` | 25+ codes with role-tier permission gates |
+| Physics Config | `physicsConfig.ts` | Tunable simulation constants (mutable singleton) |
 
-Implemented concerns include:
-
-- action code validation and role constraints
-- stat deltas for wealth, health, happiness, cortisol, dopamine
-- metabolism and satiety cost
-- allostatic strain/load
-- market clearing
-- AMM reserve tracking
-- skill and inventory progression
+**SFC Accounting:** Total system fiat (agent wealth + AMM reserves + treasury + deposits + collateral) must remain constant. Every engine maintains zero-sum transfers. An SFC assertion runs every iteration.
 
 ## 7. Persistence Model
 
-Primary DB files:
+**26 tables** across 6 domains in SQLite (Drizzle ORM + better-sqlite3):
 
-- `server/src/db/schema.ts`
-- `server/src/db/migrate.ts`
-- `server/src/db/index.ts`
+| Domain | Tables |
+|---|---|
+| **Core** | sessions, agents, agentIntents, resolvedActions, iterations, reflections, chatMessages, artifacts, roleChanges |
+| **Economy** | economySnapshots, agentEconomy, ammSnapshots, marketPrices, orderBook |
+| **Banking** | depositAccounts, loanContracts, bankBalanceSheets, macroSnapshots |
+| **Capital Markets** | equityPositions, bondHoldings |
+| **Fiscal** | fiscalBudgets, publicGoodsState |
 
-Repository helpers:
+**Repository pattern:** 10 repos in `db/repos/` (agentRepo, sessionRepo, iterationRepo, chatMessageRepo, economyRepo, bankingRepo, capitalMarketRepo, fiscalRepo, macroSnapshotRepo, orderBookRepo).
 
-- `server/src/db/repos/sessionRepo.ts`
-- `server/src/db/repos/agentRepo.ts`
-- `server/src/db/repos/iterationRepo.ts`
-- `server/src/db/repos/economyRepo.ts`
-- `server/src/db/repos/chatMessageRepo.ts`
-
-Persisted entities include:
-
-- sessions
-- agents
-- iterations
-- resolved actions
-- agent intents
-- reflections
-- chat messages
-- role changes
-- economy snapshots
-- market prices
-- AMM snapshots
+**Async log flusher:** `asyncLogFlusher.ts` batches high-frequency writes (agent intents, resolved actions) during simulation ticks to prevent SQLITE_BUSY deadlocks. Max 5 retry attempts before dropping stuck rows.
 
 The backend mixes Drizzle ORM reads/writes with targeted `better-sqlite3` statements for hot paths and transactional batch updates.
 
@@ -243,14 +241,16 @@ Responsibilities:
 
 ### Stores
 
-Important Zustand stores:
+8 Zustand stores with zero cross-store coupling:
 
-- `sessionDetailStore.ts`: brainstorming, design, session detail
-- `simulationStore.ts`: live simulation state, SSE buffering, controls
-- `reflectionStore.ts`: reflection workflow state
-- `compareStore.ts`: compare-session state
-- `sessionsStore.ts`: home/session list state
-- `settingsStore.ts`: provider and model settings
+- `simulationStore.ts`: Live simulation state, SSE double-buffering (RAF), pause/resume/abort controls, telemetry
+- `scenarioStore.ts`: Tab-based scenario management, baseline + N variants, fork orchestration
+- `sessionDetailStore.ts`: Brainstorming, design generation (SSE), refinement, agent management
+- `bootstrapStore.ts`: Location-based bootstrap progress (SSE), step tracking
+- `reflectionStore.ts`: Two-pass reflection workflow, agent reflections, society evaluation
+- `sessionsStore.ts`: Home page session list
+- `settingsStore.ts`: Provider/model settings, connection testing
+- `compareStore.ts`: Cross-session comparison, history, follow-up chat
 
 ### Pages
 
@@ -274,40 +274,43 @@ The simulation UI consumes SSE events from `/simulate/stream`. `simulationStore.
 
 ## 10. Current Commands
 
-Workspace commands from the repository root:
-
 ```bash
-npm install
-npm run dev
-npm run dev:server
-npm run dev:web
-npm run build
-npm run lint -w web
+npm install                # Install all workspace dependencies
+npm run dev                # Full app (server + web concurrently)
+npm run dev -w server      # Backend only
+npm run dev -w web         # Frontend only
+npm run build              # Build all packages in dependency order
+npm run test -w server     # Run server tests (vitest) — 195 tests
+npm run lint -w web        # Lint frontend
 ```
 
-Existing direct test scripts:
+## 11. Test Coverage
 
-```bash
-npx tsx server/src/llm/__tests__/phase2.test.ts
-npx tsx server/src/cognition/__tests__/phase3.test.ts
-npx tsx server/src/mechanics/__tests__/physics_sandbox.ts --json
-```
+**195 tests** across 18 test files (vitest):
+- Mechanics: banking (24), capital markets (20), fiscal (18), inflation (11), edge cases (15)
+- SFC integration: banking (6), capital markets (6), fiscal (20), inflation (9), AMM (14)
+- Data: bootstrap pipeline (7), Gini (8), location cache (3), World Bank API (7)
+- DB: agentRepo (3), economyConfig (16), scenario entry (8)
 
-## 11. Practical Notes for Contributors
+**Not yet tested:** physicsEngine, allostaticEngine, skillSystem, all routes, all orchestration, all frontend stores. See `MODULE_MAP.md` Section 5 for the prioritized test plan.
 
-- The worktree may be dirty; do not assume a clean branch.
-- `Documents/Legacy/` contains older design material and may not match the current code.
-- Route-level manual object mapping exists in a few places; shared contracts should be checked carefully when changing response shapes.
-- High-value integration points are simulation state recovery, import/export fidelity, and frontend/store synchronization with SSE.
+## 12. Practical Notes for Contributors
 
-## 12. Source of Truth
+- `Documents/Legacy/` contains pre-fork "Ideal World" design material — may not match current code.
+- `MODULE_MAP.md` in the project root is the authoritative module reference — consult before modifying any module.
+- High-value integration points: simulation state recovery, import/export fidelity, SSE synchronization.
+- SFC accounting: any change that touches wealth/fiat transfers must maintain the M0-constant invariant.
+
+## 13. Source of Truth
 
 For current implementation details, prefer:
 
-1. `shared/src/types.ts`
-2. `server/src/db/schema.ts`
-3. route handlers in `server/src/routes/`
-4. orchestration code in `server/src/orchestration/`
-5. Zustand stores in `web/src/stores/`
+1. `MODULE_MAP.md` (module boundaries, exports, dependencies)
+2. `shared/src/types.ts` (cross-workspace contracts)
+3. `server/src/db/schema.ts` (DB structure)
+4. `CLAUDE.md` (AI assistant conventions)
+5. Route handlers in `server/src/routes/`
+6. Orchestration code in `server/src/orchestration/`
+7. Zustand stores in `web/src/stores/`
 
-Treat older narrative docs as context, not authority, unless they match the code.
+Treat `Documents/Legacy/` and older narrative docs as historical context, not authority.

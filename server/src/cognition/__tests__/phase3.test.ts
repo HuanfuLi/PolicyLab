@@ -362,6 +362,8 @@ async function testCognitiveEngine() {
         wealthDelta: 5,
         healthDelta: -1,
         happinessDelta: 0,
+        cortisolDelta: 2,
+        dopamineDelta: -1,
         economyEvents: [],
         isStarving: false,
         narrativeSummary: 'Another day at the factory.',

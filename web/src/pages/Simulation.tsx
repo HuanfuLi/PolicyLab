@@ -780,7 +780,7 @@ interface AgentIntentPanelProps {
 }
 
 function AgentIntentPanel({ agents, agentIntentHistory, pendingActionCodes, currentIteration }: AgentIntentPanelProps) {
-  const citizenAgents = agents.filter(a => !(a as any).isCentralAgent);
+  const citizenAgents = agents.filter(a => !('isCentralAgent' in a && a.isCentralAgent));
   const sorted = [...citizenAgents].sort((a, b) => {
     if (a.isAlive !== b.isAlive) return a.isAlive ? -1 : 1;
     return a.name.localeCompare(b.name);
@@ -815,7 +815,7 @@ interface AgentIntentCardProps {
   currentIteration: number;
 }
 
-function AgentIntentCard({ agent, history, pending, currentIteration }: AgentIntentCardProps) {
+function AgentIntentCard({ agent, history, pending }: AgentIntentCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [expandedIntents, setExpandedIntents] = useState<Set<number>>(new Set());
 

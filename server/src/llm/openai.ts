@@ -15,21 +15,28 @@ export class OpenAIProvider implements LLMProvider {
   async chat(messages: LLMMessage[], options: LLMOptions = {}): Promise<string> {
     const response = await this.client.chat.completions.create({
       model: options.model ?? this.defaultModel,
-      max_completion_tokens: options.maxTokens ?? 4096,
+      max_completion_tokens: options.maxTokens ?? 16384,
       messages: messages.map(m => ({
         role: m.role as any,
         content: typeof m.content === 'string' ? m.content : m.content.map(b => b.text).join('\n'),
       })),
     });
 
-    return response.choices[0]?.message?.content ?? '';
+    const content = response.choices[0]?.message?.content ?? '';
+    if (response.choices[0]?.finish_reason === 'length') {
+      throw new Error('LLM response truncated (hit max_completion_tokens). Respond more concisely.');
+    }
+    if (!content.trim()) {
+      throw new Error(`LLM returned empty response (finish_reason: ${response.choices[0]?.finish_reason ?? 'unknown'})`);
+    }
+    return content;
   }
 
   async *chatStream(messages: LLMMessage[], options: LLMOptions = {}): AsyncIterable<string> {
     // Note: o1 models might not support stream depending on the exact version, but this implements standard OpenAI stream
     const stream = await this.client.chat.completions.create({
       model: options.model ?? this.defaultModel,
-      max_completion_tokens: options.maxTokens ?? 4096,
+      max_completion_tokens: options.maxTokens ?? 16384,
       messages: messages.map(m => ({
         role: m.role as any,
         content: typeof m.content === 'string' ? m.content : m.content.map(b => b.text).join('\n'),
@@ -106,10 +113,17 @@ export class OpenAICompatibleProvider implements LLMProvider {
       try {
         const response = await this.client.chat.completions.create({
           model: options.model ?? this.defaultModel,
-          max_tokens: options.maxTokens ?? 4096,
+          max_tokens: options.maxTokens ?? 16384,
           messages: mapped,
         });
-        return response.choices[0]?.message?.content ?? '';
+        const content = response.choices[0]?.message?.content ?? '';
+        if (response.choices[0]?.finish_reason === 'length') {
+          throw new Error('LLM response truncated (hit max_tokens). Respond more concisely.');
+        }
+        if (!content.trim()) {
+          throw new Error(`LLM returned empty response (finish_reason: ${response.choices[0]?.finish_reason ?? 'unknown'})`);
+        }
+        return content;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         const isConnErr = CONN_ERROR_RE.test(msg);
@@ -132,7 +146,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
   async *chatStream(messages: LLMMessage[], options: LLMOptions = {}): AsyncIterable<string> {
     const stream = await this.client.chat.completions.create({
       model: options.model ?? this.defaultModel,
-      max_tokens: options.maxTokens ?? 4096,
+      max_tokens: options.maxTokens ?? 16384,
       messages: messages.map(m => ({
         role: m.role as any,
         content: typeof m.content === 'string' ? m.content : m.content.map(b => b.text).join('\n'),
@@ -148,19 +162,58 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
   async testConnection(): Promise<TestConnectionResult> {
     const start = Date.now();
+
+    // Step 1: Query /v1/models to verify connectivity and discover loaded models.
+    // This is a lightweight GET that succeeds even when no model is loaded,
+    // letting us distinguish "server unreachable" from "no model loaded".
+    let availableModels: string[] = [];
+    try {
+      const modelList = await this.client.models.list();
+      for await (const m of modelList) {
+        availableModels.push(m.id);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isConn = CONN_ERROR_RE.test(msg);
+      return {
+        ok: false,
+        model: this.defaultModel || '(none)',
+        latencyMs: Date.now() - start,
+        error: isConn
+          ? `Cannot reach ${this.baseURL} — is LM Studio / Ollama running?`
+          : `Server responded but model listing failed: ${msg}`,
+      };
+    }
+
+    if (availableModels.length === 0) {
+      return {
+        ok: false,
+        model: '(none)',
+        latencyMs: Date.now() - start,
+        error: 'Connected to the server, but no models are loaded. Load a model in LM Studio / Ollama and try again.',
+      };
+    }
+
+    // Step 2: Pick the model to test with.  Prefer the configured model if it
+    // matches one of the loaded models; otherwise fall back to the first
+    // available model so the health-check can still succeed.
+    const testModel = (this.defaultModel && availableModels.includes(this.defaultModel))
+      ? this.defaultModel
+      : availableModels[0]!;
+
     try {
       const response = await this.client.chat.completions.create({
-        model: this.defaultModel,
+        model: testModel,
         max_tokens: 10,
         messages: [{ role: 'user', content: 'Hi' }],
       });
       const latencyMs = Date.now() - start;
-      const model = response.model ?? this.defaultModel;
+      const model = response.model ?? testModel;
       return { ok: true, model, latencyMs };
     } catch (err) {
       return {
         ok: false,
-        model: this.defaultModel,
+        model: testModel,
         latencyMs: Date.now() - start,
         error: err instanceof Error ? err.message : String(err),
       };

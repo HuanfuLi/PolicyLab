@@ -1,17 +1,19 @@
 # Design Enhancement Plan
 
+> **Status:** ALL FIXES AND ENHANCEMENTS IMPLEMENTED (completed during v1.0 development)
+> **Last updated:** 2026-04-05
+
 Forensic audit of simulation bugs and economy design weaknesses identified after "The Liberty Guild" session.
-This document is the authoritative implementation brief for coding agents.
+All items in this document have been implemented and verified.
 
 ---
 
-## Part 1 — Pending Bug Fixes (from CONVERSATION.md)
+## Part 1 — Bug Fixes (from CONVERSATION.md)
 
-These four fixes were verified against the codebase and are confirmed legitimate.
-They should be implemented before the design enhancements in Part 2.
+All four fixes were implemented and verified through 5 audit rounds (see `.planning/PROBLEM_SOLVING_ROADMAP.md`).
 
-### Fix A — Zero-Sum STEAL
-**Status**: Not yet implemented
+### Fix A �� Zero-Sum STEAL
+**Status**: IMPLEMENTED
 **File**: `server/src/orchestration/simulationRunner.ts`
 
 `physicsEngine.ts` gives the thief `w = stolen` wealth but nothing deducts that amount from the victim's `weekStateMap`. Ghost fiat is created on every STEAL action.
@@ -29,7 +31,7 @@ targetWeekState.wealthDelta -= actualStolen
 ---
 
 ### Fix B — Death & Humiliation Wealth Redistribution
-**Status**: Not yet implemented
+**Status**: IMPLEMENTED
 **File**: `server/src/orchestration/simulationRunner.ts`
 
 Two fiat destruction vectors:

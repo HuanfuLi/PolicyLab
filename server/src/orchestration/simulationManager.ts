@@ -34,8 +34,8 @@ export type SimulationEvent =
       actionTarget: string | null;
       actions?: Array<{ actionCode: string; parameters: Record<string, unknown> }>;
     }
-  | { type: 'resolution'; iteration: number; narrativeSummary: string; lifecycleEvents: unknown[] }
-  | { type: 'iteration-complete'; iteration: number; stats: Record<string, unknown> }
+  | { type: 'resolution'; iteration: number; narrativeSummary: string; lifecycleEvents: Array<{ type: string; agentId: string; detail: string }> }
+  | { type: 'iteration-complete'; iteration: number; stats: Record<string, unknown> & { aliveCount?: number; averageWealth?: number } }
   | { type: 'simulation-complete'; finalReport: string }
   | { type: 'paused'; iteration: number }
   | { type: 'error'; message: string }
@@ -159,12 +159,17 @@ class SimulationManager {
     if (!state || state.clients.size === 0) return;
     const seq = ++state.sequenceId;
     const data = `id: ${seq}\ndata: ${JSON.stringify(event)}\n\n`;
+    // Collect failed clients first to avoid modifying Set during iteration
+    const failed: Response[] = [];
     for (const client of state.clients) {
       try {
         client.write(data);
       } catch {
-        state.clients.delete(client);
+        failed.push(client);
       }
+    }
+    for (const client of failed) {
+      state.clients.delete(client);
     }
   }
 }

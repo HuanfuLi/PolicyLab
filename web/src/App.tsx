@@ -17,6 +17,7 @@ import TelemetryPanel from './components/TelemetryPanel';
 import { useSessionDetailStore } from './stores/sessionDetailStore';
 import type { Stage } from '@policylab/shared';
 
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './App.css';
 
 // ── Session nav step definitions ────────────────────────────────────────────
@@ -238,6 +239,7 @@ function App() {
   return (
     <Router>
       <MainLayout>
+        <ErrorBoundary>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/settings" element={<SettingsPage />} />
@@ -250,6 +252,7 @@ function App() {
           <Route path="/session/:id/agents" element={<AgentReview />} />
           <Route path="/session/:id/artifacts" element={<Artifacts />} />
         </Routes>
+        </ErrorBoundary>
       </MainLayout>
     </Router>
   );

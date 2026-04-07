@@ -18,10 +18,12 @@ interface QueuedInsert {
 
 const FLUSH_INTERVAL_MS = 500;
 const BULK_THRESHOLD = 200;
+const MAX_RETRY_ATTEMPTS = 5;
 
 class AsyncLogFlusher {
   private queue: QueuedInsert[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
+  private consecutiveFailures = 0;
   /** Prepared-statement cache keyed by "table|col1,col2,…" */
   private stmtCache = new Map<string, ReturnType<typeof sqlite.prepare>>();
 
@@ -56,7 +58,8 @@ class AsyncLogFlusher {
   flush(): void {
     if (this.queue.length === 0) return;
 
-    const batch = this.queue.splice(0);
+    // Snapshot the batch but DON'T splice yet — only clear after successful commit
+    const batch = this.queue.slice(0);
 
     // Group by table+columns signature so we can reuse prepared statements
     const groups = new Map<string, { table: string; columns: string[]; rows: unknown[][] }>();
@@ -70,20 +73,34 @@ class AsyncLogFlusher {
       group.rows.push(...item.values);
     }
 
-    sqlite.transaction(() => {
-      for (const [key, group] of groups) {
-        let stmt = this.stmtCache.get(key);
-        if (!stmt) {
-          const placeholders = group.columns.map(() => '?').join(', ');
-          const sql = `INSERT INTO ${group.table} (${group.columns.join(', ')}) VALUES (${placeholders})`;
-          stmt = sqlite.prepare(sql);
-          this.stmtCache.set(key, stmt);
+    try {
+      sqlite.transaction(() => {
+        for (const [key, group] of groups) {
+          let stmt = this.stmtCache.get(key);
+          if (!stmt) {
+            const placeholders = group.columns.map(() => '?').join(', ');
+            const sql = `INSERT INTO ${group.table} (${group.columns.join(', ')}) VALUES (${placeholders})`;
+            stmt = sqlite.prepare(sql);
+            this.stmtCache.set(key, stmt);
+          }
+          for (const row of group.rows) {
+            (stmt.run as (...params: unknown[]) => void)(...row);
+          }
         }
-        for (const row of group.rows) {
-          (stmt.run as (...params: unknown[]) => void)(...row);
-        }
+      })();
+      // Transaction succeeded — now clear the committed items from the queue
+      this.queue.splice(0, batch.length);
+      this.consecutiveFailures = 0;
+    } catch (err) {
+      this.consecutiveFailures++;
+      if (this.consecutiveFailures >= MAX_RETRY_ATTEMPTS) {
+        console.error(`[asyncLogFlusher] Transaction failed ${this.consecutiveFailures} times, dropping ${batch.length} rows:`, err);
+        this.queue.splice(0, batch.length);
+        this.consecutiveFailures = 0;
+      } else {
+        console.error(`[asyncLogFlusher] Transaction failed (attempt ${this.consecutiveFailures}/${MAX_RETRY_ATTEMPTS}), rows retained for retry:`, err);
       }
-    })();
+    }
   }
 }
 

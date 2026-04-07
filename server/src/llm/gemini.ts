@@ -27,14 +27,21 @@ export class GeminiProvider implements LLMProvider {
         try {
             const response = await this.client.chat.completions.create({
                 model: options.model ?? this.defaultModel,
-                max_tokens: options.maxTokens ?? 4096,
+                max_tokens: options.maxTokens ?? 16384,
                 messages: messages.map(m => ({
                     role: m.role as any,
                     content: typeof m.content === 'string' ? m.content : m.content.map(b => b.text).join('\n'),
                 })),
             });
 
-            return response.choices[0]?.message?.content ?? '';
+            const content = response.choices[0]?.message?.content ?? '';
+            if (response.choices[0]?.finish_reason === 'length') {
+                throw new Error('LLM response truncated (hit max_tokens). Respond more concisely.');
+            }
+            if (!content.trim()) {
+                throw new Error(`LLM returned empty response (finish_reason: ${response.choices[0]?.finish_reason ?? 'unknown'})`);
+            }
+            return content;
         } catch (err) {
             throw new Error(extractGeminiError(err));
         }
@@ -44,7 +51,7 @@ export class GeminiProvider implements LLMProvider {
         try {
             const stream = await this.client.chat.completions.create({
                 model: options.model ?? this.defaultModel,
-                max_tokens: options.maxTokens ?? 4096,
+                max_tokens: options.maxTokens ?? 16384,
                 messages: messages.map(m => ({
                     role: m.role as any,
                     content: typeof m.content === 'string' ? m.content : m.content.map(b => b.text).join('\n'),

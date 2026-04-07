@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, CheckSquare, Square, MessageSquare, Send, Users, Clock } from 'lucide-react';
+import { ArrowRight, CheckSquare, Square, MessageSquare, Send, Users, Clock, Trash2, RefreshCw } from 'lucide-react';
 import { useCompareStore } from '../stores/compareStore';
 import MarkdownText from '../components/MarkdownText';
-import type { SessionMetadata, ComparisonDimension, EconomyParamDiff } from '@policylab/shared';
+import type { SessionMetadata, ComparisonDimension, EconomyParamDiff, TelemetryLog } from '@policylab/shared';
 
 const stageBadge: Record<string, { label: string; cls: string }> = {
   'completed': { label: '✓ Completed', cls: 'badge-success' },
@@ -18,7 +18,7 @@ function ScoreBar({ score, color }: { score: number; color: string }) {
   );
 }
 
-function DimensionRow({ dim, idx }: { dim: ComparisonDimension; idx: number }) {
+function DimensionRow({ dim }: { dim: ComparisonDimension; idx: number }) {
   const [open, setOpen] = useState(false);
   const colors = ['var(--primary)', 'var(--warning)'];
 
@@ -92,7 +92,7 @@ function ConfigDiffSection({ diffs, session1Title, session2Title }: {
   );
 }
 
-function SVGLineChart({ title, iterations }: { title: string, iterations: any[] }) {
+function SVGLineChart({ title, iterations }: { title: string, iterations: Array<{ statistics?: { avgWealth?: number; avgHealth?: number; avgHappiness?: number } }> }) {
   if (!iterations || iterations.length === 0) return (
     <div style={{ flex: 1, background: 'var(--panel-alpha-05)', borderRadius: '8px', padding: '1rem', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.85rem' }}>
       No metric history available for {title}
@@ -106,9 +106,21 @@ function SVGLineChart({ title, iterations }: { title: string, iterations: any[] 
   const x = (i: number) => padUrl + (i / Math.max(1, iterations.length - 1)) * (width - 2 * padUrl);
   const y = (val: number) => height - padUrl - (val / 100) * (height - 2 * padUrl);
 
-  const pointsWealth = iterations.map((it, i) => `${x(i)},${y(it.statistics?.avgWealth || 50)}`).join(' ');
-  const pointsHealth = iterations.map((it, i) => `${x(i)},${y(it.statistics?.avgHealth || 50)}`).join(' ');
-  const pointsHappiness = iterations.map((it, i) => `${x(i)},${y(it.statistics?.avgHappiness || 50)}`).join(' ');
+  // Filter to only iterations that have statistics — missing statistics would create
+  // synthetic flat lines at the midpoint, causing the "locked at middle" visual bug
+  const valid = iterations
+    .map((it, i) => ({ it, i }))
+    .filter(({ it }) => it.statistics != null);
+
+  if (valid.length === 0) return (
+    <div style={{ flex: 1, background: 'var(--panel-alpha-05)', borderRadius: '8px', padding: '1rem', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.85rem' }}>
+      No metric history available for {title}
+    </div>
+  );
+
+  const pointsWealth = valid.map(({ it, i }) => `${x(i)},${y(it.statistics?.avgWealth ?? 50)}`).join(' ');
+  const pointsHealth = valid.map(({ it, i }) => `${x(i)},${y(it.statistics?.avgHealth ?? 50)}`).join(' ');
+  const pointsHappiness = valid.map(({ it, i }) => `${x(i)},${y(it.statistics?.avgHappiness ?? 50)}`).join(' ');
 
   return (
     <div style={{ flex: 1, background: 'var(--panel-alpha-05)', borderRadius: '8px', padding: '1rem' }}>
@@ -129,6 +141,129 @@ function SVGLineChart({ title, iterations }: { title: string, iterations: any[] 
         <span style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>● Wealth</span>
         <span style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>● Health</span>
         <span style={{ color: 'var(--chart-sapphire)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>● Happiness</span>
+      </div>
+    </div>
+  );
+}
+
+/** Dual-series comparison chart: one line per session, with auto-scaling Y axis */
+function ComparisonChart({ title, data1, data2, label1, label2, color1, color2 }: {
+  title: string;
+  data1: Array<{ x: number; y: number }>;
+  data2: Array<{ x: number; y: number }>;
+  label1: string;
+  label2: string;
+  color1?: string;
+  color2?: string;
+}) {
+  const c1 = color1 ?? 'var(--primary)';
+  const c2 = color2 ?? 'var(--warning)';
+  const width = 440;
+  const height = 140;
+  const pad = 20;
+  const padRight = 48;
+
+  const allY = [...data1.map(d => d.y), ...data2.map(d => d.y)];
+  const allX = [...data1.map(d => d.x), ...data2.map(d => d.x)];
+  const yMin = Math.min(...allY);
+  const yMax = Math.max(...allY);
+  const xMin = Math.min(...allX);
+  const xMax = Math.max(...allX);
+  const yRange = yMax - yMin || 1;
+  const xRange = xMax - xMin || 1;
+
+  const sx = (v: number) => pad + ((v - xMin) / xRange) * (width - pad - padRight);
+  const sy = (v: number) => pad + (height - 2 * pad) - ((v - yMin) / yRange) * (height - 2 * pad);
+
+  const pts1 = data1.map(d => `${sx(d.x)},${sy(d.y)}`).join(' ');
+  const pts2 = data2.map(d => `${sx(d.x)},${sy(d.y)}`).join(' ');
+
+  const fmt = (n: number) => {
+    if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    if (Math.abs(n) >= 1_000) return (n / 1_000).toFixed(1) + 'k';
+    return n.toFixed(2);
+  };
+
+  return (
+    <div style={{ flex: 1, minWidth: '420px', background: 'var(--panel-alpha-05)', borderRadius: '8px', padding: '0.75rem' }}>
+      <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.8rem', color: 'var(--color-bright)', textAlign: 'center' }}>
+        {title}
+      </h4>
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
+        <line x1={pad} y1={sy(yMin)} x2={width - padRight} y2={sy(yMin)} stroke="var(--glass-border)" strokeWidth="1" />
+        <line x1={pad} y1={sy((yMin + yMax) / 2)} x2={width - padRight} y2={sy((yMin + yMax) / 2)} stroke="var(--glass-border)" strokeWidth="1" strokeDasharray="4,4" />
+        <line x1={pad} y1={sy(yMax)} x2={width - padRight} y2={sy(yMax)} stroke="var(--glass-border)" strokeWidth="1" />
+        <polyline points={pts1} fill="none" stroke={c1} strokeWidth="2" strokeLinejoin="round" />
+        <polyline points={pts2} fill="none" stroke={c2} strokeWidth="1.5" strokeLinejoin="round" strokeDasharray="6,3" strokeOpacity="0.85" />
+        <text x={width - padRight + 4} y={sy(yMax) + 4} fill="var(--text-dim)" fontSize="8">{fmt(yMax)}</text>
+        <text x={width - padRight + 4} y={sy(yMin)} fill="var(--text-dim)" fontSize="8">{fmt(yMin)}</text>
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '0.25rem', fontSize: '0.7rem' }}>
+        <span style={{ color: c1, display: 'flex', alignItems: 'center', gap: '0.2rem' }}>● {label1}</span>
+        <span style={{ color: c2, display: 'flex', alignItems: 'center', gap: '0.2rem' }}>┅ {label2}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Renders comparison charts for economic indicators available in telemetry data. Silently skips missing indicators. */
+function EconomyComparisonCharts({ t1, t2, title1, title2 }: {
+  t1: TelemetryLog[];
+  t2: TelemetryLog[];
+  title1: string;
+  title2: string;
+}) {
+  type Indicator = { key: keyof TelemetryLog; label: string; color1?: string; color2?: string };
+  const indicators: Indicator[] = [
+    { key: 'giniCoefficient', label: 'Gini Coefficient' },
+    { key: 'cpi', label: 'CPI (Consumer Price Index)' },
+    { key: 'inflationRate', label: 'Inflation Rate (%)' },
+    { key: 'm1', label: 'Money Supply M1' },
+    { key: 'loansOutstanding', label: 'Loans Outstanding' },
+    { key: 'totalFiatSupply', label: 'Fiat Supply' },
+    { key: 'ammSpotPrice_Food', label: 'Food Price (AMM)' },
+    { key: 'trustIndex', label: 'Trust Index' },
+    { key: 'crimeRate', label: 'Crime Rate' },
+    { key: 'averageCortisol', label: 'Avg Cortisol' },
+    { key: 'averageDopamine', label: 'Avg Dopamine' },
+    { key: 'infrastructureQuality', label: 'Infrastructure Quality' },
+    { key: 'educationQuality', label: 'Education Quality' },
+  ];
+
+  const toXY = (logs: TelemetryLog[], key: keyof TelemetryLog) =>
+    logs.filter(l => l[key] != null).map(l => ({ x: l.iterationNumber, y: l[key] as number }));
+
+  const charts = indicators
+    .map(ind => {
+      const d1 = toXY(t1, ind.key);
+      const d2 = toXY(t2, ind.key);
+      // Silent fallback: skip if neither session has data for this indicator
+      if (d1.length < 2 && d2.length < 2) return null;
+      return { ...ind, d1, d2 };
+    })
+    .filter(Boolean) as Array<Indicator & { d1: Array<{ x: number; y: number }>; d2: Array<{ x: number; y: number }> }>;
+
+  if (charts.length === 0) return null;
+
+  return (
+    <div className="glass-card" style={{ marginBottom: '2rem' }}>
+      <h3 style={{ fontSize: '1rem', color: 'var(--color-bright)', marginBottom: '1.25rem' }}>
+        Economic Indicators
+        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '1rem', fontWeight: 'normal' }}>
+          (side-by-side telemetry comparison)
+        </span>
+      </h3>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+        {charts.map(ch => (
+          <ComparisonChart
+            key={ch.key}
+            title={ch.label}
+            data1={ch.d1}
+            data2={ch.d2}
+            label1={title1}
+            label2={title2}
+          />
+        ))}
       </div>
     </div>
   );
@@ -180,8 +315,9 @@ function SessionCard({ session, selected, eligible, onToggle }: {
 const CompareSessions = () => {
   const {
     allSessions, selectedIds, comparison, messages, history, session1Iterations, session2Iterations,
+    session1Telemetry, session2Telemetry,
     loading, chatPending, error,
-    loadSessions, loadHistory, selectHistoryItem, toggleSession, runComparison, sendMessage,
+    loadSessions, loadHistory, selectHistoryItem, deleteComparison, toggleSession, runComparison, sendMessage,
   } = useCompareStore();
 
   const [chatInput, setChatInput] = useState('');
@@ -289,6 +425,17 @@ const CompareSessions = () => {
                     <div style={{ color: isSelected ? 'var(--primary)' : 'var(--color-bright)', fontSize: '0.9rem' }}>{s1} vs {s2}</div>
                     <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{new Date(item.timestamp).toLocaleString()}</div>
                   </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteComparison(item.id); }}
+                    style={{
+                      background: 'transparent', border: 'none', color: 'var(--text-dim)',
+                      cursor: 'pointer', padding: '4px', borderRadius: '4px', display: 'flex',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}
+                    title="Delete comparison"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               );
             })}
@@ -313,9 +460,19 @@ const CompareSessions = () => {
       {/* Results */}
       {comparison && !loading && (
         <>
-          <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', color: 'var(--color-bright)' }}>
-            Comparison Report
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.25rem', color: 'var(--color-bright)', margin: 0 }}>
+              Comparison Report
+            </h2>
+            <button
+              className="btn-secondary"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+              disabled={loading || selectedIds.length !== 2}
+              onClick={runComparison}
+            >
+              <RefreshCw size={14} /> Re-generate
+            </button>
+          </div>
 
           {/* Side-by-side stat cards */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
@@ -362,6 +519,16 @@ const CompareSessions = () => {
               <SVGLineChart title={selected2?.title || 'Society B'} iterations={session2Iterations} />
             </div>
           </div>
+
+          {/* Economic Indicator Comparison Charts */}
+          {(session1Telemetry.length > 0 || session2Telemetry.length > 0) && (
+            <EconomyComparisonCharts
+              t1={session1Telemetry}
+              t2={session2Telemetry}
+              title1={selected1?.title || 'Society A'}
+              title2={selected2?.title || 'Society B'}
+            />
+          )}
 
           {/* Narrative */}
           <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem' }}>

@@ -362,7 +362,11 @@ router.put('/:id/config', async (req, res) => {
 
     // Budget persistence — only after db.update succeeds
     if (body.budgetAllocation) {
-      fiscalRepo.createBudget(id, body.budgetAllocation);
+      try {
+        fiscalRepo.createBudget(id, body.budgetAllocation);
+      } catch (budgetErr) {
+        console.error(`[sessions] Failed to persist budget for ${id}:`, budgetErr);
+      }
     }
 
     const [updated] = await db.select().from(sessions).where(eq(sessions.id, id));
@@ -470,7 +474,14 @@ router.post('/:id/fork-simulation', async (req, res) => {
       .from(iterations).where(eq(iterations.sessionId, id));
     const maxIterNum = maxRow?.max ?? 0;
 
-    const config = JSON.stringify({ totalIterations: maxIterNum });
+    // Preserve the full source config (economyConfig, budgetAllocation, etc.)
+    // so the forked session retains all economic parameters
+    let mergedConfig: Record<string, unknown> = {};
+    if (source.config) {
+      try { mergedConfig = JSON.parse(source.config); } catch { /* ignore */ }
+    }
+    mergedConfig.totalIterations = maxIterNum;
+    const config = JSON.stringify(mergedConfig);
 
     await db.insert(sessions).values({
       id: newId,
@@ -520,6 +531,13 @@ router.post('/:id/fork-simulation', async (req, res) => {
         lifecycleEvents: it.lifecycleEvents,
         timestamp: it.timestamp,
       });
+    }
+
+    // Clone fiscal budget if source had one
+    const sourceConfig = mergedConfig as Record<string, unknown>;
+    const sourceBudget = sourceConfig.budgetAllocation as BudgetAllocation | undefined;
+    if (sourceBudget) {
+      fiscalRepo.createBudget(newId, sourceBudget);
     }
 
     res.status(201).json({ id: newId });

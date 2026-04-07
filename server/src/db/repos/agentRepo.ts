@@ -33,11 +33,13 @@ function rowToAgent(row: typeof agents.$inferSelect): Agent {
     initialStats: parseStats(row.initialStats),
     currentStats: parseStats(row.currentStats),
     isAlive: row.status === 'alive',
-    isCentralAgent: row.type === 'central' || undefined,
+    isCentralAgent: row.type === 'central' ? true : undefined,
     status: row.status,
     type: row.type,
     bornAtIteration: row.bornAtIteration ?? null,
     diedAtIteration: row.diedAtIteration ?? null,
+    age: row.age ?? undefined,
+    weightKg: row.weightKg ?? undefined,
     allostaticStrain: row.allostaticStrain ?? 0,
     allostaticLoad: row.allostaticLoad ?? 0,
     personalityTraits: parseTraits(row.personalityTraits),
@@ -70,6 +72,8 @@ export const agentRepo = {
       status: a.status ?? 'alive',
       bornAtIteration: a.bornAtIteration ?? undefined,
       diedAtIteration: a.diedAtIteration ?? undefined,
+      age: a.age ?? undefined,
+      weightKg: a.weightKg ?? undefined,
       personalityTraits: JSON.stringify(a.personalityTraits ?? []),
     }));
 

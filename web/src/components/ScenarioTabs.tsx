@@ -43,16 +43,12 @@ export default function ScenarioTabs({
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
 
-  // Initialize from session config on mount if tabs are empty
+  // Initialize from session config on mount if tabs are empty,
+  // and re-sync baseline if session config changes after initialization
   useEffect(() => {
     if (tabs.length === 0) {
       initFromSession(economyConfig, budgetAllocation);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // M23 fix: re-sync baseline if session config changes after initialization
-  useEffect(() => {
-    if (tabs.length > 0) {
+    } else {
       syncBaseline(economyConfig, budgetAllocation);
     }
   }, [economyConfig, budgetAllocation]); // eslint-disable-line react-hooks/exhaustive-deps

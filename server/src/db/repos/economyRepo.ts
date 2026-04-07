@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db, sqlite } from '../index.js';
 import { agentEconomy, economySnapshots, marketPrices, ammSnapshots } from '../schema.js';
 import type { SkillMatrix, Inventory, EconomySnapshot, PriceIndex } from '@policylab/shared';
-import type { AMMState } from '../../mechanics/automatedMarketMaker.js';
+import type { AMMState } from '@policylab/shared';
 import { DEFAULT_SKILL_MATRIX, DEFAULT_INVENTORY } from '@policylab/shared';
 
 // ── Agent Economy State ──────────────────────────────────────────────────────

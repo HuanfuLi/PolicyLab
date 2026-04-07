@@ -52,7 +52,12 @@ export const useSessionDetailStore = create<SessionDetailStore>((set, get) => ({
   error: null,
   failedMessage: null,
 
-  reset: () =>
+  reset: () => {
+    // Cancel any in-flight design generation stream
+    const state = get() as unknown as Record<string, unknown>;
+    if (state._designAbort instanceof AbortController) {
+      state._designAbort.abort();
+    }
     set({
       session: null,
       brainstormMessages: [],
@@ -63,7 +68,8 @@ export const useSessionDetailStore = create<SessionDetailStore>((set, get) => ({
       designProgress: defaultProgress,
       error: null,
       failedMessage: null,
-    }),
+    });
+  },
 
   loadSession: async (id: string) => {
     set({ loading: true, error: null });
@@ -99,7 +105,7 @@ export const useSessionDetailStore = create<SessionDetailStore>((set, get) => ({
 
   sendBrainstormMessage: async (id: string, text: string) => {
     const optimisticMsg: ChatMessage = {
-      id: `temp-${Date.now()}`,
+      id: crypto.randomUUID(),
       sessionId: id,
       context: 'brainstorm',
       agentId: null,
@@ -117,7 +123,7 @@ export const useSessionDetailStore = create<SessionDetailStore>((set, get) => ({
       const response = await brainstormApi.chat(id, text, 'brainstorm');
 
       const assistantMsg: ChatMessage = {
-        id: `temp-agent-${Date.now()}`,
+        id: crypto.randomUUID(),
         sessionId: id,
         context: 'brainstorm',
         agentId: null,
@@ -172,11 +178,18 @@ export const useSessionDetailStore = create<SessionDetailStore>((set, get) => ({
       },
     });
 
+    const controller = new AbortController();
+    // Store controller so reset() can cancel in-flight design generation
+    (set as unknown as (fn: (s: SessionDetailStore) => Partial<SessionDetailStore>) => void)(
+      () => ({ _designAbort: controller } as unknown as Partial<SessionDetailStore>),
+    );
+
     try {
       // POST /api/sessions/:id/design (spec §5.2)
       const response = await fetch(`/api/sessions/${id}/design`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -264,7 +277,7 @@ export const useSessionDetailStore = create<SessionDetailStore>((set, get) => ({
 
   sendRefinementMessage: async (id: string, text: string) => {
     const optimisticMsg: ChatMessage = {
-      id: `temp-${Date.now()}`,
+      id: crypto.randomUUID(),
       sessionId: id,
       context: 'refinement',
       agentId: null,
@@ -284,7 +297,7 @@ export const useSessionDetailStore = create<SessionDetailStore>((set, get) => ({
       const response = await brainstormApi.chat(id, text, 'refinement');
 
       const assistantMsg: ChatMessage = {
-        id: `temp-agent-${Date.now()}`,
+        id: crypto.randomUUID(),
         sessionId: id,
         context: 'refinement',
         agentId: null,
@@ -339,31 +352,39 @@ export const useSessionDetailStore = create<SessionDetailStore>((set, get) => ({
   },
 
   updateLockedVariables: async (id: string, lockedVars: string[]) => {
-    await brainstormApi.patchConfig(id, { lockedVariables: lockedVars });
-    set(state => ({
-      session: state.session
-        ? {
-            ...state.session,
-            config: state.session.config
-              ? { ...state.session.config, lockedVariables: lockedVars }
-              : { totalIterations: 20, checklist: { governance: false, economy: false, legal: false, culture: false, infrastructure: false }, readyForDesign: false, lockedVariables: lockedVars },
-          }
-        : state.session,
-    }));
+    try {
+      await brainstormApi.patchConfig(id, { lockedVariables: lockedVars });
+      set(state => ({
+        session: state.session
+          ? {
+              ...state.session,
+              config: state.session.config
+                ? { ...state.session.config, lockedVariables: lockedVars }
+                : { totalIterations: 20, checklist: { governance: false, economy: false, legal: false, culture: false, infrastructure: false }, readyForDesign: false, lockedVariables: lockedVars },
+            }
+          : state.session,
+      }));
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Failed to save locked variables' });
+    }
   },
 
   updateEconomyConfig: async (id: string, patch: Partial<EconomyConfig>) => {
-    await brainstormApi.patchConfig(id, { economyConfig: patch });
-    set(state => ({
-      session: state.session
-        ? {
-            ...state.session,
-            config: state.session.config
-              ? { ...state.session.config, economyConfig: { ...(state.session.config.economyConfig ?? {}), ...patch } }
-              : state.session.config,
-          }
-        : state.session,
-    }));
+    try {
+      await brainstormApi.patchConfig(id, { economyConfig: patch });
+      set(state => ({
+        session: state.session
+          ? {
+              ...state.session,
+              config: state.session.config
+                ? { ...state.session.config, economyConfig: { ...(state.session.config.economyConfig ?? {}), ...patch } }
+                : state.session.config,
+            }
+          : state.session,
+      }));
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Failed to save economy config' });
+    }
   },
 
   forkSession: async (id: string, iterations: number): Promise<string> => {
@@ -396,13 +417,20 @@ export const useSessionDetailStore = create<SessionDetailStore>((set, get) => ({
   },
 
   saveBudgetAllocation: async (sessionId: string, allocation: BudgetAllocation) => {
-    await fetch(`/api/sessions/${sessionId}/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        budgetAllocation: allocation,
-        economyConfig: { fiscalEnabled: true },
-      }),
-    });
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          budgetAllocation: allocation,
+          economyConfig: { fiscalEnabled: true },
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to save budget: HTTP ${res.status}`);
+      }
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Failed to save budget allocation' });
+    }
   },
 }));

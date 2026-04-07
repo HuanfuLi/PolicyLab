@@ -1,6 +1,10 @@
-# IMPLEMENTATION OVERSIGHT: IDEAL WORLD ARCHITECTURE (REVISED)
+# IMPLEMENTATION OVERSIGHT: POLICYLAB ARCHITECTURE
 
-Following a re-examination of the codebase after the "implementation fix" and the "Single-Pass Action Selection" feature update, the following architectural status is confirmed.
+> **Originally written:** Pre-fork as "Ideal World"
+> **Last updated:** 2026-04-05 — all items resolved after v1.0 milestone + audit rounds
+> **Note:** Age/weight persistence and allostatic load persistence were fixed in Phase 07 audit (schema migration + agentRepo update).
+
+Following a re-examination of the codebase, the following architectural status is confirmed.
 
 ## 1. Core Simulation Architecture & Engine Updates
 
@@ -51,13 +55,13 @@ Following a re-examination of the codebase after the "implementation fix" and th
 *   **Status:** Integrated into `simulationRunner.ts`.
 *   **Observation:** The `applyMETMetabolism` function uses the MET system from `allostaticEngine.ts` to compute a variable `satietyCost` based on the agent's primary action.
 
-### ⚠️ Partial: Age Inefficiency Modifier & Persistence
-*   **Status:** Logic exists but data is transient.
-*   **Observation:** `applyMETMetabolism` uses `agent.age ?? 35`. However, the `age` field is still missing from the `agents` database table and the `Agent` TypeScript type.
+### ✅ Resolved: Age Inefficiency Modifier & Persistence
+*   **Status:** Fully implemented and persisted.
+*   **Observation:** `age` and `weightKg` columns added to agents DB table (schema migration). `agentRepo` reads/writes both fields. MET system uses real agent weight for BMR calculation.
 
-### ⚠️ Partial: Allostatic Load Pipeline (Psychosomatic Decay)
-*   **Status:** Integrated but transient.
-*   **Observation:** The allostatic load pipeline is executed in the main loop, but `allostaticStrain` and `allostaticLoad` values are stored in a volatile Map and **NOT persisted to the database**.
+### ✅ Resolved: Allostatic Load Pipeline (Psychosomatic Decay)
+*   **Status:** Fully integrated and persisted.
+*   **Observation:** `allostaticStrain` and `allostaticLoad` columns added to agents table. Values persisted via `agentRepo.bulkUpdateAllostaticStates()` every iteration. Restored on simulation resume from DB.
 
 ---
 

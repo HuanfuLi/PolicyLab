@@ -29,9 +29,12 @@ router.post('/', async (req, res) => {
     return res.status(409).json({ error: 'Reflection already running' });
   }
 
-  runReflection(id).catch(err =>
-    console.error('[reflect route] unhandled error:', err)
-  );
+  runReflection(id).catch(err => {
+    console.error('[reflect route] unhandled error:', err);
+    const message = err instanceof Error ? err.message : 'Reflection failed';
+    reflectionManager.broadcast(id, { type: 'error', message });
+    reflectionManager.finish(id);
+  });
 
   return res.json({ ok: true });
 });

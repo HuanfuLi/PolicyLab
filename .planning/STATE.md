@@ -2,29 +2,29 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Milestone complete
-stopped_at: Completed 06-03-PLAN.md — Phase 06 scenario-entry fully complete and verified
-last_updated: "2026-04-02T18:14:03.047Z"
+status: Ready to execute
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-04-07T05:05:00.878Z"
 progress:
-  total_phases: 6
-  completed_phases: 5
-  total_plans: 20
-  completed_plans: 19
+  total_phases: 9
+  completed_phases: 6
+  total_plans: 29
+  completed_plans: 24
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-01)
+See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** The deterministic economic engine must be realistic enough that simulation outcomes are meaningful for understanding real-world policy trade-offs.
-**Current focus:** Phase 06 — scenario-entry
+**Current focus:** Phase 09 — redesign-prompts-for-all
 
 ## Current Position
 
-Phase: 06
-Plan: Not started
+Phase: 09 (redesign-prompts-for-all) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -64,6 +64,38 @@ Plan: Not started
 | Phase 06-scenario-entry P01 | 15 | 2 tasks | 4 files |
 | Phase 06-scenario-entry P03 | 12 | 2 tasks | 3 files |
 | Phase 06-scenario-entry P03 | 12 | 3 tasks | 3 files |
+| Phase 07 P01 | 407 | 2 tasks | 9 files |
+| Phase 07 P02 | 396 | 2 tasks | 6 files |
+| Phase 07 P03 | 4 | 2 tasks | 4 files |
+| Phase 07 P04 | 296 | 2 tasks | 5 files |
+| Phase 07 P05 | 276 | 1 tasks | 1 files |
+| Phase 09 P01 | 688 | 3 tasks | 17 files |
+
+## Post-Milestone Work (2026-04-05)
+
+### Audit Rounds
+
+- **5 rounds of bug fixes**: 65 issues identified and fixed across 22 tasks (see PROBLEM_SOLVING_ROADMAP.md)
+- **Final audit**: 6 critical, 9 high, 14 medium, 8 low issues found and fixed
+- **TypeScript**: 0 errors (server + web)
+- **Tests**: 195/195 passing (18 test files)
+- **Lint**: 24 problems (7 false-positive React Compiler errors, 17 warnings)
+
+### Modularity Refactoring (Phase A + B)
+
+- **A1**: Extracted orderBook DB operations to `db/repos/orderBookRepo.ts`
+- **A3**: Removed `getSubconsciousDrive` value import from `llm/prompts.ts` — now passed as parameter
+- **A4**: Moved `AMMState` type to `shared/types.ts` — broke db→mechanics cross-layer import
+- **B2**: Extracted 14 session state Maps to `orchestration/simulationState.ts` (133 lines)
+- **B3**: Extracted telemetry retrieval to `orchestration/telemetryCollector.ts` (45 lines)
+- **Created**: `MODULE_MAP.md` — 477-line module registry with exports, tests, dependencies, and isolation guide
+
+### Key Metrics
+
+- **76 source files** in server, **~30 files** in web
+- **20 test files**, **195 tests** — 26% file coverage
+- **0 circular dependencies** between modules
+- **simulationRunner.ts** reduced from 3,985 to 3,854 lines via state extraction
 
 ## Accumulated Context
 
@@ -114,24 +146,34 @@ Recent decisions affecting current work:
 - [Phase 06-scenario-entry]: SessionSummaryInput telemetry fields optional — sessions without economic config still produce valid prompts, just without telemetry section
 - [Phase 06-scenario-entry]: Fork button shows only when isPastDesign (after first simulation) — intentional design; fork workflow makes sense only with a completed run to diverge from
 - [Phase 06-scenario-entry]: Post-checkpoint: tooltip uses theme-aware CSS vars; disabled sections clickable to enable; duplicate Fiscal section removed
+- [Phase 07]: Stratified quantile sampling for Pareto distribution improves Gini accuracy with small agent counts
+- [Phase 07]: Annual rates from World Bank divided by 12 (ITERATIONS_PER_YEAR); Gini divided by 100 (WB 0-100 to 0-1 scale); budget allocation normalized from real fiscal spending
+- [Phase 07]: IdeaInput uses null/creative/location mode state for dual-mode UI; bootstrap SSE uses fetch+ReadableStream reader
+- [Phase 07]: DataConfidenceBadge created as minimal stub since plan 07-03 (parallel wave 3) owns the richer version
+- [Phase 07]: runAllScenarios runs simulations sequentially per Research open question 3 (LLM cost management)
+- [Phase 07]: Pre-existing simulationRunner.ts build errors deemed out of scope for integration plan
+- [Phase 09]: Monolithic prompts.ts (2027 lines) split into 7 domain modules per D-19; barrel index.ts re-exports all symbols
 
 ### Roadmap Evolution
 
 - Phase 6 added: Scenario Entry — policymakers configure economic parameters and initial conditions at session design time
 - Phase 7 added: Real-World Scenario Bootstrap — location-based data-driven society design for policymakers
+- Phase 9 added: redesign prompts for all
 
 ### Pending Todos
 
-None yet.
+- Complete test coverage per MODULE_MAP.md Wave 1-6 plan (P0: physicsEngine, allostaticEngine, skillSystem tests)
+- Phase B1: Extract subsystem tick functions from simulationRunner (deferred — deeply interleaved)
+- Phase C: Frontend API layer standardization (create missing API modules for simulate, bootstrap, reflect)
+- Full centralAgent DB extraction (A2 — requires SSE callback redesign)
 
 ### Blockers/Concerns
 
-- Phase 1: M0/M1 split data structure (separating agent cash-on-hand from depositBalance) needs deliberate mapping to existing agentRepo patterns — consider `/gsd:research-phase 1` before planning
-- Phase 3: Fiscal multiplier magnitudes need calibration against existing agent wealth/productivity parameter ranges
 - Phase 4: CPI basket weights and M1/CPI blending coefficient are initial estimates requiring empirical tuning
+- Test coverage at 26% file level — critical gaps in physicsEngine, orchestration, routes, and frontend (see MODULE_MAP.md Section 5)
 
 ## Session Continuity
 
-Last session: 2026-04-02T18:07:04.650Z
-Stopped at: Completed 06-03-PLAN.md — Phase 06 scenario-entry fully complete and verified
+Last session: 2026-04-07T05:05:00.873Z
+Stopped at: Completed 09-01-PLAN.md
 Resume file: None

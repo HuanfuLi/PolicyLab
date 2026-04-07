@@ -77,7 +77,7 @@ const DesignReview = () => {
     }
     // Sync locked variables from config
     setLockedVariables(session.config?.lockedVariables ?? []);
-  }, [session?.stage, session?.config?.lockedVariables, loading]);
+  }, [session?.stage, session?.config?.lockedVariables, session?.config?.totalIterations, loading, id, navigate]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -113,8 +113,12 @@ const DesignReview = () => {
 
   const handleStartSimulation = async () => {
     if (!id) return;
-    await startSimulation(id, iterations);
-    navigate(`/session/${id}/simulation`);
+    try {
+      await startSimulation(id, iterations);
+      navigate(`/session/${id}/simulation`);
+    } catch {
+      // startSimulation sets error state in the store; don't navigate on failure
+    }
   };
 
   const isPastDesign = session && !['design-review', 'refining'].includes(session.stage);
@@ -135,26 +139,27 @@ const DesignReview = () => {
   const handleStatSave = async (agentId: string, field: string, value: number) => {
     if (!id) return;
     try {
-      await fetch(`/api/sessions/${id}/agents/${agentId}`, {
+      const res = await fetch(`/api/sessions/${id}/agents/${agentId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: value }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await loadAgents(id);
-    } catch (err) {
-      console.error('Failed to save agent stat:', err);
+      // Clear the edit state on success
+      setAgentStatEdits(prev => {
+        const next = { ...prev };
+        if (next[agentId]) {
+          const fields = { ...next[agentId] };
+          delete fields[field];
+          if (Object.keys(fields).length === 0) delete next[agentId];
+          else next[agentId] = fields;
+        }
+        return next;
+      });
+    } catch {
+      // Don't clear edit state on failure — keep the user's value for retry
     }
-    // Clear the edit state for this cell
-    setAgentStatEdits(prev => {
-      const next = { ...prev };
-      if (next[agentId]) {
-        const fields = { ...next[agentId] };
-        delete fields[field];
-        if (Object.keys(fields).length === 0) delete next[agentId];
-        else next[agentId] = fields;
-      }
-      return next;
-    });
   };
 
   const handleToggleLock = async (key: string, checked: boolean) => {

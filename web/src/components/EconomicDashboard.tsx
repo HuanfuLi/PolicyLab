@@ -83,15 +83,12 @@ function CpiChart({ data }: { data: TelemetryLog[] }) {
 
   // Compute 5-point EWMA trend overlay (alpha=0.3)
   const alpha = 0.3;
-  let ema = filtered[0].cpi!;
-  const chartData = filtered.map(d => {
-    ema = alpha * d.cpi! + (1 - alpha) * ema;
-    return {
-      iterationNumber: d.iterationNumber,
-      cpi: d.cpi,
-      trend: parseFloat(ema.toFixed(4)),
-    };
-  });
+  const chartData = filtered.reduce<Array<{ iterationNumber: number; cpi: number | null; trend: number }>>((acc, d, i) => {
+    const prevEma = i === 0 ? d.cpi! : acc[i - 1].trend;
+    const nextEma = alpha * d.cpi! + (1 - alpha) * prevEma;
+    acc.push({ iterationNumber: d.iterationNumber, cpi: d.cpi ?? null, trend: parseFloat(nextEma.toFixed(4)) });
+    return acc;
+  }, []);
 
   return (
     <div style={sectionStyle}>

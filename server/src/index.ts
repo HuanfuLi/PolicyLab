@@ -16,8 +16,18 @@ import bootstrapRouter from './routes/bootstrap.js';
 
 const app = express();
 
-app.use(cors({ origin: 'http://localhost:5173' }));
+// CORS: allow the Vite dev server and any configured production origin
+const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
+app.use(cors({ origin: CORS_ORIGIN }));
 app.use(express.json({ limit: '50mb' }));
+
+// Security headers
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 
 // Sub-routers with :id param must be mounted BEFORE base /api/sessions
 app.use('/api/sessions/:id/chat', chatRouter);

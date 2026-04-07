@@ -188,11 +188,15 @@ export function accrueInterest(
     };
   }
 
-  // Borrower cannot pay interest
+  // Borrower cannot pay interest — compound unpaid interest onto remaining balance
+  // so fiat is never silently lost. The loan grows, preserving SFC accounting.
   return {
     depositDelta: 0,
     bankReservesDelta: 0,
-    loanUpdate: { consecutiveMissed: loan.consecutiveMissed + 1 },
+    loanUpdate: {
+      consecutiveMissed: loan.consecutiveMissed + 1,
+      remainingBalance: loan.remainingBalance + interest,
+    },
   };
 }
 
@@ -209,10 +213,15 @@ export function processDefault(
   loan: LoanContract,
   _bankAgent: Agent,
 ): { loanUpdate: Partial<LoanContract>; bankWealthDelta: number; trace: string } {
-  const loss = loan.remainingBalance - loan.collateralAmount;
+  const loss = Math.max(0, loan.remainingBalance - loan.collateralAmount);
 
-  const trace = `[BANK] Loan ${loan.id} defaulted. Collateral ${loan.collateralAmount} seized. Bank loss: ${loss.toFixed(4)}`;
+  const trace = `[BANK] Loan ${loan.id} defaulted. Collateral ${loan.collateralAmount.toFixed(4)} seized. ` +
+    `Remaining balance was ${loan.remainingBalance.toFixed(4)}. Bank absorbs loss: ${loss.toFixed(4)}`;
 
+  // Bank receives collateral (escrowed base money returns to bank reserves).
+  // The unrecoverable loss (remainingBalance - collateral) is a write-down on loanAssets
+  // reflected in the balance sheet snapshot. No additional wealth delta needed for the
+  // loss — it's implicit in the loanAssets reduction when the loan is marked 'defaulted'.
   return {
     loanUpdate: { status: 'defaulted' },
     bankWealthDelta: loan.collateralAmount,
@@ -242,7 +251,7 @@ export function accrueDepositInterest(
   const interestAmounts = deposits.map(d => d.balance * economyConfig.depositInterestRate);
   const totalInterest = interestAmounts.reduce((sum, i) => sum + i, 0);
 
-  const bankReserves = bankAgent.currentStats.wealth;
+  const bankReserves = Math.max(0, bankAgent.currentStats.wealth);
   let totalInterestPaid: number;
   let scaleFactor: number;
 
