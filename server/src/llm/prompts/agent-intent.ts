@@ -279,6 +279,7 @@ OUTPUT RULES (read carefully -- violations waste your action turn):
   // Dynamic suffix: agent-specific, changes every call
   const cortisol = agent.currentStats.cortisol ?? 20;
   const dopamine = agent.currentStats.dopamine ?? 50;
+  const health = agent.currentStats.health;
 
   let stressModifier = '';
   if (cortisol > 80) {
@@ -288,24 +289,29 @@ OUTPUT RULES (read carefully -- violations waste your action turn):
   }
 
   // RAG injection: historical subconscious drive for high-stress agents
-  const subconsciousDrive = getSubconsciousDrive(cortisol, agent.currentStats.wealth, agent.currentStats.health);
+  const subconsciousDrive = getSubconsciousDrive(cortisol, agent.currentStats.wealth, health);
   if (subconsciousDrive) {
     stressModifier += `\n\n${subconsciousDrive}`;
   }
+
+  // Descriptors for the personal dashboard
+  const healthDescriptor = health < 20 ? '-- critical' : health < 40 ? '-- weakening' : health < 70 ? '-- fair' : '-- strong';
+  const stressDescriptor = cortisol > 80 ? '-- extreme, survival instincts dominant' : cortisol > 60 ? '-- elevated, risk tolerance impaired' : cortisol > 40 ? '-- moderate tension' : '-- calm';
+  const driveDescriptor = dopamine > 70 ? '-- energized, ambitious' : dopamine > 40 ? '-- baseline motivation' : '-- low drive, prone to conservative choices';
 
   // Phase 1: Economy context (C2: full inventory + full skill matrix)
   let economyBlock = '';
   if (economyContext) {
     const foodStatus = economyContext.isStarving
-      ? '⚠️ STARVING — no food!'
+      ? 'You have no food. You are starving.'
       : economyContext.inventory.food <= 3
-        ? '⚠️ Food critically low'
+        ? 'Food critically low'
         : economyContext.inventory.food <= 6
           ? 'Food running low'
           : 'Adequately fed';
     const toolBonus = economyContext.inventory.tools > 0
-      ? ` (${economyContext.inventory.tools} tools → +${Math.min(economyContext.inventory.tools * 15, 60)}% wage on WORK)`
-      : ' (no tools — reduced wage)';
+      ? ` (${economyContext.inventory.tools} tools -- +${Math.min(economyContext.inventory.tools * 15, 60)}% wage on WORK)`
+      : ' (no tools -- reduced wage)';
 
     const skillLines = Object.entries(economyContext.skills)
       .map(([k, v]) => ({ name: k, level: (v as { level: number }).level }))
@@ -319,57 +325,64 @@ OUTPUT RULES (read carefully -- violations waste your action turn):
   Raw materials: ${economyContext.inventory.raw_materials} units
   Luxury goods:  ${economyContext.inventory.luxury_goods} units
 
-Your skills (level 0–100):
+Your skills (level 0-100):
 ${skillLines}`;
 
     if (economyContext.isStarving) {
-      economyBlock += '\n\n⚠️ You have no food stockpile. Buy food, work for wages, or produce goods for sale immediately.';
+      economyBlock += '\n\nYou have no food stockpile. Buy food, work for wages, or produce goods for sale immediately.';
     }
   }
 
-  // Phase 8: Capitalist Identity Override — injected for enterprise owners
-  // Forces the LLM to think as a capitalist rather than reverting to manual labor.
-  let capitalistIdentityBlock = '';
-  if (personalStatus?.enterprise_role === 'owner') {
-    capitalistIdentityBlock = '\n\n[CAPITALIST IDENTITY] You are a business owner. Your primary goal is to maximize your enterprise\'s profit. You MUST use POST_SELL_ORDER to sell the goods your workers produce at the highest possible price to fund their wages. Do NOT do manual labor (PRODUCE_AND_SELL) yourself; your time is too valuable. Focus on hiring, pricing, and market dominance.';
+  // Personal economic dashboard: AMM market data (D-02, D-03)
+  let marketDashboard = '';
+  if (ammMarketData) {
+    const affordableMeals = Math.floor(agent.currentStats.wealth / ammMarketData.foodSpotPrice);
+    marketDashboard = `\n\nWhat you see at the market:
+- Food price: ${ammMarketData.foodSpotPrice.toFixed(1)} fiat per unit
+- You can afford ${affordableMeals} meals at current prices
+- Market food stock: ${ammMarketData.foodReserve.toFixed(0)} units available`;
+    if (agent.currentStats.wealth < ammMarketData.foodSpotPrice * 6) {
+      marketDashboard += '\n- You cannot afford a full week of food. This is a crisis.';
+    }
+  } else if (isFirstIteration) {
+    // D-05: Darwinian Market price anchoring for iteration 1 when no AMM data yet
+    marketDashboard = '\n\nThis is the first trading day. Word around town is that a fair price for food is 3-5 fiat per unit. A day\'s wage should be about 6-8 fiat.';
   }
 
-  // Phase A: Biological Subconscious — injected when health is critical or starving.
-  // Unlike the old "Absolute Rule", this is a PRESSURE, not a mandate.
-  // Idealists may still choose martyrdom or conviction; survivors will feel their body's scream.
+  // Enterprise owner identity (D-09 -- character-driven paragraph, no mechanical tag)
+  let capitalistIdentityBlock = '';
+  if (personalStatus?.enterprise_role === 'owner') {
+    capitalistIdentityBlock = '\n\nAs a business owner, your livelihood depends on the enterprise you built. Your workers produce the goods -- your job is to price them right, hire well, and dominate the market. Manual labor is beneath you now. Use POST_SELL_ORDER to move your inventory at the highest price the market will bear.';
+  }
+
+  // Biological subconscious (D-08 -- keep prose, remove [BIOLOGICAL SUBCONSCIOUS] tag)
   let biologicalSubconscious = '';
-  const health = agent.currentStats.health;
   const isPhysicallyDistressed = health < 40 || economyContext?.isStarving === true;
   if (isPhysicallyDistressed) {
     if (health < 20 || economyContext?.isStarving === true) {
-      biologicalSubconscious = '\n\n[BIOLOGICAL SUBCONSCIOUS] A cold, descending darkness presses in from all sides. A primal, animal fear is rising from somewhere deep — not a thought, but a scream from your cells. Your stomach aches with a hollow violence, and every breath feels like it costs something you no longer have. You may still cling to your convictions, your role, your principles. But your body is not listening to those things right now. It only knows one word: survive.';
+      biologicalSubconscious = '\n\nA cold, descending darkness presses in from all sides. A primal, animal fear is rising from somewhere deep -- not a thought, but a scream from your cells. Your stomach aches with a hollow violence, and every breath feels like it costs something you no longer have. You may still cling to your convictions, your role, your principles. But your body is not listening to those things right now. It only knows one word: survive.';
     } else {
-      // health 20–39
-      biologicalSubconscious = '\n\n[BIOLOGICAL SUBCONSCIOUS] Your body is sending urgent, unignorable signals. A cold weight settles in your gut — this is not fear, it is something older. Hunger and fatigue are gnawing at the edges of your thoughts. While you may still hold to your identity and principles, the physical pressure is undeniable and rising.';
+      // health 20-39
+      biologicalSubconscious = '\n\nYour body is sending urgent, unignorable signals. A cold weight settles in your gut -- this is not fear, it is something older. Hunger and fatigue are gnawing at the edges of your thoughts. While you may still hold to your identity and principles, the physical pressure is undeniable and rising.';
     }
   } else if (cortisol > 70) {
-    biologicalSubconscious = '\n\n[BIOLOGICAL SUBCONSCIOUS] A low, persistent dread has taken up residence behind your eyes. Your body is flooded with cortisol — the old chemistry of threat and flight. You are not in immediate danger, but your nervous system is not convinced of that. You may act with more edge, more desperation than you intend.';
+    biologicalSubconscious = '\n\nA low, persistent dread has taken up residence behind your eyes. Your body is flooded with cortisol -- the old chemistry of threat and flight. You are not in immediate danger, but your nervous system is not convinced of that. You may act with more edge, more desperation than you intend.';
   }
 
-  // Phase 2: Darwinian Market price anchoring — only shown in iteration 1
-  const marketKnowledgeBlock = isFirstIteration
-    ? '\n\n[MARKET KNOWLEDGE] This is the first trading period. The fair market price for 1 unit of Food is 3-5 Wealth. A fair day\'s wage for labor is 6-8 Wealth. Use this knowledge when trading or setting prices.'
-    : '';
-
-  // Phase 3: Cognitive context (memories, plan, reflection)
-  // NOTE: Global state summaries are intentionally excluded — agents only know
+  // Cognitive context (D-15, D-16 -- economic memories prominent)
+  // NOTE: Global state summaries are intentionally excluded -- agents only know
   // what they have personally experienced (Bug #3 fix: no global contamination).
   let cognitiveBlock = '';
   if (cognitiveContext) {
-    cognitiveBlock += `\n\nYour personal memories (only what YOU have experienced):
+    cognitiveBlock += `\n\nWhat you remember:
 ${cognitiveContext.memoryContext}`;
 
     if (cognitiveContext.reflectionText) {
-      cognitiveBlock += `\n\nYour inner reflection:
+      cognitiveBlock += `\n\nYou've been thinking:
 "${cognitiveContext.reflectionText}"`;
     }
 
-    cognitiveBlock += `\n\nYour current plan: ${cognitiveContext.planGoal}
+    cognitiveBlock += `\n\nYour goal: ${cognitiveContext.planGoal}
 Next step: ${cognitiveContext.currentPlanStep}`;
   }
 
@@ -385,20 +398,20 @@ Next step: ${cognitiveContext.currentPlanStep}`;
   const employmentBoardBlock = buildEmploymentBoardSection(employmentBoard);
   const personalStatusBlock = buildPersonalStatusSection(personalStatus);
 
-  // Task 4: Action-Result Feedback — ground the LLM in deterministic outcomes
+  // Action-Result Feedback (D-07 -- remove [Previous Action Results] tag)
   const actionResultsBlock = lastActionResults
-    ? `\n\n[Previous Action Results]\n${lastActionResults}\n⚠️ Do NOT narrate successes that did not happen. Base your next decisions strictly on these results.`
+    ? `\n\nLast week's results:\n${lastActionResults}\nThese are facts -- do not claim outcomes that did not happen.`
     : '';
 
-  // Sheriff Phase B: Legal Risk Assessment — injected when enforcement is active
+  // Legal Risk Assessment (D-07 -- remove [LEGAL RISK ASSESSMENT] tag)
   const legalRiskBlock = (enforcementLevel !== undefined && enforcementLevel > 0)
     ? (() => {
         const detectionPct = Math.round(Math.min(0.9, 0.2 * enforcementLevel) * 100);
-        return `\n\n[LEGAL RISK ASSESSMENT]\nCurrent enforcement level: ${enforcementLevel.toFixed(1)}/3.0\nDetection probability if you perform an illegal action: ${detectionPct}%\nIf caught: your wealth is seized (-25% of current wealth), your stress surges (+30 cortisol), and the illegal action earns you nothing.\nReview the Laws (excerpt) in the system prompt before choosing STEAL, SABOTAGE, EMBEZZLE, or actions restricted by this society's constitution. Rational actors should weigh profit vs. risk.`;
+        return `\n\nYou know the law is enforced here. Getting caught stealing or embezzling means losing a quarter of your savings and overwhelming stress.\nDetection chance: ${detectionPct}% at current enforcement (${enforcementLevel.toFixed(1)}/3.0).`;
       })()
     : '';
 
-  // Build role-specific action dictionary (Task 1: full parameter schemas injected)
+  // Build role-specific action dictionary
   const actionDictionary = buildActionDictionary(allowedActions);
 
   // Banking Foundation: build banking context blocks
@@ -411,20 +424,19 @@ Next step: ${cognitiveContext.currentPlanStep}`;
   const inflationBlock = buildInflationContextSection(inflationContext);
   const centralBankBlock = buildCentralBankSection(centralBankContext);
 
-  // Personality traits — injected as a character influence, not a hard rule
+  // Personality traits -- injected as a character influence, not a hard rule
   const traitsBlock = agent.personalityTraits && agent.personalityTraits.length > 0
-    ? `\nPersonality: ${agent.personalityTraits.join(', ')}. These are deep-seated tendencies that colour your decisions — a risk-tolerant agent may attempt daring moves; an empathetic agent might help others at personal cost. You are not bound rigidly by these traits, but they influence how you weigh choices.`
+    ? `\nPersonality: ${agent.personalityTraits.join(', ')}. These are deep-seated tendencies that colour your decisions -- a risk-tolerant agent may attempt daring moves; an empathetic agent might help others at personal cost. You are not bound rigidly by these traits, but they influence how you weigh choices.`
     : '';
 
-  const dynamicSuffix = `You are ${agent.name}, a ${agent.role}.
-Background: ${agent.background}${traitsBlock}
+  const dynamicSuffix = `Your name is ${agent.name}. You are a ${agent.role}.
+${agent.background}${traitsBlock}
 
-Your current situation:
-- Wealth: ${agent.currentStats.wealth} Wealth (fiat currency — no upper limit)
-- Health: ${agent.currentStats.health}/100
-- Happiness: ${agent.currentStats.happiness}/100
-- Cortisol (stress): ${cortisol}/100  ${cortisol > 80 ? '— extreme; survival instincts dominant' : cortisol > 60 ? '— elevated; risk tolerance impaired' : cortisol > 40 ? '— moderate tension' : '— calm'}
-- Dopamine (drive):  ${dopamine}/100  ${dopamine > 70 ? '— energized, ambitious' : dopamine > 40 ? '— baseline motivation' : '— low drive, prone to conservative choices'}${economyBlock}${cognitiveBlock}${marketKnowledgeBlock}${agentNamesBlock}${citizenBankingBlock}${bankOperationsBlock}${citizenCapitalMarketBlock}${citizenFiscalBlock}${inflationBlock}${centralBankBlock}
+Your situation right now:
+- Wealth: ${agent.currentStats.wealth} fiat
+- Health: ${health}/100 ${healthDescriptor}
+- Stress: ${cortisol}/100 ${stressDescriptor}
+- Drive: ${dopamine}/100 ${driveDescriptor}${economyBlock}${marketDashboard}${cognitiveBlock}${agentNamesBlock}${citizenBankingBlock}${bankOperationsBlock}${citizenCapitalMarketBlock}${citizenFiscalBlock}${inflationBlock}${centralBankBlock}
 
 ${iterationContext}${capitalistIdentityBlock}${biologicalSubconscious}${stressModifier}${actionResultsBlock}
 ${marketIntelligenceBlock ?? ''}

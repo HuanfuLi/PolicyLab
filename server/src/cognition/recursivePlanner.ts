@@ -157,7 +157,9 @@ ${memoriesText}
 
 Current state: Wealth: ${currentStats.wealth}/100, Health: ${currentStats.health}/100, Happiness: ${currentStats.happiness}/100${contextNote}
 
-Consider what actions are available to you: work, trade, rest, produce food, eat, help others, invest, or protest/strike.
+Consider what actions are available to you: work, trade, rest, produce food, help others, invest, or protest/strike.
+
+Your goal should reflect your economic situation. Examples: "Save enough to buy tools", "Produce food every week until I have 100 fiat", "Pay off my loan in 3 weeks", "Build up a food stockpile to survive the winter".
 
 Respond with ONLY valid JSON:
 {
