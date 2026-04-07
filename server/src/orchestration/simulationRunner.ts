@@ -1433,6 +1433,13 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         ? `\n\n[MARKET INTELLIGENCE — Use this data to reason about economic opportunity]\n\nCommodity prices and supply:\n${miLines.join('\n')}\n\nEconomy:\n  Population: ${aliveAgents.length} alive agents\n  Active enterprises: ${iterEntsSummary}\n  Unemployed agents: ${iterUnemployedCount}\n\nHow to read this:\n- CRITICAL/LOW reserve means the market is undersupplied — prices will rise further if no one produces.\n- SURPLUS reserve means the market is oversupplied — selling now yields less than baseline.\n- Your skills determine how efficiently you can produce each commodity.`
         : '';
 
+      // Pre-compute AMM market data once per iteration for agent economic dashboard (D-02)
+      const ammMarketData = primaryAMMForMI ? {
+        foodSpotPrice: primaryAMMForMI.spotPrice,
+        foodReserve: primaryAMMForMI.currentFoodReserve,
+        fiatReserve: primaryAMMForMI.currentFiatReserve,
+      } : undefined;
+
       // Pre-compute inflation/macro context once per iteration (not per agent)
       const iterInflationState = sessionInflationState.get(sessionId);
       const iterInflationContext = buildInflationContext(iterInflationState);
@@ -1624,6 +1631,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             citizenFiscalContext,
             inflationContext,
             centralBankContext,
+            ammMarketData,
           );
 
           // throwOnExhaustion: true — after all retries, throw instead of silently defaulting to REST.
