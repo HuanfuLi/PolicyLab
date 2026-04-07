@@ -175,7 +175,7 @@ Plans:
 **Plans:** 4 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — Split prompts.ts into 7 domain modules with barrel re-export index
-- [ ] 09-02-PLAN.md — Rewrite citizen intent prompt: economic survival signals, immersion, action dictionary
-- [ ] 09-03-PLAN.md — Enrich agent roster backgrounds (5-8 sentence life stories) and align reflection prompts
-- [ ] 09-04-PLAN.md — Wire AMM market data in simulationRunner + prompt content verification tests
+- [x] 09-01-PLAN.md — Split prompts.ts into 7 domain modules with barrel re-export index
+- [x] 09-02-PLAN.md — Rewrite citizen intent prompt: economic survival signals, immersion, action dictionary
+- [x] 09-03-PLAN.md — Enrich agent roster backgrounds (5-8 sentence life stories) and align reflection prompts
+- [x] 09-04-PLAN.md — Wire AMM market data in simulationRunner + prompt content verification tests
