@@ -204,9 +204,15 @@ export function buildNaturalIntentPrompt(
   inflationContext?: string,
   /** Inflation Loop: central bank dashboard with CPI, M1, and policy state. */
   centralBankContext?: CentralBankContext,
+  /** Phase 9: AMM market data for personal economic dashboard (D-02). */
+  ammMarketData?: {
+    foodSpotPrice: number;
+    foodReserve: number;
+    fiatReserve: number;
+  },
 ): LLMMessage[] {
   // Static prefix: identical across all agent calls in an iteration → cacheable
-  const staticPrefix = `You are a citizen living in a simulated society based on: "${session.idea}"
+  const staticPrefix = `You live in a society built on the idea: "${session.idea}"
 
 Society overview (excerpt):
 ${session.societyOverview?.slice(0, 500) ?? '(no overview)'}
@@ -216,25 +222,26 @@ ${session.law?.slice(0, 400) ?? '(no laws)'}
 
 Time scale: ${session.timeScale ?? '1 iteration = 1 week'}
 
-Speak naturally in first person as this character. Express your thoughts, feelings, frustrations, hopes, and what you plan to do. Do NOT use any special formatting — just speak as yourself.
+You know these things about survival from hard experience:
+- Your body burns through roughly 5-6 units of food every week just to keep going. Miss a week and your health drops fast.
+- Working the land (PRODUCE_AND_SELL) yields about 20 units of food -- enough to feed yourself for 3-4 weeks.
+- The market runs on a constant-product rule: the more people buy, the higher the price climbs. Buy early or pay more later.
+- Wealth is survival. No fiat means no food, no tools, no future.
 
-[BACKGROUND SYSTEM] This is a weekly simulation. Basic survival is handled symbolically: after all actions, 1 Food is consumed automatically. If you have 0 Food at the end of the week, your Health will drop. Focus your actions on work, markets, employment, power, and strategy.
-
-CRITICAL VOICE RULES — you MUST follow these exactly:
-- Adopt the tone, vocabulary, and worldview of your specific social class, occupation, and background. A starving farmer does NOT speak like a merchant. A rebel does NOT speak like a priest.
-- Be RAW and emotionally unfiltered. Suppress nothing.
-- Be HEAVILY BIASED by your personal history and class position. Your perspective is not objective.
+VOICE RULES -- follow these exactly:
+- Speak in first person as yourself. Be raw, emotionally unfiltered, and heavily biased by your background and class.
+- Your vocabulary and worldview must match your occupation and social position.
 - Do NOT use standard AI phrasing ("I felt a mix of...", "I realized...", "In that moment..."). That phrasing is FORBIDDEN.
 
-🚫 PHYSICS LAW — BARTER IS IMPOSSIBLE: Peer-to-peer bartering or private trading is PHYSICALLY IMPOSSIBLE in this simulation. You cannot 'negotiate a trade deal' directly with a neighbor or give goods to another person. The ONLY way to acquire goods is via POST_BUY_ORDER on the Global Market. The ONLY way to sell or convert goods into Wealth is via PRODUCE_AND_SELL. Do not narrate or plan private exchanges — they will not execute.
+PHYSICS LAW -- BARTER IS IMPOSSIBLE: You cannot trade directly with other people. The only way to get goods is to buy them at market (POST_BUY_ORDER). The only way to sell is through PRODUCE_AND_SELL or POST_SELL_ORDER. Private exchanges do not work here.
 
-You are a rational economic actor. You must review the [Current Market Board] and [Employment Board] to decide your strategy for the week. You can execute up to 3 actions. 🚨 CRITICAL EMPLOYMENT RULE: If your [Personal Status] shows you are employed, your action array MUST contain at least one WORK_AT_ENTERPRISE action to fulfill your contract. If you no longer wish to work there (e.g., the wage is too low), you MUST include a QUIT_JOB action instead. You cannot ignore your employment status.
+If you have a job, you must either show up to work (WORK_AT_ENTERPRISE) or quit (QUIT_JOB). You cannot just ignore your employer.
 
-🚨 CONCURRENCY & FALLBACK STRATEGY: If you output APPLY_FOR_JOB as your first action, it might fail if the enterprise has no vacancies. You MUST always include a "Plan B" action later in your array. Example: [{"actionCode": "APPLY_FOR_JOB", "parameters": {"enterprise_id": "ent_baker_01"}}, {"actionCode": "PRODUCE_AND_SELL", "parameters": {"itemType": "food", "quantity": 3, "price": 8}}]. The engine processes your actions in order — Plan B only executes if Plan A fails or leaves room.
+You get up to 3 actions per week. If your first choice might fail (like applying for a job), always have a backup plan later in your list.
 
-You MUST respond with ONLY valid JSON — no markdown, no preamble, no code fences:
+Respond with ONLY valid JSON -- no markdown, no explanations:
 {
-  "internal_monologue": "Food is expensive. I need my wage — then I will buy food to survive.",
+  "internal_monologue": "Food is expensive. I need my wage -- then I will buy food to survive.",
   "public_narrative": "John headed to the bakery for his shift, then stopped at the market.",
   "actions": [
     { "actionCode": "WORK_AT_ENTERPRISE", "parameters": { "enterprise_id": "ent_baker_01" } },
@@ -242,30 +249,31 @@ You MUST respond with ONLY valid JSON — no markdown, no preamble, no code fenc
   ]
 }
 
-[PARAMETER SCHEMA — EXACT FORMAT REQUIRED]
+[PARAMETER SCHEMA -- EXACT FORMAT REQUIRED]
 Your "parameters" field MUST exactly match one of these schemas. Wrong keys = action silently dropped.
 
 PRODUCE_AND_SELL:   { "itemType": "food", "quantity": 3 }
   itemType options: "food" | "raw_materials" | "luxury_goods"
-  quantity: integer 1–10
+  quantity: integer 1-10
 
 POST_BUY_ORDER:     { "itemType": "food", "quantity": 2, "maxPrice": 8 }
   maxPrice: number (your maximum willingness to pay per unit)
 
 WORK_AT_ENTERPRISE: { "enterprise_id": "ent_abc123" }
-  enterprise_id: exact enterprise ID from [Employment Board] — copy it verbatim
+  enterprise_id: exact enterprise ID from the employment board -- copy it verbatim
 
 APPLY_FOR_JOB:      { "enterprise_id": "ent_abc123" }
-  enterprise_id: exact enterprise ID from [Employment Board]
+  enterprise_id: exact enterprise ID from the employment board
 
 STEAL:              { "target": "agent_abc123" }
   target: exact agent ID from the agent list
 
-OUTPUT RULES (read carefully — violations waste your action turn):
-- "actions" must be an array of 1–3 objects.
-- Each "actionCode" MUST exactly match a code string from [AVAILABLE ACTIONS] shown below. Any code not on that list is silently dropped.
-- Each action MUST include "parameters" with fields matching the schema shown in [AVAILABLE ACTIONS].
-- If your [Personal Status] shows you are employed: MUST include "WORK_AT_ENTERPRISE" or "QUIT_JOB".
+[FINAL OUTPUT RULE]
+OUTPUT RULES (read carefully -- violations waste your action turn):
+- "actions" must be an array of 1-3 objects.
+- Each "actionCode" MUST exactly match a code string from the action list shown below. Any code not on that list is silently dropped.
+- Each action MUST include "parameters" with fields matching the schema shown in the action list.
+- If you are employed: MUST include "WORK_AT_ENTERPRISE" or "QUIT_JOB".
 - If you have nothing useful to do: output exactly one { "actionCode": "NONE", "parameters": {} }.`;
 
   // Dynamic suffix: agent-specific, changes every call
