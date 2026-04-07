@@ -12,11 +12,11 @@ This milestone transforms PolicyLab from a cash/barter economy into a modern eco
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Banking Foundation** - Bank agent role, deposit accounts, loan lifecycle (create/repay/default), reserve enforcement, M0/M1 SFC audit, and EconomyConfig foundation
-- [ ] **Phase 2: Capital Markets** - Enterprise equity (shares + dividends), government bonds (issuance/coupon/maturity), corporate bonds, and holder ledger persistence
+- [x] **Phase 1: Banking Foundation** - Bank agent role, deposit accounts, loan lifecycle (create/repay/default), reserve enforcement, M0/M1 SFC audit, and EconomyConfig foundation
+- [x] **Phase 2: Capital Markets** - Enterprise equity (shares + dividends), government bonds (issuance/coupon/maturity), corporate bonds, and holder ledger persistence
 - [x] **Phase 3: Fiscal Policy** - Budget categories configurable at design time, per-category spending multipliers, public goods quality state, and per-iteration budget execution (completed 2026-04-02)
-- [ ] **Phase 4: Inflation Loop** - CPI calculation, M1-to-price-level feedback, central bank policy agent, inflation expectations in agent cognition, and behavioral adaptation
-- [ ] **Phase 5: Economic Dashboard** - Four recharts panels (CPI, M1/M2, fiscal, bond yield), macro snapshot SSE telemetry field, and simulationStore accumulation
+- [x] **Phase 4: Inflation Loop** - CPI calculation, M1-to-price-level feedback, central bank policy agent, inflation expectations in agent cognition, and behavioral adaptation
+- [x] **Phase 5: Economic Dashboard** - Four recharts panels (CPI, M1/M2, fiscal, bond yield), macro snapshot SSE telemetry field, and simulationStore accumulation
 
 ## Phase Details
 
@@ -96,10 +96,10 @@ Plans:
   2. An M1/M2 area chart shows money supply expansion and contraction over the simulation history; M0 baseline is visually distinct from M1 and M2 bands
   3. A fiscal budget bar chart shows per-category spending allocation and the current public goods quality score for each category
   4. A bond yield line chart tracks government and corporate bond coupon yields over time; the chart is absent (or shows empty state) when no bonds have been issued
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [x] 05-01-PLAN.md — Extend TelemetryLog shared type with Phase 3-4 fields; add macroHistory to simulationStore; install recharts
-- [ ] 05-02-PLAN.md — Build EconomicDashboard component (4 recharts panels); wire into TelemetryPanel tabs and Simulation page
+- [x] 05-02-PLAN.md — Build EconomicDashboard component (4 recharts panels); wire into TelemetryPanel tabs and Simulation page
 **UI hint**: yes
 
 ### Phase 6: Scenario Entry — policymakers configure economic parameters and initial conditions at session design time
@@ -127,13 +127,13 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Banking Foundation | 3/3 | Complete |  |
-| 2. Capital Markets | 3/3 | Complete | - |
-| 3. Fiscal Policy | 5/5 | Complete   | 2026-04-02 |
-| 4. Inflation Loop | 0/3 | Not started | - |
-| 5. Economic Dashboard | 1/2 | In Progress|  |
-| 6. Scenario Entry | 4/4 | Complete   | 2026-04-02 |
-| 7. Real-World Scenario Bootstrap | 0/5 | Not started | - |
+| 1. Banking Foundation | 3/3 | Complete | 2026-04-01 |
+| 2. Capital Markets | 3/3 | Complete | 2026-04-01 |
+| 3. Fiscal Policy | 5/5 | Complete | 2026-04-02 |
+| 4. Inflation Loop | 3/3 | Complete | 2026-04-02 |
+| 5. Economic Dashboard | 2/2 | Complete | 2026-04-02 |
+| 6. Scenario Entry | 4/4 | Complete | 2026-04-02 |
+| 7. Real-World Scenario Bootstrap | 5/5 | Complete | 2026-04-03 |
 
 ### Phase 7: Real-World Scenario Bootstrap — location-based data-driven society design for policymakers
 
@@ -148,14 +148,14 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
   5. Design Review shows scenario builder with tab-based UI: Baseline + N scenario tabs with inline diff markers showing parameter divergence from baseline
   6. "Run All Scenarios" creates fork sessions, starts simulations, and auto-navigates to comparison view
   7. Data confidence indicators (API/web/LLM + high/medium/low) are shown per parameter
-**Plans:** 5 plans
+**Plans:** 5/5 plans complete
 
 Plans:
-- [ ] 07-01-PLAN.md — Shared types (LocationProfile, DataPoint, ScenarioTab), World Bank API client, Photon geocoder, location cache, Gini distribution algorithm
-- [ ] 07-02-PLAN.md — Location data service orchestrator, data-to-simulation bootstrap pipeline, SSE bootstrap route, LLM prompts
-- [ ] 07-03-PLAN.md — IdeaInput dual-mode UI, LocationSearch autocomplete, bootstrap progress panel, bootstrapStore
-- [ ] 07-04-PLAN.md — ScenarioTabs component, DiffMarker, scenarioStore, DesignReview integration
-- [ ] 07-05-PLAN.md — End-to-end integration wiring, polish, human verification
+- [x] 07-01-PLAN.md — Shared types (LocationProfile, DataPoint, ScenarioTab), World Bank API client, Photon geocoder, location cache, Gini distribution algorithm
+- [x] 07-02-PLAN.md — Location data service orchestrator, data-to-simulation bootstrap pipeline, SSE bootstrap route, LLM prompts
+- [x] 07-03-PLAN.md — IdeaInput dual-mode UI, LocationSearch autocomplete, bootstrap progress panel, bootstrapStore
+- [x] 07-04-PLAN.md — ScenarioTabs component, DiffMarker, scenarioStore, DesignReview integration
+- [x] 07-05-PLAN.md — End-to-end integration wiring, polish, human verification
 
 ### Phase 8: Live Scenario Comparison — real-time overlaid economic charts during parallel simulation runs
 
@@ -166,3 +166,16 @@ Plans:
 
 Plans:
 - [ ] TBD (run /gsd:plan-phase 8 to break down)
+
+### Phase 9: Redesign Prompts for All
+
+**Goal:** Fix the agent death spiral by giving agents accurate economic knowledge and first-principles reasoning, deepen agent immersion by removing simulation-awareness and mechanical system tags, enrich agent backgrounds with 5-8 sentence life stories for differentiated emergent behavior, and restructure the monolithic prompts.ts into 7 domain-specific modules
+**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-17, D-18, D-19, D-20
+**Depends on:** Phase 8
+**Plans:** 4 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — Split prompts.ts into 7 domain modules with barrel re-export index
+- [ ] 09-02-PLAN.md — Rewrite citizen intent prompt: economic survival signals, immersion, action dictionary
+- [ ] 09-03-PLAN.md — Enrich agent roster backgrounds (5-8 sentence life stories) and align reflection prompts
+- [ ] 09-04-PLAN.md — Wire AMM market data in simulationRunner + prompt content verification tests
