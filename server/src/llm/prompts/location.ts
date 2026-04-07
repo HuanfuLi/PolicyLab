@@ -30,7 +30,7 @@ export function buildLocationAgentRosterMessages(
 You MUST respond with ONLY valid JSON (no markdown, no preamble, no code fences):
 {
   "agents": [
-    {"name": "string - culturally appropriate full name", "background": "string - 2-3 sentences describing their life, skills, and economic situation"}
+    {"name": "string - culturally appropriate full name", "background": "string - 5-8 sentence life story including: where they grew up, a formative event that shaped their worldview, their economic philosophy (do they hoard, share, trade aggressively, save cautiously?), a personal fear or ambition that drives them, and specific practical knowledge tied to their role and sector"}
   ]
 }
 
@@ -38,6 +38,8 @@ Rules:
 - Names should be culturally appropriate for ${locationProfile.countryName}
 - Backgrounds should reflect real economic conditions and the agent's sector/role
 - Each background should be unique and specific
+- Each background MUST include an economic instinct: how this person relates to money, food, and risk. Examples: 'He hoards food instinctively after a childhood famine', 'She trusts no bank after her father lost his savings', 'He invests aggressively, chasing every opportunity'
+- Backgrounds should create natural economic diversity: some agents produce, some trade, some save, some spend freely
 - Generate exactly ${agentBlueprints.length} agents in the same order as the input list`;
 
   let userContent = `Location data:\n${locationSummary}\n\nAgent roster (${agentBlueprints.length} agents):\n${agentList}`;

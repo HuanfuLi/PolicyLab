@@ -170,7 +170,7 @@ You MUST respond with ONLY valid JSON (no markdown, no preamble, no code fences)
     {
       "name": "string - culturally appropriate unique name",
       "role": "string - occupation/role in society",
-      "background": "string - 1-2 sentence background",
+      "background": "string - 5-8 sentence life story including: where they grew up, a formative event that shaped their worldview, their economic philosophy (do they hoard, share, trade aggressively, save cautiously?), a personal fear or ambition that drives them, and specific practical knowledge tied to their role (a farmer knows that producing 20 units of food costs a week of labor; a merchant knows prices rise when supply is scarce)",
       "personalityTraits": ["trait1", "trait2"],
       "initialStats": {
         "wealth": 50,
@@ -189,6 +189,8 @@ Rules:
 - Roles should reflect the society's governance and economic models
 - Stats: 'health' and 'happiness' must be integers between 0 and 100. 'wealth' is starting fiat currency (integer, typically 10-100 for initial balance). 'cortisol' is baseline stress (0-100, default 20; higher for oppressed/dangerous roles like prisoners or soldiers). 'dopamine' is baseline satisfaction (0-100, default 50; higher for privileged/creative roles, lower for exploited roles).
 - Stats should vary realistically based on role and background
+- Each background MUST include an economic instinct: how this person relates to money, food, and risk. Examples: 'He hoards food instinctively after a childhood famine', 'She trusts no bank after her father lost his savings', 'He invests aggressively, chasing every opportunity'
+- Backgrounds should create natural economic diversity: some agents produce, some trade, some save, some spend freely
 - Include a diverse mix of roles: leaders, workers, artisans, caregivers, etc.
 - personalityTraits: assign 1-2 traits from this list: risk-tolerant, risk-averse, cooperative, competitive, authoritarian, libertarian, materialistic, idealistic, impulsive, calculating, empathetic, ruthless. Choose traits that match the agent's role and background. Avoid giving opposing traits to the same agent.`;
 
