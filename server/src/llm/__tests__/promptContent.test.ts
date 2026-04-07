@@ -113,7 +113,7 @@ describe('Prompt content (Wave 2 scaffolding)', () => {
   });
 
   // D-13: Central Agent retains mechanical framing
-  it.skip('(D-13) Central Agent retains mechanical framing', () => {
+  it('(D-13) Central Agent retains mechanical framing', () => {
     const messages = buildResolutionPrompt(
       testSession,
       [testAgent],
@@ -126,7 +126,7 @@ describe('Prompt content (Wave 2 scaffolding)', () => {
   });
 
   // D-11: Rich life stories in roster
-  it.skip('(D-11) rich life stories in roster', () => {
+  it('(D-11) rich life stories in roster', () => {
     const messages = buildAgentRosterMessages(
       'A medieval farming village overview.',
       'Basic property rights.',
