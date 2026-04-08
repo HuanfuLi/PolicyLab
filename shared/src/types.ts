@@ -498,7 +498,21 @@ export interface EconomyConfig {
    * Lower values (e.g. 0.7) create sqrt-ish returns. Default: 0.7.
    */
   publicGoodsGainDiminishing?: number;
+
+  // ── Enterprise tuning (Phase 10) ──────────────────────────────────────
+  /** Minimum wage floor for enterprise workers. Default: 5. */
+  minimumWage?: number;
+  /** Consecutive deficit iterations before enterprise bankruptcy. Default: 3. */
+  enterpriseInsolvencyThreshold?: number;
+  /** Food units produced by idle agents as subsistence fallback. Default: 5. */
+  idleFallbackProduction?: number;
+  /** Consecutive idle iterations before forced subsistence production. Default: 2. */
+  idleFallbackThreshold?: number;
 }
+
+// ── Enterprise Types (Phase 10) ─────────────────────────────────────────
+export type EnterpriseSector = 'agriculture' | 'industry' | 'services' | 'government';
+export type EnterpriseCommodity = 'food' | 'tools' | 'raw_materials' | 'luxury_goods' | 'none';
 
 export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   bankingEnabled: true,
