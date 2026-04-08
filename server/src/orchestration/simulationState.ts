@@ -84,6 +84,9 @@ export const sessionEnterpriseInsolvency = new Map<string, Map<string, number>>(
 /** Per-agent consecutive idle iterations counter (per D-09). Reset on WORK/PRODUCE action. */
 export const sessionAgentIdleCounter = new Map<string, Map<string, number>>();
 
+/** Per-enterprise previous wage costs for cost pass-through calculation (per D-07). */
+export const sessionPreviousWageCosts = new Map<string, Map<string, number>>();
+
 // ── Trace Helper ────────────────────────────────────────────────────────────
 
 const MAX_TRACE_SIZE = 50_000; // 50 KB cap per session to prevent unbounded growth
@@ -150,4 +153,5 @@ export function cleanupSessionState(sessionId: string): void {
   sessionEmploymentRegistry.delete(sessionId);
   sessionEnterpriseInsolvency.delete(sessionId);
   sessionAgentIdleCounter.delete(sessionId);
+  sessionPreviousWageCosts.delete(sessionId);
 }

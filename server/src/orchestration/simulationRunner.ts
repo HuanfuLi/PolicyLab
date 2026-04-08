@@ -198,8 +198,21 @@ import {
   sessionLastPhysicsTraces, sessionFiscalMultipliers,
   appendTrace,
   getEnterpriseRegistry, getEmploymentRegistry,
+  getEnterpriseInsolvency, getAgentIdleCounter,
+  sessionPreviousWageCosts,
   cleanupSessionState,
 } from './simulationState.js';
+// Enterprise Engine imports (Phase 10)
+import {
+  processEnterpriseWages,
+  processEnterpriseInsolvency,
+  processIdleFallback,
+  processEnterpriseProduction,
+  processEnterpriseCostPassThrough,
+  type EnterpriseInput,
+  type ProductionInput,
+} from '../mechanics/enterpriseEngine.js';
+import * as enterpriseRepo from '../db/repos/enterpriseRepo.js';
 
 /** Per-enterprise ledger: tracks revenue from labor sales vs. wage obligations this iteration. */
 interface EnterpriseLedger {
@@ -1231,6 +1244,44 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               defenseQuality: currentPublicGoods.defenseQuality,
               welfareQuality: currentPublicGoods.welfareQuality,
             }, economyConfig));
+          }
+        }
+      }
+    }
+
+    // ── Enterprise Bootstrap (Phase 10) ─────────────────────────────────────
+    // On first iteration, load enterprise blueprints from session config and
+    // populate the enterprise registry + create deposit accounts for each.
+    {
+      const entConfig = getEconomyConfig(session.config as Record<string, unknown> | null);
+      const existingRegistry = getEnterpriseRegistry(sessionId);
+      if (existingRegistry.size === 0 && entConfig.bankingEnabled) {
+        const blueprints = enterpriseRepo.getEnterprises(sessionId);
+        const bankAgent = agents.find(a => a.type === 'bank' && a.isAlive);
+        for (const bp of blueprints) {
+          existingRegistry.set(bp.id, {
+            id: bp.id,
+            ownerId: bp.ownerId,
+            ownerName: agents.find(a => a.id === bp.ownerId)?.name ?? 'Unknown',
+            industry: bp.industry,
+            employees: new Set(bp.employees),
+            applicants: new Set(),
+            wage: bp.wage,
+            minSkill: 0,
+          });
+          // Create enterprise deposit account with initial capital (D-24)
+          if (bankAgent) {
+            const entDepositId = `ent_${bp.id}`;
+            bankingRepo.upsertDeposit({
+              id: entDepositId,
+              sessionId,
+              ownerAgentId: entDepositId,
+              bankAgentId: bankAgent.id,
+              accountType: 'demand',
+              balance: bp.initialCapital,
+              interestRate: entConfig.depositInterestRate ?? 0.002,
+              lastUpdated: 0,
+            });
           }
         }
       }
@@ -3231,6 +3282,190 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         // Append fiscal traces to physics trace log
         if (fiscalDelta.trace.length > 0) {
           appendTrace(sessionId, fiscalDelta.trace.join('\n'));
+        }
+      }
+
+      // ── Enterprise Economics (Phase 10) ─────────────────────────────────────
+      // Runs after fiscal tick. Processes enterprise wages (deposit-based payroll),
+      // insolvency checks, idle agent fallback, production-to-AMM, and cost pass-through.
+      let totalLiquidityInjected = 0;
+      if (economyConfig.bankingEnabled) {
+        const entRegistry = getEnterpriseRegistry(sessionId);
+        const insolvencyCounters = getEnterpriseInsolvency(sessionId);
+        const idleCounters = getAgentIdleCounter(sessionId);
+        const bankAgent = agents.find(a => a.type === 'bank' && a.isAlive);
+
+        if (entRegistry.size > 0) {
+          // 1. Collect which agents did WORK this iteration from weekStateMap
+          const workedAgents = new Set<string>();
+          for (const [agentId, weekState] of weekStateMap.entries()) {
+            if (weekState.workedEnterpriseId !== null) {
+              workedAgents.add(agentId);
+            }
+          }
+
+          // 2. Build EnterpriseInput array from registry with treasury from deposit accounts
+          const enterpriseInputs: EnterpriseInput[] = [...entRegistry.values()].map(ent => {
+            const entDepositId = `ent_${ent.id}`;
+            const deposit = bankingRepo.getDeposit(entDepositId, bankAgent?.id ?? '');
+            return {
+              id: ent.id,
+              ownerId: ent.ownerId,
+              wage: ent.wage,
+              employees: ent.employees,
+              treasury: deposit?.balance ?? 0,
+            };
+          });
+
+          // 3. Enterprise wage processing
+          const wageDelta = processEnterpriseWages({
+            enterprises: enterpriseInputs,
+            workedAgents,
+            config: economyConfig,
+            insolvencyCounters,
+          });
+
+          // 4. Apply wage payments via deposit-to-deposit bank transfer
+          for (const payment of wageDelta.wagePayments) {
+            const entDepositId = `ent_${payment.fromEnterprise}`;
+            if (bankAgent) {
+              // Debit enterprise deposit
+              const entDeposit = bankingRepo.getDeposit(entDepositId, bankAgent.id);
+              if (entDeposit) {
+                bankingRepo.updateDepositBalance(entDeposit.id, entDeposit.balance - payment.amount, iterNum);
+              }
+              // Credit employee deposit (or wealth if no deposit)
+              const empDeposit = bankingRepo.getDeposit(payment.toAgentId, bankAgent.id);
+              if (empDeposit) {
+                bankingRepo.updateDepositBalance(empDeposit.id, empDeposit.balance + payment.amount, iterNum);
+              } else {
+                // Direct wealth transfer if employee has no deposit account
+                const agentUpdate = statUpdates.find(u => u.id === payment.toAgentId);
+                if (agentUpdate) agentUpdate.wealth += payment.amount;
+              }
+            }
+          }
+
+          // 5. Insolvency check
+          // Update counters from wage delta first
+          for (const update of wageDelta.insolvencyUpdates) {
+            insolvencyCounters.set(update.enterpriseId, update.consecutiveDeficits);
+          }
+          const insolvencyDelta = processEnterpriseInsolvency({
+            insolvencyCounters,
+            enterprises: enterpriseInputs,
+            config: economyConfig,
+          });
+          // Remove bankrupt enterprises from registry, update DB
+          for (const update of insolvencyDelta.insolvencyUpdates) {
+            if (update.isBankrupt) {
+              entRegistry.delete(update.enterpriseId);
+              enterpriseRepo.updateEnterpriseInsolvencyAsync(update.enterpriseId, update.consecutiveDeficits, true);
+            } else {
+              enterpriseRepo.updateEnterpriseInsolvencyAsync(update.enterpriseId, update.consecutiveDeficits, false);
+            }
+          }
+
+          // 6. Idle agent fallback
+          const agentActionMap = new Map<string, string[]>();
+          for (const [agentId, actionRow] of actionRowByAgentId.entries()) {
+            agentActionMap.set(agentId, [actionRow.action as string]);
+          }
+          const idleDelta = processIdleFallback({
+            idleCounters,
+            agentActions: agentActionMap,
+            config: economyConfig,
+          });
+          // Apply forced food production to idle agents
+          for (const prod of idleDelta.idleFallbackProduction) {
+            const agentUpdate = statUpdates.find(u => u.id === prod.agentId);
+            if (agentUpdate) {
+              // Add food to agent inventory via economy state
+              const econState = agentEconomyMap.get(prod.agentId);
+              if (econState) {
+                const updatedInventory = { ...econState.inventory } as Record<string, { quantity: number; quality?: number }>;
+                const currentFood = updatedInventory.food?.quantity ?? 0;
+                updatedInventory.food = { quantity: currentFood + prod.quantity, quality: updatedInventory.food?.quality ?? 100 };
+                agentEconomyMap.set(prod.agentId, { ...econState, inventory: updatedInventory as Inventory });
+              }
+            }
+          }
+
+          // 7. Enterprise production -> AMM sells
+          const productionInputs: ProductionInput[] = [...entRegistry.values()].map(ent => ({
+            id: ent.id,
+            sector: (ent.industry === 'agriculture' ? 'agriculture'
+              : ent.industry === 'services' ? 'services'
+              : ent.industry === 'government' ? 'government'
+              : 'industry') as import('@policylab/shared').EnterpriseSector,
+            productionQuantity: [...ent.employees].filter(id => workedAgents.has(id)).length,
+          }));
+          const productionDelta = processEnterpriseProduction({ enterprises: productionInputs });
+          // Execute AMM sells for production output (inject goods into AMM reserves)
+          for (const output of productionDelta.productionOutput) {
+            if (output.commodity === 'food') {
+              const sessionAMM = sessionAMMRegistry.get(sessionId);
+              if (sessionAMM && output.quantity > 0) {
+                sessionAMM.injectGoodsReserve(output.quantity);
+              }
+            } else if (output.commodity !== 'none') {
+              const multiAMMs = sessionMultiAMMRegistry.get(sessionId);
+              const pool = multiAMMs?.get(output.commodity as MultiAMMItemType);
+              if (pool && output.quantity > 0) {
+                pool.injectGoodsReserve(output.quantity);
+              }
+            }
+          }
+
+          // 8. Cost pass-through
+          const currentWageCosts = new Map<string, number>();
+          for (const payment of wageDelta.wagePayments) {
+            currentWageCosts.set(payment.fromEnterprise,
+              (currentWageCosts.get(payment.fromEnterprise) ?? 0) + payment.amount);
+          }
+          const prevWageCosts = sessionPreviousWageCosts.get(sessionId) ?? new Map();
+          processEnterpriseCostPassThrough({
+            currentWageCosts,
+            previousWageCosts: prevWageCosts,
+          });
+          // Store for next iteration
+          sessionPreviousWageCosts.set(sessionId, currentWageCosts);
+
+          // Append enterprise traces to physics trace log
+          const allEnterpriseTraces = [
+            ...wageDelta.trace,
+            ...insolvencyDelta.trace,
+            ...idleDelta.trace,
+            ...productionDelta.trace,
+          ];
+          if (allEnterpriseTraces.length > 0) {
+            appendTrace(sessionId, allEnterpriseTraces.join('\n'));
+          }
+        }
+
+        // 9. Central bank liquidity injection
+        if (bankAgent) {
+          const totalDeposits = bankingRepo.getTotalDeposits(sessionId);
+          const liqResult = bankingEngine.processLiquidityInjection({
+            bankReserves: bankAgent.currentStats.wealth,
+            totalDeposits,
+            config: economyConfig,
+          });
+          if (liqResult.injectionAmount > 0) {
+            // Inject fiat into bank reserves (M0 increase)
+            const bankUpdate = statUpdates.find(u => u.id === bankAgent.id);
+            if (bankUpdate) bankUpdate.wealth += liqResult.injectionAmount;
+            totalLiquidityInjected += liqResult.injectionAmount;
+            appendTrace(sessionId, liqResult.trace.join('\n'));
+          }
+        }
+      }
+
+      // SFC audit adjustment for liquidity injection M0 increase
+      if (totalLiquidityInjected > 0) {
+        const sfcEntry = sessionSFCTracking.get(sessionId);
+        if (sfcEntry) {
+          sfcEntry.initialFiat += totalLiquidityInjected;
         }
       }
 

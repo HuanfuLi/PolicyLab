@@ -207,6 +207,5 @@ describe('processEnterpriseCostPassThrough', () => {
     });
 
     expect(result.costPassThroughMarkup.get('ent1')).toBeCloseTo(1.0);
->>>>>>> worktree-agent-a14b9841
   });
 });
