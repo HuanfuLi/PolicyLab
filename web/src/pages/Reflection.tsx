@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { FileText, ArrowRight, TrendingDown, TrendingUp, Minus, Loader2, AlertCircle, CheckCircle, ChevronDown, ChevronUp, BarChart2, SkipForward, RotateCcw } from 'lucide-react';
 import { useReflectionStore } from '../stores/reflectionStore';
 import { useSimulationStore } from '../stores/simulationStore';
@@ -25,15 +25,24 @@ function StatDelta({ initial, final }: { initial: number; final: number }) {
   );
 }
 
+const SCENARIO_COLORS = ['var(--chart-blue)', 'var(--chart-orange)', 'var(--chart-green)', 'var(--chart-violet)'];
+
 const Reflection = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const sseCleanupRef = useRef<(() => void) | null>(null);
+
+  // Multi-scenario support
+  const scenarioIds = useMemo(() => searchParams.get('scenarios')?.split(',').filter(Boolean) ?? [], [searchParams]);
+  const isMultiScenario = scenarioIds.length > 1;
 
   const {
     isRunning, isComplete, currentPass, completedCount, totalAgents, isEvaluating,
     agentReflections, evaluation, error,
     agents, loadAgents, loadReflections, startReflection, connectSSE, reset,
+    scenarioReflections, crossScenarioNarrative, isLoadingCrossScenario,
+    loadScenarioReflections, loadCrossScenarioNarrative,
   } = useReflectionStore();
 
   const { session, loadSession } = useSessionDetailStore();
@@ -61,6 +70,13 @@ const Reflection = () => {
     loadReflections(id);
     loadSocietyStats(id);
   }, [id]);
+
+  // Multi-scenario: load reflections from all scenarios
+  useEffect(() => {
+    if (!isMultiScenario) return;
+    loadScenarioReflections(scenarioIds);
+    loadCrossScenarioNarrative(scenarioIds);
+  }, [isMultiScenario, scenarioIds.join(',')]);
 
   const loadSocietyStats = async (sessionId: string) => {
     try {
@@ -231,7 +247,156 @@ const Reflection = () => {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '1.5rem', flex: 1, overflow: 'hidden' }}>
+      {/* Multi-scenario cross-scenario view */}
+      {isMultiScenario && (
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {/* Cross-Scenario Summary Data Table */}
+          <div className="glass-panel" style={{ padding: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.25rem', color: 'var(--color-bright)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <BarChart2 size={20} style={{ color: 'var(--primary)' }} /> Cross-Scenario Comparison
+            </h2>
+            {Object.keys(scenarioReflections).length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--glass-border)' }}>
+                      <th style={{ textAlign: 'left', padding: '0.5rem 1rem', color: 'var(--text-dim)', fontWeight: 700, fontSize: '0.8rem', textTransform: 'uppercase' }}>Metric</th>
+                      {scenarioIds.map((sid, idx) => {
+                        const scen = scenarioReflections[sid];
+                        return (
+                          <th key={sid} style={{ textAlign: 'center', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.8rem', color: SCENARIO_COLORS[idx % SCENARIO_COLORS.length] }}>
+                            {scen?.label ?? `Scenario ${idx + 1}`}
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { label: 'Avg Wealth', key: 'avgWealth' as const },
+                      { label: 'Avg Health', key: 'avgHealth' as const },
+                      { label: 'Avg Happiness', key: 'avgHappiness' as const },
+                      { label: 'Survivors', key: 'aliveCount' as const },
+                      { label: 'Final CPI', key: 'finalCPI' as const },
+                      { label: 'Final M1', key: 'finalM1' as const },
+                    ].map(({ label, key }) => (
+                      <tr key={key} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                        <td style={{ padding: '0.5rem 1rem', color: 'var(--text-muted)' }}>{label}</td>
+                        {scenarioIds.map((sid, idx) => {
+                          const stats = scenarioReflections[sid]?.stats;
+                          const val = stats ? stats[key] : null;
+                          return (
+                            <td key={sid} style={{ textAlign: 'center', padding: '0.5rem 1rem', color: SCENARIO_COLORS[idx % SCENARIO_COLORS.length], fontWeight: 700 }}>
+                              {val != null ? (key === 'finalCPI' ? val.toFixed(2) : key === 'finalM1' ? Math.round(val).toLocaleString() : key === 'aliveCount' ? `${val}/${stats?.totalAgents ?? '?'}` : val) : '--'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dim)' }}>
+                <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', display: 'inline-block', marginRight: '0.5rem' }} />
+                Loading scenario data...
+              </div>
+            )}
+          </div>
+
+          {/* Cross-Scenario Narrative */}
+          <div className="glass-panel" style={{ padding: '1.5rem' }}>
+            <h3 style={{ color: 'var(--color-bright)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <FileText size={18} style={{ color: 'var(--primary)' }} /> Cross-Scenario Analysis
+            </h3>
+            {isLoadingCrossScenario ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dim)' }}>
+                <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', display: 'inline-block', marginRight: '0.5rem' }} />
+                Generating cross-scenario narrative...
+              </div>
+            ) : crossScenarioNarrative ? (
+              <div style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                <MarkdownText>{crossScenarioNarrative}</MarkdownText>
+              </div>
+            ) : (
+              <p style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>Narrative will appear after scenario data loads.</p>
+            )}
+          </div>
+
+          {/* Per-Agent Cross-Scenario Comparison */}
+          <div className="glass-panel" style={{ padding: '1.5rem' }}>
+            <h3 style={{ color: 'var(--color-bright)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              Agent Reflections Across Scenarios
+            </h3>
+            {(() => {
+              // Build agent name -> {scenarioId -> reflection} map
+              const agentMap = new Map<string, { name: string; role: string; entries: Array<{ sid: string; label: string; color: string; pass1: string; pass2: string | null }> }>();
+              scenarioIds.forEach((sid, idx) => {
+                const scen = scenarioReflections[sid];
+                if (!scen) return;
+                // We need agent names - try to find from our loaded agents or use id
+                for (const [agentId, refl] of Object.entries(scen.agentReflections)) {
+                  const existing = agentMap.get(agentId);
+                  const agent = agents.find(a => a.id === agentId);
+                  const name = agent?.name ?? agentId.slice(0, 8);
+                  const role = agent?.role ?? '';
+                  if (existing) {
+                    existing.entries.push({
+                      sid, label: scen.label, color: SCENARIO_COLORS[idx % SCENARIO_COLORS.length],
+                      pass1: refl.pass1, pass2: refl.pass2,
+                    });
+                  } else {
+                    agentMap.set(agentId, {
+                      name, role,
+                      entries: [{
+                        sid, label: scen.label, color: SCENARIO_COLORS[idx % SCENARIO_COLORS.length],
+                        pass1: refl.pass1, pass2: refl.pass2,
+                      }],
+                    });
+                  }
+                }
+              });
+
+              if (agentMap.size === 0) {
+                return (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dim)' }}>
+                    Agent reflections will appear when all scenarios have completed reflection...
+                  </div>
+                );
+              }
+
+              return Array.from(agentMap.entries()).map(([agentId, data]) => (
+                <div key={agentId} style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--panel-alpha-02)', border: '1px solid var(--glass-border)', borderRadius: '12px' }}>
+                  <div style={{ color: 'var(--color-bright)', fontWeight: 'bold', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {data.name}
+                    {data.role && <span className="badge badge-neutral" style={{ fontWeight: 'normal' }}>{data.role}</span>}
+                  </div>
+                  {data.entries.map((entry) => (
+                    <div key={entry.sid} style={{ marginBottom: '0.5rem', paddingLeft: '1rem', borderLeft: `4px solid ${entry.color}` }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: entry.color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {entry.label}
+                      </span>
+                      {entry.pass1 && (
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.3rem', fontStyle: 'italic' }}>
+                          "{entry.pass1}"
+                        </p>
+                      )}
+                      {entry.pass2 && (
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.2rem', fontStyle: 'italic', opacity: 0.8 }}>
+                          After full picture: "{entry.pass2}"
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ));
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Single-scenario: original two-panel layout */}
+      {!isMultiScenario && <div style={{ display: 'flex', gap: '1.5rem', flex: 1, overflow: 'hidden' }}>
 
         {/* Left Panel: Society Evaluation Report */}
         <div className="glass-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -445,7 +610,7 @@ const Reflection = () => {
             ))}
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 };
