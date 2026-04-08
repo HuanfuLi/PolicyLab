@@ -35,6 +35,8 @@ export interface Session {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  groupId: string | null;
+  scenarioLabel: string | null;
 }
 
 export interface SessionMetadata {
@@ -47,6 +49,8 @@ export interface SessionMetadata {
   completedIterations: number;
   createdAt: string;
   updatedAt: string;
+  groupId: string | null;
+  scenarioLabel: string | null;
 }
 
 export interface AgentStats {

@@ -38,6 +38,8 @@ router.get('/', async (_req, res) => {
       completedIterations: Number(row.completedIterations ?? 0),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      groupId: null,
+      scenarioLabel: null,
     }));
 
     res.json(result);

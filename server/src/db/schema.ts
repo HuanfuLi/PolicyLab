@@ -13,6 +13,8 @@ export const sessions = sqliteTable('sessions', {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
   completedAt: text('completed_at'),
+  groupId: text('group_id'),
+  scenarioLabel: text('scenario_label'),
 });
 
 export const agents = sqliteTable('agents', {

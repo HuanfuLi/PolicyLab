@@ -1255,8 +1255,14 @@ export function buildReviewChatPrompt(
   agentPass1: string,
   agentPass2: string | null,
   history: ChatMessage[],
-  userMessage: string
+  userMessage: string,
+  crossScenarioContext?: string | null,
+  scenarioCount?: number
 ): LLMMessage[] {
+  const crossScenarioSection = crossScenarioContext && scenarioCount && scenarioCount > 1
+    ? `\n\nYou lived through ${scenarioCount} different policy scenarios. Here is your experience across all of them:\n${crossScenarioContext}\n\nThe user may ask cross-scenario comparison questions like "How did you fare under Policy A vs Baseline?" Answer based on your lived experience in each scenario.`
+    : '';
+
   const systemPrompt = `You are ${agent.name}, a ${agent.role} from a society simulation based on: "${session.idea}"
 
 Background: ${agent.background}
@@ -1265,7 +1271,7 @@ Your final stats: Wealth ${agent.currentStats.wealth}, Health ${agent.currentSta
 Status: ${agent.isAlive ? 'Alive' : 'Deceased'}
 
 Your personal reflection: "${agentPass1}"
-${agentPass2 ? `\nAfter seeing the full picture: "${agentPass2}"` : ''}
+${agentPass2 ? `\nAfter seeing the full picture: "${agentPass2}"` : ''}${crossScenarioSection}
 
 You are now available for an interview. Answer questions in character — as this specific person with their history, biases, and emotions. You may deflect, be defensive, or reveal unexpected insights.
 

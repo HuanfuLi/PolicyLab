@@ -62,6 +62,8 @@ router.get('/:id/export', async (req, res) => {
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       completedAt: session.completedAt ?? null,
+      groupId: session.groupId ?? null,
+      scenarioLabel: session.scenarioLabel ?? null,
     },
     agents: agentRows.map(a => ({
       id: a.id,
