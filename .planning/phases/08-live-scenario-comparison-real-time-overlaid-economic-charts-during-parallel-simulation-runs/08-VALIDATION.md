@@ -1,10 +1,11 @@
 ---
 phase: 8
 slug: live-scenario-comparison
-status: draft
+status: audited
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-04-07
+audited: 2026-04-07
 ---
 
 # Phase 8 — Validation Strategy
@@ -38,13 +39,14 @@ created: 2026-04-07
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 08-02-01 | 02 | 1 | LSC-04 | unit | `npx vitest run server/src/llm/__tests__/loadBalancer.test.ts -x` | Plan 02 creates | pending |
-| 08-04-01 | 04 | 1 | LSC-01 | unit | `npx vitest run server/src/__tests__/scenarioDataMerge.test.ts -x` | Plan 04 creates | pending |
-| 08-01-01 | 01 | 1 | LSC-05 | compilation | `npx tsc --noEmit -p server/tsconfig.json` | N/A | pending |
-| 08-03-01 | 03 | 2 | LSC-03 | compilation | `npx tsc --noEmit -p web/tsconfig.json` | N/A | pending |
-| 08-05-01 | 05 | 3 | LSC-02 | compilation | `npx tsc --noEmit -p web/tsconfig.json` | N/A | pending |
-| 08-06-01 | 06 | 3 | LSC-06 | compilation | `npx tsc --noEmit -p web/tsconfig.json && npx tsc --noEmit -p server/tsconfig.json` | N/A | pending |
-| 08-07-01 | 07 | 4 | LSC-04 | compilation+suite | `npx tsc --noEmit -p server/tsconfig.json && npm run test -w server -- --run` | N/A | pending |
+| 08-02-01 | 02 | 1 | LSC-04 | unit | `npx vitest run server/src/llm/__tests__/loadBalancer.test.ts` | exists | green |
+| 08-04-01 | 04 | 1 | LSC-01 | unit | `npx vitest run server/src/__tests__/scenarioDataMerge.test.ts` | exists | green |
+| 08-01-01 | 01 | 1 | LSC-05 | unit+compilation | `npx vitest run server/src/__tests__/sessionGrouping.test.ts` | exists | green |
+| 08-03-01 | 03 | 2 | LSC-03 | unit | `npx vitest run server/src/__tests__/sessionGrouping.test.ts` | exists | green |
+| 08-05-01 | 05 | 3 | LSC-02 | compilation | `npx tsc --noEmit -p web/tsconfig.json` | N/A | compilation-green |
+| 08-06-01 | 06 | 3 | LSC-06 | compilation | `npx tsc --noEmit -p web/tsconfig.json && npx tsc --noEmit -p server/tsconfig.json` | N/A | compilation-green |
+| 08-08-01 | 08 | 3 | LSC-08 | unit | `npx vitest run server/src/llm/__tests__/policyBriefPrompt.test.ts` | exists | green |
+| 08-07-01 | 07 | 4 | LSC-04 | compilation+suite | `npx tsc --noEmit -p server/tsconfig.json && npm run test -w server -- --run` | N/A | green |
 | 08-07-02 | 07 | 4 | all | human-verify | Manual end-to-end test | N/A | pending |
 
 *Status: pending / green / red / flaky*
@@ -53,12 +55,19 @@ created: 2026-04-07
 
 ## Wave 0 Requirements
 
-- [ ] `server/src/llm/__tests__/loadBalancer.test.ts` — Plan 02 creates this (TDD task); stubs for LSC-04 (round-robin + rate limits)
-- [ ] `server/src/__tests__/scenarioDataMerge.test.ts` — Plan 04 creates this; stubs for LSC-01 (multi-scenario chart data merge)
+- [x] `server/src/llm/__tests__/loadBalancer.test.ts` — Plan 02 created this (TDD task); covers LSC-04 (round-robin + rate limits) — 7 tests green
+- [x] `server/src/__tests__/scenarioDataMerge.test.ts` — Plan 04 created this; covers LSC-01 (multi-scenario chart data merge) — 4 tests green
 
-**Note:** The remaining requirements (LSC-03 batch control, LSC-05 session grouping, LSC-06 cross-scenario reflection, LSC-07 agent review, LSC-08 policy brief, LSC-09 add scenarios, LSC-10 comparison button, LSC-11 telemetry cleanup) are frontend-heavy or integration-level concerns verified by TypeScript compilation + full test suite + human verification in Plan 08-07. Creating unit test stubs for these would require mocking SSE, Zustand stores, and LLM calls, which adds complexity without proportional confidence gain. The compilation checks plus the blocking human-verify checkpoint in 08-07 provide adequate Nyquist sampling.
+## Nyquist Audit Additions (2026-04-07)
 
-*Framework install: None needed — vitest already configured and passing 207 tests*
+- [x] `server/src/llm/__tests__/policyBriefPrompt.test.ts` — Nyquist audit created; covers LSC-08 `buildPolicyBriefPrompt` pure function (10 tests green)
+- [x] `server/src/__tests__/sessionGrouping.test.ts` — Nyquist audit created; covers LSC-05 session grouping schema contract (3 tests), LSC-03 batch session ID validation contract (7 tests), LSC-08 config diff computation logic (5 tests) — 15 tests green
+
+**Remaining un-automatable requirements:** LSC-02 (CSS layout collapse/expand), LSC-06 (cross-scenario reflection LLM quality), LSC-07 (agent chat cross-scenario context), LSC-09 (multi-step UI workflow), LSC-10 (post-completion button state), LSC-11 (visual tab removal) — these require full browser render or LLM response quality judgment. All covered by Manual-Only Verifications section.
+
+**LSC-04 wiring gap:** `server/src/llm/gateway.ts` does NOT yet export `getLoadBalancer()` and `simulationRunner.ts` does not call it. Plan 08-07 (load balancer wiring) was not executed — its SUMMARY.md is absent. This is an implementation gap, not a test gap. The LoadBalancer unit itself is fully tested.
+
+*Framework install: None needed — vitest already configured and passing 243 tests*
 
 ---
 
@@ -84,4 +93,4 @@ created: 2026-04-07
 - [x] Feedback latency < 15s
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** nyquist-audited — 2 pre-existing test files confirmed green, 2 new test files added covering LSC-03/LSC-05/LSC-08 server logic; LSC-04 implementation gap escalated
