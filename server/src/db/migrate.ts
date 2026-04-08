@@ -367,5 +367,26 @@ export function runMigrations() {
       ON public_goods_state(session_id, iteration_number);
   `);
 
+  // Enterprise persistence (Phase 10): enterprise entities per session
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS enterprises (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      sector TEXT NOT NULL,
+      industry TEXT NOT NULL,
+      commodity_output TEXT NOT NULL,
+      initial_capital REAL NOT NULL,
+      wage REAL NOT NULL,
+      is_service_enterprise INTEGER NOT NULL DEFAULT 0,
+      consecutive_insolvency_iterations INTEGER NOT NULL DEFAULT 0,
+      is_bankrupt INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_enterprises_session ON enterprises(session_id);
+  `);
+
   console.log('Database migrations applied.');
 }

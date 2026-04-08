@@ -25,14 +25,28 @@ export class GeminiProvider implements LLMProvider {
 
     async chat(messages: LLMMessage[], options: LLMOptions = {}): Promise<string> {
         try {
-            const response = await this.client.chat.completions.create({
+            const params: Record<string, unknown> = {
                 model: options.model ?? this.defaultModel,
                 max_tokens: options.maxTokens ?? 16384,
                 messages: messages.map(m => ({
                     role: m.role as any,
                     content: typeof m.content === 'string' ? m.content : m.content.map(b => b.text).join('\n'),
                 })),
-            });
+            };
+
+            // Structured output via Gemini's OpenAI-compatible JSON schema
+            if (options.jsonSchema) {
+                params.response_format = {
+                    type: 'json_schema',
+                    json_schema: {
+                        name: options.jsonSchema.name,
+                        strict: true,
+                        schema: options.jsonSchema.schema,
+                    },
+                };
+            }
+
+            const response = await this.client.chat.completions.create(params as any);
 
             const content = response.choices[0]?.message?.content ?? '';
             if (response.choices[0]?.finish_reason === 'length') {

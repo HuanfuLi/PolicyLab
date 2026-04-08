@@ -49,13 +49,21 @@ export class VertexProvider implements LLMProvider {
             });
         }
 
+        const generationConfig: Record<string, unknown> = {
+            maxOutputTokens: options.maxTokens ?? 16384,
+            temperature: options.temperature,
+        };
+
+        // Structured output: constrain Vertex to produce valid JSON
+        if (options.jsonSchema) {
+            generationConfig.responseMimeType = 'application/json';
+            generationConfig.responseSchema = options.jsonSchema.schema;
+        }
+
         return {
             contents: mappedContents,
             systemInstruction,
-            generationConfig: {
-                maxOutputTokens: options.maxTokens ?? 16384,
-                temperature: options.temperature,
-            }
+            generationConfig,
         };
     }
 

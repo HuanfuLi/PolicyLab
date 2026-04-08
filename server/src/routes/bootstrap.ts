@@ -167,9 +167,24 @@ router.post('/:id/bootstrap', async (req, res) => {
       const provider = getProvider();
       const govRaw = await withRetry(() =>
         provider.chat([
-          { role: 'system', content: 'You are a political analyst. Respond with ONLY valid JSON: {"governmentType": "string", "keyRegulations": "string", "propertyRights": "string"}' },
+          { role: 'system', content: 'You are a political analyst. Describe the government type, key economic regulations, and property rights system.' },
           { role: 'user', content: `Briefly describe the government type, key economic regulations, and property rights system for ${location} (${countryCode}). Be factual and concise.` },
-        ], { maxTokens: 1024 }),
+        ], {
+          maxTokens: 1024,
+          jsonSchema: {
+            name: 'governance_analysis',
+            schema: {
+              type: 'object',
+              properties: {
+                governmentType: { type: 'string' },
+                keyRegulations: { type: 'string' },
+                propertyRights: { type: 'string' },
+              },
+              required: ['governmentType', 'keyRegulations', 'propertyRights'],
+              additionalProperties: false,
+            },
+          },
+        }),
       );
       const govData = parseJSON<{ governmentType: string; keyRegulations: string; propertyRights: string }>(govRaw);
       profile.governance = {
@@ -189,9 +204,22 @@ router.post('/:id/bootstrap', async (req, res) => {
       const provider = getProvider();
       const infraRaw = await withRetry(() =>
         provider.chat([
-          { role: 'system', content: 'You are an infrastructure analyst. Respond with ONLY valid JSON: {"summary": "string"}' },
+          { role: 'system', content: 'You are an infrastructure analyst. Describe the infrastructure state.' },
           { role: 'user', content: `Briefly describe the infrastructure state for ${location} (${countryCode}): transportation, energy, communications. Be factual and concise.` },
-        ], { maxTokens: 1024 }),
+        ], {
+          maxTokens: 1024,
+          jsonSchema: {
+            name: 'infrastructure_analysis',
+            schema: {
+              type: 'object',
+              properties: {
+                summary: { type: 'string' },
+              },
+              required: ['summary'],
+              additionalProperties: false,
+            },
+          },
+        }),
       );
       const infraData = parseJSON<{ summary: string }>(infraRaw);
       profile.infrastructure = {
@@ -240,13 +268,37 @@ router.post('/:id/bootstrap', async (req, res) => {
     const baseFiat = Math.max(20, Math.min(500, Math.round(gdpPerCapita / 100)));
     const blueprints = generateAgentRoster(profile, clampedAgentCount, baseFiat);
 
-    // 5d: Generate agent backgrounds via LLM (batch call)
+    // 5d: Generate agent backgrounds via LLM (structured output)
     try {
       const provider = getProvider();
       const rosterRaw = await withRetry(() =>
         provider.chat(
           buildLocationAgentRosterMessages(profile, blueprints, scenario),
-          { maxTokens: 16384 },
+          {
+            maxTokens: 16384,
+            jsonSchema: {
+              name: 'agent_roster',
+              schema: {
+                type: 'object',
+                properties: {
+                  agents: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        name: { type: 'string', description: 'Culturally appropriate full name' },
+                        background: { type: 'string', description: '5-8 sentence life story with economic instinct' },
+                      },
+                      required: ['name', 'background'],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ['agents'],
+                additionalProperties: false,
+              },
+            },
+          },
         ),
       );
       const rosterData = parseJSON<{
@@ -296,7 +348,7 @@ router.post('/:id/bootstrap', async (req, res) => {
       const provider = getProvider();
       const overviewRaw = await withRetry(() =>
         provider.chat([
-          { role: 'system', content: 'You are a policy analyst. Respond with ONLY valid JSON: {"title": "string", "overview": "string"}' },
+          { role: 'system', content: 'You are a policy analyst. Write a simulation title and 3-paragraph overview.' },
           { role: 'user', content: `Write a 3-paragraph overview for a policy simulation based on ${location} (${countryCode}).
 
 Real-world data:
@@ -309,7 +361,21 @@ Real-world data:
 ${scenario ? `\nPolicy scenario to explore: ${scenario}` : ''}
 
 The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "Detroit Economic Recovery Model"). The overview should describe the economic context, key challenges, and what this simulation will explore. Use real numbers from the data above.` },
-        ], { maxTokens: 2048 }),
+        ], {
+          maxTokens: 2048,
+          jsonSchema: {
+            name: 'society_overview',
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                overview: { type: 'string' },
+              },
+              required: ['title', 'overview'],
+              additionalProperties: false,
+            },
+          },
+        }),
       );
       const overviewData = parseJSON<{ title: string; overview: string }>(overviewRaw);
       societyTitle = overviewData.title || location;
