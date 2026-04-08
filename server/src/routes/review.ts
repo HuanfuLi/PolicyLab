@@ -22,11 +22,7 @@ const router = Router({ mergeParams: true });
 // POST /:agentId/chat
 router.post('/:agentId/chat', async (req, res) => {
   const { id, agentId } = req.params as { id: string; agentId: string };
-  const { message, crossScenarioContext, scenarioCount } = req.body as {
-    message?: string;
-    crossScenarioContext?: string;
-    scenarioCount?: number;
-  };
+  const { message } = req.body as { message?: string };
   const maxLength = readSettings().maxMessageLength ?? 64000;
 
   if (!message || message.trim().length === 0 || message.length > maxLength) {
@@ -97,9 +93,7 @@ router.post('/:agentId/chat', async (req, res) => {
       pass1,
       pass2,
       history,
-      message.trim(),
-      crossScenarioContext ?? null,
-      scenarioCount
+      message.trim()
     );
     const reply = await provider.chat(messages, { model: settings.citizenAgentModel });
 

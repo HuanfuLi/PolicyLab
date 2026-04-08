@@ -332,41 +332,11 @@ function buildPersonalStatus(sessionId: string, agentId: string, enterpriseOwner
   if (enterpriseOwnerId) {
     return { employed: false, enterprise_id: enterpriseOwnerId, enterprise_role: 'owner', agentWealth };
   }
-  const enterprises = getEnterpriseRegistry(sessionId);
   const employment = getEmploymentRegistry(sessionId).get(agentId);
   if (employment) {
-    const enterprise = enterprises.get(employment.enterpriseId);
-    return {
-      employed: true,
-      enterprise_id: employment.enterpriseId,
-      enterprise_role: 'employee',
-      agentWealth,
-      enterprise_industry: enterprise?.industry ?? null,
-      enterprise_wage: employment.wage,
-    };
+    return { employed: true, enterprise_id: employment.enterpriseId, enterprise_role: 'employee', agentWealth };
   }
   return { employed: false, enterprise_id: null, enterprise_role: null, agentWealth };
-}
-
-function assertAgentContext(agentId: string, agent: Agent, personalStatus?: PersonalStatusBoard): void {
-  const wealth = agent.currentStats.wealth;
-  const health = agent.currentStats.health;
-  if (!Number.isFinite(wealth)) {
-    console.warn(`[ASSERTION] Agent ${agentId}: wealth is not a valid number (${wealth})`);
-  }
-  if (!Number.isFinite(health)) {
-    console.warn(`[ASSERTION] Agent ${agentId}: health is not a valid number (${health})`);
-  }
-  if (!Number.isFinite(agent.currentStats.happiness)) {
-    console.warn(`[ASSERTION] Agent ${agentId}: happiness is not a valid number (${agent.currentStats.happiness})`);
-  }
-  if (
-    personalStatus?.employed &&
-    personalStatus.enterprise_id &&
-    (personalStatus.enterprise_wage == null || personalStatus.enterprise_wage < 0)
-  ) {
-    console.warn(`[ASSERTION] Agent ${agentId}: employed context missing valid wage for ${personalStatus.enterprise_id}`);
-  }
 }
 
 function createAgentWeekState(econState?: AgentEconomyState): AgentWeekState {
@@ -1460,7 +1430,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       const iterUnemployedCount = aliveAgents.filter(a => !employmentRegistry.has(a.id)).length;
       const iterEntsSummary = Object.entries(iterEntsByIndustry).map(([k, v]) => `${k} ×${v}`).join(', ') || 'none';
       const sharedMarketIntelligenceBlock = miLines.length > 0
-        ? `\n\n[MARKET INTELLIGENCE — Use this data to reason about economic opportunity]\n\nCommodity prices and supply:\n${miLines.join('\n')}\n\nEconomy:\n  Population: ${aliveAgents.length} alive agents\n  Active enterprises: ${iterEntsSummary}\n  Unemployed agents: ${iterUnemployedCount}\n\nHow to read this:\n- CRITICAL/LOW reserve means the market is undersupplied — prices will rise further if no one produces.\n- SURPLUS reserve means the market is oversupplied — selling now yields less than baseline.\n- Your skills determine how efficiently you can produce each commodity.${primaryAMMForMI && (primaryAMMForMI.currentFoodReserve < 30 || primaryAMMForMI.spotPrice > FOOD_SPOT_BASELINE * 1.5) ? `\n\n⚠ OPPORTUNITY: Food reserves are ${primaryAMMForMI.currentFoodReserve < 10 ? 'CRITICAL' : 'LOW'} and prices are ${primaryAMMForMI.spotPrice.toFixed(1)} fiat/unit. Farming (PRODUCE_AND_SELL) yields ~20 units worth ~${(20 * primaryAMMForMI.spotPrice).toFixed(0)} fiat — one of the most profitable actions available right now.` : ''}`
+        ? `\n\n[MARKET INTELLIGENCE — Use this data to reason about economic opportunity]\n\nCommodity prices and supply:\n${miLines.join('\n')}\n\nEconomy:\n  Population: ${aliveAgents.length} alive agents\n  Active enterprises: ${iterEntsSummary}\n  Unemployed agents: ${iterUnemployedCount}\n\nHow to read this:\n- CRITICAL/LOW reserve means the market is undersupplied — prices will rise further if no one produces.\n- SURPLUS reserve means the market is oversupplied — selling now yields less than baseline.\n- Your skills determine how efficiently you can produce each commodity.`
         : '';
 
       // Pre-compute AMM market data once per iteration for agent economic dashboard (D-02)
@@ -1542,7 +1512,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           } : undefined;
           const ownedEnterprise = [...enterpriseRegistry.values()].find(enterprise => enterprise.ownerId === agent.id);
           const personalStatus = buildPersonalStatus(sessionId, agent.id, ownedEnterprise?.id, agent.currentStats.wealth);
-          assertAgentContext(agent.id, agent, personalStatus);
           const inflationContext = iterInflationContext;
           const centralBankContext = agent.role === 'central_bank' && iterInflationState
             ? {
@@ -1957,14 +1926,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       const outcomeMap = new Map(resolution.agentOutcomes.map(o => [o.agentId, o]));
       // Fix A1: Reconcile lifecycle death events with agent outcomes.
       // If LLM narrated a death but forgot to set died:true in agentOutcomes, force it.
-      // LLM may return agent names instead of UUIDs — resolve via name→id lookup.
-      const lcNameToId = new Map(agents.map(a => [a.name, a.id]));
       for (const event of resolution.lifecycleEvents ?? []) {
         if ((event as { type: string; agentId?: string }).type === 'death') {
-          const rawId = (event as { type: string; agentId?: string }).agentId;
-          const evtAgentId = rawId
-            ? (agents.some(a => a.id === rawId) ? rawId : lcNameToId.get(rawId) ?? rawId)
-            : undefined;
+          const evtAgentId = (event as { type: string; agentId?: string }).agentId;
           if (evtAgentId) {
             const existing = outcomeMap.get(evtAgentId);
             if (existing && !existing.died) {
@@ -3747,23 +3711,13 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
 
         // 3. Persist role changes to roleChanges table (lifecycle events)
-        // Build name→id map so we can resolve LLM-returned agent names to UUIDs
-        const nameToIdMap = new Map(agents.map(a => [a.name, a.id]));
         for (const evt of resolution.lifecycleEvents ?? []) {
           const e = evt as { type: string; agentId?: string; detail?: string; fromRole?: string; toRole?: string };
           if (e.type === 'role_change' && e.agentId) {
-            // Resolve: LLM may return a UUID or an agent name
-            const resolvedId = agents.some(a => a.id === e.agentId)
-              ? e.agentId
-              : nameToIdMap.get(e.agentId!);
-            if (!resolvedId) {
-              console.warn(`[roleChange] Skipping: unresolvable agentId "${e.agentId}"`);
-              continue;
-            }
             db.insert(roleChanges).values({
               id: uuidv4(),
               sessionId,
-              agentId: resolvedId,
+              agentId: e.agentId,
               fromRole: e.fromRole ?? '',
               toRole: e.toRole ?? '',
               reason: e.detail ?? null,

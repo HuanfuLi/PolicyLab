@@ -62,33 +62,6 @@ async function eraseSimulationData(sessionId: string): Promise<void> {
 
 const router = Router({ mergeParams: true });
 
-function readBatchSessionIds(body: unknown): string[] | null {
-  const sessionIds = (body as { sessionIds?: unknown })?.sessionIds;
-  if (!Array.isArray(sessionIds) || sessionIds.some((id) => typeof id !== 'string' || !id)) {
-    return null;
-  }
-  return sessionIds;
-}
-
-function handleBatchControl(
-  req: Parameters<typeof router.post>[1] extends (...args: infer P) => unknown ? P[0] : never,
-  res: Parameters<typeof router.post>[1] extends (...args: infer P) => unknown ? P[1] : never,
-  action: 'pause' | 'resume' | 'abort',
-) {
-  const sessionIds = readBatchSessionIds(req.body);
-  if (!sessionIds) {
-    return res.status(400).json({ error: 'sessionIds must be a non-empty string array' });
-  }
-
-  for (const sessionId of sessionIds) {
-    if (action === 'pause') simulationManager.pause(sessionId);
-    if (action === 'resume') simulationManager.resume(sessionId);
-    if (action === 'abort') simulationManager.abort(sessionId);
-  }
-
-  return res.json({ ok: true });
-}
-
 // POST /simulate — start simulation
 router.post('/', async (req, res) => {
   const { id } = req.params as { id: string };
@@ -215,12 +188,6 @@ router.post('/abort', (req, res) => {
   simulationManager.abort(id);
   return res.json({ ok: true });
 });
-
-// Batch helpers for multi-scenario control. These are mounted on the existing
-// simulate router path so the frontend can adopt them without widening router ownership.
-router.post('/batch/pause', (req, res) => handleBatchControl(req, res, 'pause'));
-router.post('/batch/resume', (req, res) => handleBatchControl(req, res, 'resume'));
-router.post('/batch/abort', (req, res) => handleBatchControl(req, res, 'abort'));
 
 // POST /simulate/abort-reset — stop simulation and wipe all artifacts, return to design
 router.post('/abort-reset', async (req, res) => {

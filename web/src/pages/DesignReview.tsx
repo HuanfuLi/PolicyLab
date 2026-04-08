@@ -61,11 +61,11 @@ const DesignReview = () => {
   useEffect(() => {
     if (!id) return;
     reset();
-    // Don't reset scenario tabs — restore from session config instead
+    scenarioStore.reset();
     loadSession(id);
   }, [id]);
 
-  // Redirect if not in design-review stage + init scenario tabs from saved config
+  // Redirect if not in design-review stage
   useEffect(() => {
     if (!session || loading) return;
     if (session.stage === 'brainstorming' || session.stage === 'idea-input' || session.stage === 'designing') {
@@ -77,29 +77,7 @@ const DesignReview = () => {
     }
     // Sync locked variables from config
     setLockedVariables(session.config?.lockedVariables ?? []);
-    // Restore scenario tabs from session config (survives page refresh)
-    if (session.config?.economyConfig) {
-      scenarioStore.initFromSession(
-        session.config.economyConfig,
-        session.config.budgetAllocation ?? { infrastructure: 0.25, education: 0.25, defense: 0.25, welfare: 0.25 },
-        session.config.scenarioTabs,
-      );
-    }
   }, [session?.stage, session?.config?.lockedVariables, session?.config?.totalIterations, loading, id, navigate]);
-
-  // Auto-save scenario tabs to session config (debounced)
-  const saveTabs = scenarioStore.tabs;
-  useEffect(() => {
-    if (!id || saveTabs.length <= 1) return; // Only save when user has added scenarios
-    const timer = setTimeout(() => {
-      fetch(`/api/sessions/${id}/config`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenarioTabs: saveTabs }),
-      }).catch(() => null);
-    }, 1000); // 1s debounce
-    return () => clearTimeout(timer);
-  }, [id, saveTabs]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -197,9 +175,11 @@ const DesignReview = () => {
   const handleRunAllScenarios = async () => {
     if (!id) return;
     try {
-      // Pass navigate so runAllScenarios can redirect to
-      // /session/:id/simulation?scenarios=id1,id2,id3 after forking and launching
-      await scenarioStore.runAllScenarios(id, iterations, navigate);
+      const forkIds = await scenarioStore.runAllScenarios(id, iterations);
+      // Navigate to comparison page after all scenarios complete
+      if (forkIds.length > 0) {
+        navigate('/compare');
+      }
     } catch (err) {
       console.error('Run all scenarios failed:', err);
     }

@@ -35,8 +35,6 @@ export interface Session {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
-  groupId: string | null;
-  scenarioLabel: string | null;
 }
 
 export interface SessionMetadata {
@@ -49,8 +47,6 @@ export interface SessionMetadata {
   completedIterations: number;
   createdAt: string;
   updatedAt: string;
-  groupId: string | null;
-  scenarioLabel: string | null;
 }
 
 export interface AgentStats {
@@ -372,9 +368,23 @@ export interface SessionExport {
 
 // ── Settings ───────────────────────────────────────────────────────────────
 
+export type LLMProviderType = 'claude' | 'openai' | 'gemini' | 'vertex' | 'local' | 'custom';
+
+/** A single provider slot for the multi-provider load balancer. */
+export interface ProviderConfig {
+  provider: LLMProviderType;
+  apiKey?: string;
+  baseUrl?: string;
+  model: string;
+  /** Rate limit in calls per minute. Null/undefined = unlimited. */
+  rateLimit?: number | null;
+  vertexProjectId?: string;
+  vertexLocation?: string;
+}
+
 export interface AppSettings {
   /** LLM provider selection */
-  provider: 'claude' | 'openai' | 'gemini' | 'vertex' | 'local';
+  provider: LLMProviderType;
   /** Active API key — maps to apiKeys[provider]. Kept for backward compat. */
   apiKey: string;
   /** Per-provider API key storage so switching providers doesn't lose keys */
@@ -388,22 +398,22 @@ export interface AppSettings {
   citizenAgentModel: string;
   maxConcurrency: number;
   /** Optional separate provider for citizen agent tasks */
-  citizenProvider?: 'claude' | 'openai' | 'gemini' | 'vertex' | 'local';
+  citizenProvider?: LLMProviderType;
   citizenApiKey?: string;
   citizenBaseUrl?: string;
   citizenVertexProjectId?: string;
   citizenVertexLocation?: string;
   maxMessageLength: number;
-  /** Optional multi-provider config for round-robin load balancing. */
+  /** Additional providers for parallel simulation via load balancer */
   providers?: ProviderConfig[];
 }
 
-export interface ProviderConfig {
-  provider: AppSettings['provider'];
-  apiKey: string;
+/** ProviderConfig with API key stripped for client display. */
+export interface ProviderConfigResponse {
+  provider: LLMProviderType;
+  hasApiKey: boolean;
   baseUrl?: string;
-  model?: string;
-  /** Requests per minute. Null means unlimited local capacity. */
+  model: string;
   rateLimit?: number | null;
   vertexProjectId?: string;
   vertexLocation?: string;
@@ -418,7 +428,7 @@ export interface SettingsResponse {
   centralAgentModel: string;
   citizenAgentModel: string;
   maxConcurrency: number;
-  citizenProvider?: 'claude' | 'openai' | 'gemini' | 'vertex' | 'local';
+  citizenProvider?: LLMProviderType;
   hasCitizenApiKey?: boolean;
   citizenBaseUrl?: string;
   citizenVertexProjectId?: string;
@@ -427,6 +437,7 @@ export interface SettingsResponse {
   vertexProjectId?: string;
   vertexLocation?: string;
   apiKeys?: Partial<Record<'claude' | 'openai' | 'gemini' | 'vertex', string>>;
+  providers?: ProviderConfigResponse[];
 }
 
 export interface TestResult {
@@ -521,6 +532,42 @@ export interface EconomyConfig {
    * Lower values (e.g. 0.7) create sqrt-ish returns. Default: 0.7.
    */
   publicGoodsGainDiminishing?: number;
+
+  // ── Phase 10: Enterprise & Realism ────────────────────────────────────────
+  /** Per-iteration minimum wage floor. Enterprises must pay at least this. Default: 5. */
+  minimumWage?: number;
+  /** Taylor Rule: neutral real interest rate per iteration. Default: 0.00167 (2% annual / 12). */
+  taylorNeutralRate?: number;
+  /** Taylor Rule: target CPI inflation rate per iteration. Default: 0.00167 (2% annual / 12). */
+  taylorInflationTarget?: number;
+  /** Taylor Rule: response coefficient to inflation gap. Default: 0.5. */
+  taylorInflationCoeff?: number;
+  /** Taylor Rule: response coefficient to output gap. Default: 0.5. */
+  taylorOutputCoeff?: number;
+  /** Maximum base rate before central bank switches to quantity restrictions. Default: 0.0125 (15% annual / 12). */
+  centralBankRateCeiling?: number;
+  /** Rate discount for business loans vs personal loans (multiplied by base rate). Default: 0.3. */
+  businessLoanRateDiscount?: number;
+  /** Term extension multiplier for business loans vs personal. Default: 1.5. */
+  businessLoanTermMultiplier?: number;
+  /** Reserve ratio below which central bank injects liquidity. Default: 0.05. */
+  liquidityInjectionThreshold?: number;
+  /** Max liquidity injection as fraction of total deposits. Default: 0.05. */
+  liquidityInjectionCap?: number;
+  /** Consecutive insolvency iterations before enterprise bankruptcy. Default: 3. */
+  enterpriseInsolvencyThreshold?: number;
+  /** Subsistence food production when agent is idle for 2+ iterations. Default: 5. */
+  idleFallbackProduction?: number;
+  /** Iterations of zero production before idle fallback kicks in. Default: 2. */
+  idleFallbackThreshold?: number;
+
+  // ── Phase 10: CPI, Fiscal & Tax Fixes ────────────────────────────────────
+  /** Whether cpiBasePrices should auto-initialize from AMM spot prices at iteration 1. Default: true. (D-30) */
+  cpiBasePriceAutoInit?: boolean;
+  /** Flat income/production tax rate applied to WORK income and enterprise revenue per iteration. Default: 0.15 (15%). (D-32) */
+  incomeTaxRate?: number;
+  /** When true, public goods quality gain is scaled by spending-to-GDP ratio, preventing trivial spending from maxing quality. Default: true. (D-31) */
+  publicGoodsSpendingToGdpScaling?: boolean;
 }
 
 export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
@@ -558,7 +605,27 @@ export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   welfareMultiplier: 0.002,
   publicGoodsDecayRate: 0.5,
   publicGoodsGainDiminishing: 0.7,
+  // Phase 10: Enterprise & Realism defaults
+  minimumWage: 5,
+  taylorNeutralRate: 0.00167,
+  taylorInflationTarget: 0.00167,
+  taylorInflationCoeff: 0.5,
+  taylorOutputCoeff: 0.5,
+  centralBankRateCeiling: 0.0125,
+  businessLoanRateDiscount: 0.3,
+  businessLoanTermMultiplier: 1.5,
+  liquidityInjectionThreshold: 0.05,
+  liquidityInjectionCap: 0.05,
+  enterpriseInsolvencyThreshold: 3,
+  idleFallbackProduction: 5,
+  idleFallbackThreshold: 2,
+  // Phase 10: CPI, Fiscal & Tax Fixes defaults
+  cpiBasePriceAutoInit: true,
+  incomeTaxRate: 0.15,
+  publicGoodsSpendingToGdpScaling: true,
 };
+
+export type LoanProductType = 'personal' | 'business';
 
 export interface LoanContract {
   id: string;
@@ -574,6 +641,7 @@ export interface LoanContract {
   issuedAtIteration: number;
   dueAtIteration: number;
   status: 'active' | 'repaid' | 'defaulted';
+  loanProductType?: LoanProductType;
   createdAt: string;
 }
 
@@ -848,6 +916,24 @@ export interface ScenarioTab {
   economyConfig: Partial<EconomyConfig>;
   budgetAllocation?: BudgetAllocation;
   deltas?: Record<string, { from: number | boolean; to: number | boolean }>;
+}
+
+// ── Phase 10: Enterprise Blueprint Types ────────────────────────────────────
+export type EnterpriseSector = 'agriculture' | 'industry' | 'services' | 'government';
+export type EnterpriseCommodity = 'food' | 'tools' | 'raw_materials' | 'luxury_goods' | 'none';
+
+export interface EnterpriseBlueprint {
+  id: string;
+  name: string;
+  ownerId: string;
+  sector: EnterpriseSector;
+  industry: string;
+  commodityOutput: EnterpriseCommodity;
+  initialCapital: number;
+  initialInventory: Record<string, number>;
+  employees: string[];
+  wage: number;
+  isServiceEnterprise: boolean;
 }
 
 // ── AMM State (moved from mechanics for cross-module sharing) ───────────────

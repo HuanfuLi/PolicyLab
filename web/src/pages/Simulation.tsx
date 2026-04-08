@@ -1,18 +1,10 @@
 import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Play, Pause, Square, X, Activity, Heart, CircleDollarSign, Users, Loader2, AlertCircle, ArrowRight, GitFork, Zap, ChevronDown, ChevronRight, ShieldAlert, BarChart3 } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Play, Pause, Square, X, Activity, Heart, CircleDollarSign, Users, Loader2, AlertCircle, ArrowRight, GitFork, Zap, ChevronDown, ChevronRight, ShieldAlert } from 'lucide-react';
 import { useSimulationStore, type AgentIntentRecord } from '../stores/simulationStore';
-import { useMultiScenarioStore, SCENARIO_COLORS } from '../stores/multiScenarioStore';
 import { useShallow } from 'zustand/react/shallow';
 import MarkdownText from '../components/MarkdownText';
 import TelemetryPanel from '../components/TelemetryPanel';
-import { ScenarioProgressBar } from '../components/ScenarioProgressBar';
-import { CollapsiblePanel } from '../components/CollapsiblePanel';
-import { ScenarioChart } from '../components/ScenarioChart';
-import { ConfigDiffHeader } from '../components/ConfigDiffHeader';
-import { mergeScenarioData, mergeStatsData } from '@policylab/shared/scenarioDataMerge';
-import type { ScenarioMeta } from '@policylab/shared/scenarioDataMerge';
-import type { EconomyConfig } from '@policylab/shared';
 
 // Chart color tokens (kept in sync with --chart-* CSS variables in index.css)
 const CHART_ORANGE = 'var(--chart-orange)';
@@ -21,21 +13,6 @@ const CHART_VIOLET = 'var(--chart-violet)';
 const Simulation = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
-
-  // Multi-scenario detection from URL query param
-  const scenarioIds = useMemo(
-    () => searchParams.get('scenarios')?.split(',').filter(Boolean) ?? [],
-    [searchParams],
-  );
-  const isMultiScenario = scenarioIds.length > 1;
-
-  // Multi-scenario store (only used when isMultiScenario)
-  const multiStore = useMultiScenarioStore();
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
-  const bothCollapsed = leftCollapsed && rightCollapsed;
-
   const {
     isRunning, isPaused, isComplete,
     currentIteration, totalIterations,
@@ -153,43 +130,6 @@ const Simulation = () => {
   }, [id]);
 
 
-  // Multi-scenario: init store and connect N SSE streams
-  useEffect(() => {
-    if (!isMultiScenario) return;
-    // Fetch labels for each scenario session
-    const initMulti = async () => {
-      const sessions = await Promise.all(
-        scenarioIds.map(async (sid) => {
-          try {
-            const r = await fetch(`/api/sessions/${sid}`);
-            const s = await r.json() as { title?: string; config?: { scenarioLabel?: string } };
-            return { id: sid, label: s.config?.scenarioLabel ?? s.title ?? sid.slice(0, 8) };
-          } catch {
-            return { id: sid, label: sid.slice(0, 8) };
-          }
-        }),
-      );
-      multiStore.initScenarios(sessions);
-      multiStore.loadAllAgents();
-      multiStore.loadAllHistory();
-      const disconnect = multiStore.connectAll();
-      sseCleanupRef.current = disconnect;
-    };
-    initMulti();
-    return () => { multiStore.reset(); };
-  }, [isMultiScenario, scenarioIds.join(',')]);
-
-  // Derived multi-scenario state for rendering
-  const msScenarios = useMemo(() => Object.values(multiStore.scenarios), [multiStore.scenarios]);
-  const scenarioMetas: ScenarioMeta[] = useMemo(
-    () => multiStore.scenarioOrder.map((sid, i) => ({
-      index: i,
-      label: multiStore.scenarios[sid]?.label ?? sid.slice(0, 8),
-      sessionId: sid,
-    })),
-    [multiStore.scenarioOrder, multiStore.scenarios],
-  );
-
   // Auto-proceed: when simulation finishes and toggle is on, navigate to reflection.
   // Only fires when the session is still in a simulation stage — prevents triggering
   // when the user navigates back to this page after reflection/review has started.
@@ -205,7 +145,7 @@ const Simulation = () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stage: 'reflecting' }),
     });
-    navigate(`/session/${id}/reflection${isMultiScenario ? `?scenarios=${scenarioIds.join(',')}` : ''}`);
+    navigate(`/session/${id}/reflection`);
   }, [id, navigate, sessionStage]);
 
   useEffect(() => {
@@ -232,7 +172,7 @@ const Simulation = () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stage: 'reflecting' }),
     });
-    navigate(`/session/${id}/reflection${isMultiScenario ? `?scenarios=${scenarioIds.join(',')}` : ''}`);
+    navigate(`/session/${id}/reflection`);
   };
 
   const handleAbort = async () => {
@@ -271,55 +211,34 @@ const Simulation = () => {
       {/* Top Bar: Progress and Controls */}
       <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, marginRight: '2rem' }}>
-          {isMultiScenario ? (
-            /* Multi-scenario progress bars */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              {msScenarios.map(sc => (
-                <ScenarioProgressBar
-                  key={sc.sessionId}
-                  label={sc.label}
-                  current={sc.currentIteration}
-                  total={sc.totalIterations}
-                  color={sc.color}
-                  isComplete={sc.isComplete}
-                  isPaused={sc.isPaused}
-                  error={sc.error}
-                />
-              ))}
-            </div>
-          ) : (
-            /* Single-scenario progress bar */
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                {isComplete ? (
-                  <span style={{ color: 'var(--success)' }}><strong>Simulation Complete</strong></span>
-                ) : isRunning ? (
-                  <span>
-                    <strong style={{ color: 'var(--color-bright)' }}>Iteration {currentIteration}</strong>
-                    {totalIterations > 0 && ` of ${totalIterations}`}
-                    <Loader2 size={14} style={{ marginLeft: '0.5rem', animation: 'spin 1s linear infinite', display: 'inline' }} />
-                  </span>
-                ) : isPaused ? (
-                  <span style={{ color: 'var(--warning)' }}>Paused at iteration {currentIteration}</span>
-                ) : (
-                  <span style={{ color: 'var(--text-muted)' }}>Waiting for simulation to start…</span>
-                )}
-                {totalIterations > 0 && (
-                  <span style={{ color: 'var(--text-dim)' }}>{Math.round(progress)}%</span>
-                )}
-              </div>
-              <div style={{ height: '8px', background: 'var(--panel-alpha-10)', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${progress}%`,
-                  background: isComplete
-                    ? 'var(--success)'
-                    : 'linear-gradient(90deg, var(--primary), var(--success))',
-                  transition: 'width 1s linear',
-                }} />
-              </div>
-            </>
-          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+            {isComplete ? (
+              <span style={{ color: 'var(--success)' }}><strong>Simulation Complete</strong></span>
+            ) : isRunning ? (
+              <span>
+                <strong style={{ color: 'var(--color-bright)' }}>Iteration {currentIteration}</strong>
+                {totalIterations > 0 && ` of ${totalIterations}`}
+                <Loader2 size={14} style={{ marginLeft: '0.5rem', animation: 'spin 1s linear infinite', display: 'inline' }} />
+              </span>
+            ) : isPaused ? (
+              <span style={{ color: 'var(--warning)' }}>Paused at iteration {currentIteration}</span>
+            ) : (
+              <span style={{ color: 'var(--text-muted)' }}>Waiting for simulation to start…</span>
+            )}
+            {totalIterations > 0 && (
+              <span style={{ color: 'var(--text-dim)' }}>{Math.round(progress)}%</span>
+            )}
+          </div>
+          <div style={{ height: '8px', background: 'var(--panel-alpha-10)', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%',
+              width: `${progress}%`,
+              background: isComplete
+                ? 'var(--success)'
+                : 'linear-gradient(90deg, var(--primary), var(--success))',
+              transition: 'width 1s linear',
+            }} />
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -434,26 +353,11 @@ const Simulation = () => {
         </div>
       )}
 
-      {/* Config Diff Header (multi-scenario only) */}
-      {isMultiScenario && scenarioMetas.length > 0 && (
-        <ConfigDiffHeader scenarios={scenarioMetas} configs={{}} />
-      )}
-
       {/* Main Dashboard — Three Columns */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: leftCollapsed && rightCollapsed
-          ? '40px 1fr 40px'
-          : leftCollapsed
-            ? `40px 1fr minmax(300px, 1fr)`
-            : rightCollapsed
-              ? `minmax(300px, 1.2fr) 1fr 40px`
-              : 'minmax(300px, 1.2fr) minmax(250px, 1fr) minmax(300px, 1fr)',
-        gap: '1.5rem', flex: 1, overflow: 'hidden',
-      }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1.2fr) minmax(250px, 1fr) minmax(300px, 1fr)', gap: '1.5rem', flex: 1, overflow: 'hidden' }}>
 
-        {/* Col 1: Live Feed */}
-        <CollapsiblePanel side="left" collapsed={leftCollapsed} onToggle={() => setLeftCollapsed(c => !c)} label="Live Feed">
+        {/* Col 1: Live Feed (virtualized) */}
+        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', flexShrink: 0 }}>
             <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Activity size={18} color="var(--primary)" /> Live Feed
@@ -508,84 +412,16 @@ const Simulation = () => {
               </div>
             )}
           </div>
-        </CollapsiblePanel>
+        </div>
 
         {/* Col 2: Statistics */}
         <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <BarChart3 size={18} color="var(--primary)" /> Statistics
-            </h3>
-            {!isMultiScenario && (
-              <button
-                className="btn-secondary"
-                onClick={() => setShowTelemetryPanel(true)}
-                style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
-              >
-                Telemetry
-              </button>
-            )}
+          <div style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', flexShrink: 0 }}>
+            <h3 style={{ fontSize: '1.1rem' }}>Statistics</h3>
           </div>
-          <div style={{
-            flex: 1, padding: '1rem', overflowY: 'auto',
-            display: bothCollapsed ? 'grid' : 'flex',
-            ...(bothCollapsed
-              ? { gridTemplateColumns: '1fr 1fr', gap: '1rem', alignContent: 'start' }
-              : { flexDirection: 'column' as const, gap: '1.5rem' }),
-          }}>
+          <div style={{ flex: 1, padding: '1rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-            {isMultiScenario && scenarioMetas.length > 0 ? (
-              /* Multi-scenario overlaid charts */
-              <>
-                {(() => {
-                  // Transform store data into mergeScenarioData's expected format
-                  const macroScenarios = multiStore.scenarioOrder.map(sid => ({
-                    label: multiStore.scenarios[sid]?.label ?? sid.slice(0, 8),
-                    data: multiStore.scenarios[sid]?.macroHistory ?? [],
-                  }));
-                  if (macroScenarios.every(s => s.data.length === 0)) return null;
-                  const fields = ['cpiIndex', 'm1', 'm2', 'totalFiatSupply', 'giniCoefficient'] as const;
-                  const labels: Record<string, string> = { cpiIndex: 'CPI', m1: 'Money Supply (M1)', m2: 'Money Supply (M2)', totalFiatSupply: 'Fiat Supply', giniCoefficient: 'Gini Coefficient' };
-                  return fields.map(field => {
-                    const merged = mergeScenarioData(macroScenarios, field);
-                    if (merged.length === 0) return null;
-                    return (
-                      <ScenarioChart
-                        key={field}
-                        data={merged}
-                        scenarios={scenarioMetas}
-                        field={field}
-                        title={labels[field] ?? field}
-                        height={bothCollapsed ? 180 : 220}
-                      />
-                    );
-                  }).filter(Boolean);
-                })()}
-                {(() => {
-                  const statsScenarios = multiStore.scenarioOrder.map(sid => ({
-                    label: multiStore.scenarios[sid]?.label ?? sid.slice(0, 8),
-                    data: multiStore.scenarios[sid]?.statsHistory ?? [],
-                  }));
-                  if (statsScenarios.every(s => s.data.length === 0)) return null;
-                  const statFields = ['avgWealth', 'avgHealth', 'avgHappiness'] as const;
-                  const statLabels: Record<string, string> = { avgWealth: 'Avg Wealth', avgHealth: 'Avg Health', avgHappiness: 'Avg Happiness' };
-                  return statFields.map(field => {
-                    const merged = mergeStatsData(statsScenarios, field);
-                    if (merged.length === 0) return null;
-                    return (
-                      <ScenarioChart
-                        key={field}
-                        data={merged}
-                        scenarios={scenarioMetas}
-                        field={field}
-                        title={statLabels[field] ?? field}
-                        height={bothCollapsed ? 180 : 220}
-                      />
-                    );
-                  }).filter(Boolean);
-                })()}
-              </>
-            ) : latestStats ? (
+            {latestStats ? (
               <>
                 <StatCard
                   label="Wealth"
@@ -656,7 +492,7 @@ const Simulation = () => {
         </div>
 
         {/* Col 3: Agent Grid + Lifecycle */}
-        <CollapsiblePanel side="right" collapsed={rightCollapsed} onToggle={() => setRightCollapsed(c => !c)} label="Agent Status">
+        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', flexShrink: 0 }}>
             <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Users size={18} /> Agent Status
@@ -729,26 +565,9 @@ const Simulation = () => {
               />
             )}
           </div>
-        </CollapsiblePanel>
+        </div>
 
       </div>
-
-      {/* View Full Comparison button (multi-scenario, all complete) */}
-      {isMultiScenario && multiStore.allComplete && (
-        <div className="glass-panel" style={{ padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '1rem', flexShrink: 0 }}>
-          <button
-            className="btn-primary"
-            onClick={() => {
-              if (scenarioIds.length >= 2) {
-                navigate(`/compare?session1=${scenarioIds[0]}&session2=${scenarioIds[1]}`);
-              }
-            }}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-          >
-            <BarChart3 size={16} /> View Full Comparison
-          </button>
-        </div>
-      )}
 
       {/* Action Bar — shown when simulation is complete and not running */}
       {isComplete && !isRunning && (
@@ -792,7 +611,7 @@ const Simulation = () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ stage: 'reflecting' }),
                   });
-                  navigate(`/session/${id}/reflection${isMultiScenario ? `?scenarios=${scenarioIds.join(',')}` : ''}`);
+                  navigate(`/session/${id}/reflection`);
                 }}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
               >

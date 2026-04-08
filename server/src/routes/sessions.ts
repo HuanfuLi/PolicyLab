@@ -19,8 +19,6 @@ router.get('/', async (_req, res) => {
         stage: sessions.stage,
         createdAt: sessions.createdAt,
         updatedAt: sessions.updatedAt,
-        groupId: sessions.groupId,
-        scenarioLabel: sessions.scenarioLabel,
         agentCount: sql<number>`count(distinct ${agents.id})`,
         completedIterations: sql<number>`count(distinct ${iterations.id})`,
       })
@@ -40,63 +38,12 @@ router.get('/', async (_req, res) => {
       completedIterations: Number(row.completedIterations ?? 0),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
-      groupId: row.groupId ?? null,
-      scenarioLabel: row.scenarioLabel ?? null,
     }));
 
     res.json(result);
   } catch (err) {
     console.error('GET /sessions error:', err);
     res.status(500).json({ error: 'Failed to load sessions' });
-  }
-});
-
-router.get('/grouped', async (_req, res) => {
-  try {
-    const rows = await db
-      .select({
-        id: sessions.id,
-        title: sessions.title,
-        idea: sessions.idea,
-        stage: sessions.stage,
-        createdAt: sessions.createdAt,
-        updatedAt: sessions.updatedAt,
-        groupId: sessions.groupId,
-        scenarioLabel: sessions.scenarioLabel,
-        agentCount: sql<number>`count(distinct ${agents.id})`,
-        completedIterations: sql<number>`count(distinct ${iterations.id})`,
-        scenarioCount: sql<number>`case
-          when ${sessions.groupId} is not null then (
-            select count(*)
-            from sessions as grouped_sessions
-            where grouped_sessions.group_id = ${sessions.groupId}
-          )
-          else 1
-        end`,
-      })
-      .from(sessions)
-      .leftJoin(agents, eq(agents.sessionId, sessions.id))
-      .leftJoin(iterations, eq(iterations.sessionId, sessions.id))
-      .groupBy(sessions.id)
-      .orderBy(sql`${sessions.updatedAt} DESC`);
-
-    res.json(rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      idea: row.idea,
-      stage: row.stage as Stage,
-      agentCount: Number(row.agentCount ?? 0),
-      totalIterations: 0,
-      completedIterations: Number(row.completedIterations ?? 0),
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      groupId: row.groupId ?? null,
-      scenarioLabel: row.scenarioLabel ?? null,
-      scenarioCount: Number(row.scenarioCount ?? 1),
-    })));
-  } catch (err) {
-    console.error('GET /sessions/grouped error:', err);
-    res.status(500).json({ error: 'Failed to load grouped sessions' });
   }
 });
 
@@ -358,32 +305,6 @@ router.patch('/:id/stage', async (req, res) => {
   }
 });
 
-router.patch('/:id/group', async (req, res) => {
-  const { id } = req.params;
-  const { groupId, scenarioLabel } = req.body as { groupId?: string; scenarioLabel?: string };
-
-  try {
-    const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
-
-    await db
-      .update(sessions)
-      .set({
-        groupId: groupId ?? null,
-        scenarioLabel: scenarioLabel ?? null,
-        updatedAt: new Date().toISOString(),
-      })
-      .where(eq(sessions.id, id));
-
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('PATCH /sessions/:id/group error:', err);
-    res.status(500).json({ error: 'Failed to update session group' });
-  }
-});
-
 // PUT /api/sessions/:id/config — patch config fields (kept for backward compat)
 router.put('/:id/config', async (req, res) => {
   const { id } = req.params;
@@ -464,7 +385,7 @@ router.put('/:id/config', async (req, res) => {
 // POST /api/sessions/:id/fork — clone session design into a new session
 router.post('/:id/fork', async (req, res) => {
   const { id } = req.params;
-  const body = req.body as { iterations?: number; groupId?: string; scenarioLabel?: string };
+  const body = req.body as { iterations?: number };
 
   try {
     const [source] = await db.select().from(sessions).where(eq(sessions.id, id));
@@ -492,7 +413,7 @@ router.post('/:id/fork', async (req, res) => {
 
     await db.insert(sessions).values({
       id: newId,
-      title: body.scenarioLabel ? `${source.title} - ${body.scenarioLabel}` : `${source.title} (fork)`,
+      title: `${source.title} (fork)`,
       idea: source.idea,
       stage: 'design-review',
       config,
@@ -501,8 +422,6 @@ router.post('/:id/fork', async (req, res) => {
       timeScale: source.timeScale,
       createdAt: now,
       updatedAt: now,
-      groupId: body.groupId ?? null,
-      scenarioLabel: body.scenarioLabel ?? null,
     });
 
     // Copy agents with fresh stats
@@ -540,7 +459,6 @@ router.post('/:id/fork', async (req, res) => {
 // POST /api/sessions/:id/fork-simulation — fork with simulation data preserved
 router.post('/:id/fork-simulation', async (req, res) => {
   const { id } = req.params;
-  const body = req.body as { groupId?: string; scenarioLabel?: string };
 
   try {
     const [source] = await db.select().from(sessions).where(eq(sessions.id, id));
@@ -567,7 +485,7 @@ router.post('/:id/fork-simulation', async (req, res) => {
 
     await db.insert(sessions).values({
       id: newId,
-      title: body.scenarioLabel ? `${source.title} - ${body.scenarioLabel}` : `${source.title} (fork)`,
+      title: `${source.title} (fork)`,
       idea: source.idea,
       stage: 'simulation-complete',
       config,
@@ -576,8 +494,6 @@ router.post('/:id/fork-simulation', async (req, res) => {
       timeScale: source.timeScale,
       createdAt: now,
       updatedAt: now,
-      groupId: body.groupId ?? null,
-      scenarioLabel: body.scenarioLabel ?? null,
     });
 
     // Copy agents — preserve currentStats as both initial and current

@@ -344,13 +344,6 @@ ${skillLines}`;
     if (agent.currentStats.wealth < ammMarketData.foodSpotPrice * 6) {
       marketDashboard += '\n- You cannot afford a full week of food. This is a crisis.';
     }
-    // Profitability signal: when food price is high, surface PRODUCE_AND_SELL earnings
-    const FOOD_BASELINE_PRICE = 6.0;
-    const PRODUCE_YIELD = 20;
-    if (ammMarketData.foodSpotPrice > FOOD_BASELINE_PRICE * 1.5 || ammMarketData.foodReserve < 30) {
-      const earnings = (PRODUCE_YIELD * ammMarketData.foodSpotPrice).toFixed(0);
-      marketDashboard += `\n- Food is scarce and prices are high. Farming (PRODUCE_AND_SELL) would earn you ~${earnings} fiat right now — extremely profitable.`;
-    }
   } else if (isFirstIteration) {
     // D-05: Darwinian Market price anchoring for iteration 1 when no AMM data yet
     marketDashboard = '\n\nThis is the first trading day. Word around town is that a fair price for food is 3-5 fiat per unit. A day\'s wage should be about 6-8 fiat.';

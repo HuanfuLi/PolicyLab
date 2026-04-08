@@ -21,15 +21,6 @@ export interface Evaluation {
   analysis: string;
 }
 
-/** Per-scenario reflection data for multi-scenario comparison. */
-export interface ScenarioReflectionData {
-  sessionId: string;
-  label: string;
-  evaluation: Evaluation | null;
-  agentReflections: Record<string, AgentReflectionData>;
-  stats: { avgWealth: number; avgHealth: number; avgHappiness: number; aliveCount: number; totalAgents: number; finalCPI?: number; finalM1?: number } | null;
-}
-
 interface ReflectionStore {
   // Status
   isRunning: boolean;
@@ -47,18 +38,11 @@ interface ReflectionStore {
   // Agents (loaded separately)
   agents: Agent[];
 
-  // Multi-scenario data
-  scenarioReflections: Record<string, ScenarioReflectionData>;
-  crossScenarioNarrative: string | null;
-  isLoadingCrossScenario: boolean;
-
   // Actions
   loadAgents: (sessionId: string) => Promise<void>;
   loadReflections: (sessionId: string) => Promise<void>;
   startReflection: (sessionId: string) => Promise<void>;
   connectSSE: (sessionId: string) => () => void;
-  loadScenarioReflections: (sessionIds: string[]) => Promise<void>;
-  loadCrossScenarioNarrative: (sessionIds: string[]) => Promise<void>;
   reset: () => void;
 }
 
@@ -73,9 +57,6 @@ const initialState = {
   evaluation: null as Evaluation | null,
   error: null as string | null,
   agents: [] as Agent[],
-  scenarioReflections: {} as Record<string, ScenarioReflectionData>,
-  crossScenarioNarrative: null as string | null,
-  isLoadingCrossScenario: false,
 };
 
 export const useReflectionStore = create<ReflectionStore>((set) => ({
@@ -185,77 +166,5 @@ export const useReflectionStore = create<ReflectionStore>((set) => ({
     es.onerror = () => es.close();
 
     return () => es.close();
-  },
-
-  loadScenarioReflections: async (sessionIds: string[]) => {
-    const results: Record<string, ScenarioReflectionData> = {};
-    await Promise.all(sessionIds.map(async (sid) => {
-      try {
-        // Fetch reflections
-        const reflRes = await fetch(`/api/sessions/${sid}/reflect`);
-        let evaluation: Evaluation | null = null;
-        let agentReflections: Record<string, AgentReflectionData> = {};
-        if (reflRes.ok) {
-          const data = await reflRes.json() as {
-            reflections: Record<string, { pass1: string; pass2: string | null }>;
-            evaluation: Evaluation | null;
-          };
-          agentReflections = data.reflections ?? {};
-          evaluation = data.evaluation ?? null;
-        }
-
-        // Fetch session metadata for label
-        const sessRes = await fetch(`/api/sessions/${sid}`);
-        let label = sid;
-        if (sessRes.ok) {
-          const sessData = await sessRes.json() as { session: { scenarioLabel?: string | null; title?: string } };
-          label = sessData.session?.scenarioLabel || sessData.session?.title || sid;
-        }
-
-        // Fetch final iteration stats
-        let stats: ScenarioReflectionData['stats'] = null;
-        try {
-          const iterRes = await fetch(`/api/sessions/${sid}/iterations?full=true`);
-          if (iterRes.ok) {
-            const iters = await iterRes.json() as Array<{ statistics?: Record<string, number> }>;
-            const last = iters.filter(it => it.statistics).pop();
-            if (last?.statistics) {
-              const s = last.statistics;
-              stats = {
-                avgWealth: Math.round(s.avgWealth ?? 0),
-                avgHealth: Math.round(s.avgHealth ?? 0),
-                avgHappiness: Math.round(s.avgHappiness ?? 0),
-                aliveCount: s.aliveCount ?? 0,
-                totalAgents: s.totalPopulation ?? 0,
-                finalCPI: s.cpi,
-                finalM1: s.m1,
-              };
-            }
-          }
-        } catch { /* ignore */ }
-
-        results[sid] = { sessionId: sid, label, evaluation, agentReflections, stats };
-      } catch { /* ignore individual failures */ }
-    }));
-    set({ scenarioReflections: results });
-  },
-
-  loadCrossScenarioNarrative: async (sessionIds: string[]) => {
-    set({ isLoadingCrossScenario: true, crossScenarioNarrative: null });
-    try {
-      const res = await fetch('/api/reflect/cross-scenario', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionIds }),
-      });
-      if (res.ok) {
-        const data = await res.json() as { narrative: string };
-        set({ crossScenarioNarrative: data.narrative, isLoadingCrossScenario: false });
-      } else {
-        set({ isLoadingCrossScenario: false });
-      }
-    } catch {
-      set({ isLoadingCrossScenario: false });
-    }
   },
 }));

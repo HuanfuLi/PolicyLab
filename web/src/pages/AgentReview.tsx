@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Send, CheckCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useReflectionStore } from '../stores/reflectionStore';
 import { useSessionDetailStore } from '../stores/sessionDetailStore';
@@ -9,14 +9,6 @@ import type { Agent } from '@policylab/shared';
 interface ChatMsg {
   role: 'user' | 'agent';
   content: string;
-}
-
-/** Scenario-specific agent context for cross-scenario chat */
-interface ScenarioAgentContext {
-  sessionId: string;
-  scenarioLabel: string;
-  reflection: string | null;
-  stats: { wealth: number; health: number; happiness: number } | null;
 }
 
 function getAgentHealthColor(agent: Agent): string {
@@ -29,20 +21,12 @@ function getAgentHealthColor(agent: Agent): string {
 const AgentReview = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [chatsByAgent, setChatsByAgent] = useState<Record<string, ChatMsg[]>>({});
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [search, setSearch] = useState('');
-
-  // Multi-scenario support: read scenario IDs from URL
-  const scenarioIds = searchParams.get('scenarios')?.split(',').filter(Boolean) ?? [];
-  const isMultiScenario = scenarioIds.length > 1;
-
-  // Cross-scenario context: fetched agent data from other scenarios
-  const [scenarioContexts, setScenarioContexts] = useState<Record<string, ScenarioAgentContext[]>>({});
 
   const { agents, agentReflections, loadAgents, loadReflections } = useReflectionStore();
   const { loadSession } = useSessionDetailStore();
@@ -80,56 +64,6 @@ const AgentReview = () => {
     }).catch(() => null);
   }, [id]);
 
-  // Fetch cross-scenario data when multi-scenario mode is active
-  useEffect(() => {
-    if (!isMultiScenario) return;
-
-    const fetchScenarioData = async () => {
-      const otherIds = scenarioIds.filter(sid => sid !== id);
-      const allIds = [id, ...otherIds].filter(Boolean) as string[];
-
-      // Fetch agents + reflections from each scenario session
-      const contextMap: Record<string, ScenarioAgentContext[]> = {};
-
-      for (const sessionId of allIds) {
-        try {
-          const [agentsRes, reflectRes, sessionRes] = await Promise.all([
-            fetch(`/api/sessions/${sessionId}/agents`).then(r => r.json()),
-            fetch(`/api/sessions/${sessionId}/reflect`).then(r => r.json()),
-            fetch(`/api/sessions/${sessionId}`).then(r => r.json()),
-          ]);
-
-          const sessionAgents: Agent[] = agentsRes.agents ?? [];
-          const reflections: Record<string, { pass1: string; pass2: string | null }> = reflectRes.reflections ?? {};
-          const label: string = sessionRes.scenarioLabel || sessionRes.title || sessionId.slice(0, 8);
-
-          // Index by agent name (agents across scenarios share names but different IDs)
-          for (const agent of sessionAgents) {
-            if (agent.isCentralAgent) continue;
-            const key = agent.name.toLowerCase();
-            if (!contextMap[key]) contextMap[key] = [];
-            contextMap[key].push({
-              sessionId,
-              scenarioLabel: label,
-              reflection: reflections[agent.id]?.pass1 ?? null,
-              stats: {
-                wealth: agent.currentStats.wealth,
-                health: agent.currentStats.health,
-                happiness: agent.currentStats.happiness,
-              },
-            });
-          }
-        } catch {
-          // Skip failed scenario fetches
-        }
-      }
-
-      setScenarioContexts(contextMap);
-    };
-
-    fetchScenarioData();
-  }, [isMultiScenario, id, scenarioIds.join(',')]);
-
   // Pre-select first alive agent
   useEffect(() => {
     if (!activeAgentId && agents.length > 0) {
@@ -154,24 +88,6 @@ const AgentReview = () => {
     }
   };
 
-  /** Build cross-scenario context string for the active agent */
-  const getCrossScenarioContext = (agent: Agent): string | null => {
-    if (!isMultiScenario) return null;
-    const key = agent.name.toLowerCase();
-    const contexts = scenarioContexts[key];
-    if (!contexts || contexts.length < 2) return null;
-
-    const lines = contexts.map(ctx => {
-      const statsStr = ctx.stats
-        ? `Final stats: wealth=${ctx.stats.wealth}, health=${ctx.stats.health}, happiness=${ctx.stats.happiness}.`
-        : '';
-      const reflStr = ctx.reflection ? `Reflection: "${ctx.reflection.slice(0, 300)}"` : '';
-      return `In "${ctx.scenarioLabel}": ${reflStr} ${statsStr}`.trim();
-    });
-
-    return lines.join('\n');
-  };
-
   const handleSend = async () => {
     if (!input.trim() || sending || !activeAgentId || !id) return;
     const text = input.trim();
@@ -185,20 +101,10 @@ const AgentReview = () => {
     }));
 
     try {
-      // Include cross-scenario context in the request if available
-      const agent = agents.find(a => a.id === activeAgentId);
-      const crossContext = agent ? getCrossScenarioContext(agent) : null;
-
-      const body: Record<string, unknown> = { message: text };
-      if (crossContext) {
-        body.crossScenarioContext = crossContext;
-        body.scenarioCount = scenarioIds.length;
-      }
-
       const res = await fetch(`/api/sessions/${id}/review/${activeAgentId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ message: text }),
       });
       if (res.ok) {
         const data = await res.json() as { reply: string };
@@ -242,14 +148,7 @@ const AgentReview = () => {
   return (
     <div className="animate-fade-in" style={{ height: 'calc(100vh - 4rem)', display: 'flex', flexDirection: 'column' }}>
       <div className="page-header" style={{ marginBottom: '1rem' }}>
-        <h1 className="page-title" style={{ fontSize: '1.5rem' }}>
-          Agent Review
-          {isMultiScenario && (
-            <span style={{ fontSize: '0.85rem', color: 'var(--primary)', marginLeft: '0.75rem' }}>
-              ({scenarioIds.length} scenarios)
-            </span>
-          )}
-        </h1>
+        <h1 className="page-title" style={{ fontSize: '1.5rem' }}>Agent Review</h1>
         <button className="btn-secondary" style={{ color: 'var(--success)' }} onClick={handleEndSession}>
           <CheckCircle size={18} /> Finish & Go Home
         </button>
@@ -262,7 +161,7 @@ const AgentReview = () => {
           <div style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>
             <input
               type="text"
-              placeholder="Search agents..."
+              placeholder="Search agents…"
               className="input-glass"
               style={{ padding: '0.5rem 1rem' }}
               value={search}
@@ -325,7 +224,7 @@ const AgentReview = () => {
 
             {agents.length === 0 && (
               <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
-                Loading agents...
+                Loading agents…
               </div>
             )}
           </div>
@@ -347,19 +246,6 @@ const AgentReview = () => {
                 </div>
               </div>
 
-              {/* Cross-scenario context banner */}
-              {isMultiScenario && activeAgent && getCrossScenarioContext(activeAgent) && (
-                <div style={{
-                  padding: '0.6rem 2rem',
-                  borderBottom: '1px solid var(--glass-border)',
-                  background: 'rgba(79, 70, 229, 0.08)',
-                  fontSize: '0.8rem',
-                  color: 'var(--primary)',
-                }}>
-                  Cross-scenario context active -- this agent lived through {scenarioIds.length} scenarios
-                </div>
-              )}
-
               {/* Expandable reflection strip */}
               {activeReflection?.pass1 && (
                 <ReflectionStrip reflection={activeReflection} />
@@ -369,13 +255,8 @@ const AgentReview = () => {
               <div style={{ flex: 1, overflowY: 'auto', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 {currentMessages.length === 0 && (
                   <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '3rem' }}>
-                    <p style={{ marginBottom: '0.5rem' }}>Ask {activeAgent.name.split(' ')[0]} about their experience...</p>
+                    <p style={{ marginBottom: '0.5rem' }}>Ask {activeAgent.name.split(' ')[0]} about their experience…</p>
                     <p style={{ fontSize: '0.8rem' }}>They'll respond from their perspective as {activeAgent.role}.</p>
-                    {isMultiScenario && (
-                      <p style={{ fontSize: '0.8rem', color: 'var(--primary)', marginTop: '0.5rem' }}>
-                        You can ask cross-scenario questions like "How did you fare under different policies?"
-                      </p>
-                    )}
                   </div>
                 )}
 
@@ -391,7 +272,7 @@ const AgentReview = () => {
                       background: msg.role === 'user' ? 'var(--primary)' : 'var(--panel-alpha-10)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0,
                     }}>
-                      {msg.role === 'user' ? '\u{1F464}' : '\u{1F636}'}
+                      {msg.role === 'user' ? '👤' : '😶'}
                     </div>
                     <div style={{
                       background: msg.role === 'user' ? 'rgba(79, 70, 229, 0.2)' : 'var(--panel-alpha-05)',
@@ -417,10 +298,10 @@ const AgentReview = () => {
 
                 {sending && (
                   <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--panel-alpha-10)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>{'\u{1F636}'}</div>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--panel-alpha-10)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>😶</div>
                     <div style={{ background: 'var(--panel-alpha-05)', border: '1px solid var(--glass-border)', padding: '1rem', borderRadius: '12px', borderTopLeftRadius: 0, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                      {activeAgent.name.split(' ')[0]} is thinking...
+                      {activeAgent.name.split(' ')[0]} is thinking…
                     </div>
                   </div>
                 )}
@@ -434,7 +315,7 @@ const AgentReview = () => {
                   <input
                     type="text"
                     className="input-glass"
-                    placeholder={`Ask ${activeAgent.name.split(' ')[0]} a question...`}
+                    placeholder={`Ask ${activeAgent.name.split(' ')[0]} a question…`}
                     value={input}
                     onChange={e => setInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && !sending && handleSend()}
@@ -489,7 +370,7 @@ function ReflectionStrip({ reflection }: { reflection: { pass1: string; pass2: s
         <div style={{ flex: 1, minWidth: 0 }}>
           <span style={{ color: 'var(--primary)', fontSize: '0.75rem', textTransform: 'uppercase', marginRight: '0.5rem', fontStyle: 'normal' }}>Reflected:</span>
           {!expanded && (
-            <>"{reflection.pass1.slice(0, 150)}{reflection.pass1.length > 150 ? '...' : ''}"</>
+            <>"{reflection.pass1.slice(0, 150)}{reflection.pass1.length > 150 ? '…' : ''}"</>
           )}
         </div>
         <button

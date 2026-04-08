@@ -93,7 +93,7 @@ export const ACTION_SCHEMAS: Partial<Record<ActionCode, ActionSchema>> = {
   },
   // Capital Markets actions
   BUY_SHARES: {
-    description: 'Invest in an enterprise by purchasing shares (BUY_SHARES). BENEFIT: You receive dividend payments proportional to your ownership whenever the enterprise profits. Specify the enterprise owner.',
+    description: 'Buy shares in an enterprise to earn dividends and a piece of the profits (BUY_SHARES). Specify the enterprise owner.',
     params: '{ "target": string, "quantity": number }',
   },
   SELL_SHARES: {
@@ -110,19 +110,19 @@ export const ACTION_SCHEMAS: Partial<Record<ActionCode, ActionSchema>> = {
   },
   // Banking Foundation actions
   DEPOSIT: {
-    description: 'Deposit fiat into your bank account (DEPOSIT). BENEFIT: Earns passive income every iteration through interest while keeping your money safe and available for future WITHDRAW.',
+    description: 'Put your cash in the bank for safekeeping -- it earns interest there (DEPOSIT).',
     params: '{ "amount": number }',
   },
   WITHDRAW: {
-    description: 'Withdraw fiat from your bank deposit for immediate spending (WITHDRAW). NOTE: This reduces your passive income stream, so only pull out what you need.',
+    description: 'Pull your money out of the bank and back into your pocket (WITHDRAW).',
     params: '{ "amount": number }',
   },
   TAKE_LOAN: {
-    description: 'Borrow fiat from the bank for investment or urgent needs (TAKE_LOAN). BENEFIT: Loans let you buy tools, inventory, or food now and pay over time, potentially multiplying future earnings if used well.',
+    description: 'Borrow money from the bank -- you will owe interest and need collateral (TAKE_LOAN).',
     params: '{ "principal": number }',
   },
   REPAY_LOAN: {
-    description: 'Repay part of your outstanding loan (REPAY_LOAN). BENEFIT: Reduces debt, cuts future interest burden, and improves your creditworthiness for later borrowing.',
+    description: 'Make a payment on your loan -- chip away at what you owe (REPAY_LOAN).',
     params: '{ "loan_id": string, "amount": number }',
   },
   ISSUE_LOAN: {
@@ -195,8 +195,6 @@ export interface PersonalStatusBoard {
   enterprise_role?: 'owner' | 'employee' | null;
   /** Current agent wealth — used for entrepreneurial opportunity alert. */
   agentWealth?: number;
-  enterprise_industry?: string | null;
-  enterprise_wage?: number | null;
 }
 
 /** Banking context injected into citizen agent prompts when bankingEnabled is true. */
@@ -392,13 +390,7 @@ export function buildPersonalStatusSection(status?: PersonalStatusBoard): string
 
   if (status.employed && status.enterprise_id) {
     const roleText = status.enterprise_role ? ` as ${status.enterprise_role}` : '';
-    const details = [
-      `- Employment: employed by ${status.enterprise_id}${roleText}`,
-      status.enterprise_wage != null ? `- Wage: ${status.enterprise_wage} fiat per iteration` : null,
-      status.enterprise_industry ? `- Enterprise sector: ${status.enterprise_industry}` : null,
-      '- Showing up for WORK_AT_ENTERPRISE protects your income. Missing work means losing wages.',
-    ].filter(Boolean);
-    return ['[Personal Status]', ...details].join('\n');
+    return `[Personal Status]\n- Employment: employed by ${status.enterprise_id}${roleText}`;
   }
 
   if (status.enterprise_id && status.enterprise_role === 'owner') {
