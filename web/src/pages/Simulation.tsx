@@ -1,7 +1,16 @@
 import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Play, Pause, Square, X, Activity, Heart, CircleDollarSign, Users, Loader2, AlertCircle, ArrowRight, GitFork, Zap, ChevronDown, ChevronRight, ShieldAlert } from 'lucide-react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Play, Pause, Square, X, Activity, Heart, CircleDollarSign, Users, Loader2, AlertCircle, ArrowRight, GitFork, Zap, ChevronDown, ChevronRight, ShieldAlert, BarChart3 } from 'lucide-react';
 import { useSimulationStore, type AgentIntentRecord } from '../stores/simulationStore';
+import { useMultiScenarioStore, SCENARIO_COLORS, SCENARIO_DASHES } from '../stores/multiScenarioStore';
+import type { MultiScenarioSessionState } from '../stores/multiScenarioStore';
+import { ScenarioChart } from '../components/ScenarioChart';
+import { CollapsiblePanel } from '../components/CollapsiblePanel';
+import { ConfigDiffHeader } from '../components/ConfigDiffHeader';
+import { ScenarioProgressBar } from '../components/ScenarioProgressBar';
+import { mergeScenarioData, mergeStatsData } from '@policylab/shared/scenarioDataMerge';
+import type { ScenarioMeta } from '@policylab/shared/scenarioDataMerge';
+import type { EconomyConfig } from '@policylab/shared';
 import { useShallow } from 'zustand/react/shallow';
 import MarkdownText from '../components/MarkdownText';
 import TelemetryPanel from '../components/TelemetryPanel';
@@ -13,37 +22,63 @@ const CHART_VIOLET = 'var(--chart-violet)';
 const Simulation = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+
+  // ── Multi-scenario store ──────────────────────────────────────────────────
   const {
-    isRunning, isPaused, isComplete,
-    currentIteration, totalIterations,
-    feed, statsHistory, agents, finalReport, error, macroHistory,
-    loadAgents, loadHistory, connectSSE,
-    pause, resume, abort, abortAndReset, reset,
-    continueSimulation, forkSimulation,
-  } = useSimulationStore(useShallow(s => ({
-    isRunning: s.isRunning, isPaused: s.isPaused, isComplete: s.isComplete,
-    currentIteration: s.currentIteration, totalIterations: s.totalIterations,
-    feed: s.feed, statsHistory: s.statsHistory, agents: s.agents,
-    finalReport: s.finalReport, error: s.error, macroHistory: s.macroHistory,
+    scenarios, scenarioOrder, allComplete, anyRunning,
+    initScenarios, connectAll, pauseAll, resumeAll, abortAll,
+    addMoreIterations, endAndProceed, loadAllAgents, loadAllHistory,
+    reset: resetMulti,
+  } = useMultiScenarioStore(useShallow(s => ({
+    scenarios: s.scenarios,
+    scenarioOrder: s.scenarioOrder,
+    allComplete: s.allComplete,
+    anyRunning: s.anyRunning,
+    initScenarios: s.initScenarios,
+    connectAll: s.connectAll,
+    pauseAll: s.pauseAll,
+    resumeAll: s.resumeAll,
+    abortAll: s.abortAll,
+    addMoreIterations: s.addMoreIterations,
+    endAndProceed: s.endAndProceed,
+    loadAllAgents: s.loadAllAgents,
+    loadAllHistory: s.loadAllHistory,
+    reset: s.reset,
+  })));
+
+  // ── Legacy single-session store (used for N=1 backward compat internals) ──
+  const singleStore = useSimulationStore(useShallow(s => ({
     loadAgents: s.loadAgents, loadHistory: s.loadHistory, connectSSE: s.connectSSE,
     pause: s.pause, resume: s.resume, abort: s.abort, abortAndReset: s.abortAndReset, reset: s.reset,
     continueSimulation: s.continueSimulation, forkSimulation: s.forkSimulation,
+    loadIntentHistory: s.loadIntentHistory,
   })));
 
-  const { pendingActionCodes, agentIntentHistory, loadIntentHistory } = useSimulationStore(
+  const { pendingActionCodes, agentIntentHistory } = useSimulationStore(
     useShallow(s => ({
       pendingActionCodes: s.pendingActionCodes,
       agentIntentHistory: s.agentIntentHistory,
-      loadIntentHistory: s.loadIntentHistory,
     }))
   );
 
-  // Initialize to '' so auto-proceed never fires before the session fetch resolves.
-  // If initialized to 'simulating', a race between the Zustand isComplete update and
-  // the local setSessionStage call could trigger auto-proceed with a stale stage value.
+  // ── Local state ───────────────────────────────────────────────────────────
+  // N=1 backward compat: no ?scenarios param = single session group (D-22, D-39)
+  const scenarioIds = useMemo(() => {
+    const raw = searchParams.get('scenarios');
+    return raw ? raw.split(',').filter(Boolean) : [id!];
+  }, [searchParams, id]);
+
+  const isMulti = scenarioIds.length > 1;
+
   const [sessionStage, setSessionStage] = useState<string>('');
   const [extraIterations, setExtraIterations] = useState(10);
   const [showTelemetryPanel, setShowTelemetryPanel] = useState(false);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const bothCollapsed = leftCollapsed && rightCollapsed;
+  const [selectedFeedScenario, setSelectedFeedScenario] = useState<string>(scenarioIds[0]);
+  const [selectedAgentScenario, setSelectedAgentScenario] = useState<string>(scenarioIds[0]);
   const [agentStatusTab, setAgentStatusTab] = useState<'lifecycle' | 'intents'>('intents');
   const [confirmDialog, setConfirmDialog] = useState<'end' | 'abort' | null>(null);
   const [autoProceed, setAutoProceed] = useState(() => localStorage.getItem('sim-auto-proceed') === 'true');
@@ -54,6 +89,9 @@ const Simulation = () => {
   const sseCleanupRef = useRef<(() => void) | null>(null);
   const hasAutoProceeded = useRef(false);
 
+  // Configs fetched per scenario for ConfigDiffHeader
+  const [scenarioConfigs, setScenarioConfigs] = useState<Record<string, Partial<EconomyConfig>>>({});
+
   // Keep ref in sync for use in effects without re-running them
   useEffect(() => {
     autoProceedRef.current = autoProceed;
@@ -63,81 +101,85 @@ const Simulation = () => {
   // Persist early stopping preference and sync to server mid-run
   useEffect(() => {
     localStorage.setItem('sim-early-stopping', earlyStoppingEnabled ? 'true' : 'false');
-    if (!id || (!isRunning && !isPaused)) return;
-    fetch(`/api/sessions/${id}/simulate/early-stopping`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: earlyStoppingEnabled }),
-    }).catch(() => null);
-  }, [earlyStoppingEnabled, id, isRunning, isPaused]);
+    if (!id || !anyRunning) return;
+    // Sync to all running scenarios
+    for (const sid of scenarioIds) {
+      fetch(`/api/sessions/${sid}/simulate/early-stopping`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: earlyStoppingEnabled }),
+      }).catch(() => null);
+    }
+  }, [earlyStoppingEnabled, id, anyRunning, scenarioIds]);
 
+  // ── Initialization ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!id) return;
-    reset();
-    // Initialization: load history first, then restore session state
+    resetMulti();
+    singleStore.reset();
+    hasAutoProceeded.current = false;
+
     const init = async () => {
-      await loadAgents(id);
-      await loadHistory(id);
-      await loadIntentHistory(id);
+      // Fetch session metadata for all scenario IDs
+      const sessions = await Promise.all(
+        scenarioIds.map(sid => fetch(`/api/sessions/${sid}`).then(r => r.json()).catch(() => null))
+      );
 
-      try {
-        const r = await fetch(`/api/sessions/${id}`);
-        const s = (await r.json()) as { stage?: string; config?: { totalIterations?: number } | null };
-        if (s.stage) setSessionStage(s.stage);
+      const sessionInfos = sessions
+        .filter(Boolean)
+        .map((s: { id: string; scenarioLabel?: string; config?: { economyConfig?: Partial<EconomyConfig> } }, i: number) => ({
+          id: s.id ?? scenarioIds[i],
+          label: s.scenarioLabel ?? (i === 0 ? 'Baseline' : `Scenario ${String.fromCharCode(65 + i - 1)}`),
+        }));
 
-        const targetIters = s.config?.totalIterations ?? 0;
-
-        if (s.stage === 'simulating') {
-          // Simulation is actively running; restore the running state immediately.
-          // currentIteration is left as-is (set by loadHistory or incoming iteration-start SSE).
-          useSimulationStore.setState(prev => ({
-            isRunning: true,
-            isPaused: false,
-            isComplete: false,
-            totalIterations: targetIters > 0 ? targetIters : prev.totalIterations,
-          }));
-        } else if (s.stage === 'simulation-paused') {
-          useSimulationStore.setState(prev => ({
-            isRunning: false,
-            isPaused: true,
-            isComplete: false,
-            totalIterations: targetIters > 0 ? targetIters : prev.totalIterations,
-          }));
-        } else if (s.stage === 'simulation-complete' || s.stage === 'reflecting' || s.stage === 'reflection-complete' || s.stage === 'reviewing' || s.stage === 'completed') {
-          // Simulation already finished — mark as complete regardless of feed.
-          // Mark hasAutoProceeded so the auto-proceed effect does NOT fire on load.
-          // Auto-proceed is only valid when a simulation *just finished* via SSE;
-          // for pre-completed sessions (e.g. forked sessions, page refresh after
-          // completion) the user must choose manually.
-          hasAutoProceeded.current = true;
-          const state = useSimulationStore.getState();
-          useSimulationStore.setState({
-            isRunning: false,
-            isPaused: false,
-            isComplete: true,
-            totalIterations: targetIters > 0 ? targetIters : (state.feed.length || state.totalIterations),
-          });
+      // Collect economy configs for diff header
+      const configs: Record<string, Partial<EconomyConfig>> = {};
+      for (let i = 0; i < sessions.length; i++) {
+        const s = sessions[i];
+        if (s?.config?.economyConfig) {
+          configs[s.id ?? scenarioIds[i]] = s.config.economyConfig;
         }
-      } catch { /* ignore fetch errors */ }
+      }
+      setScenarioConfigs(configs);
+
+      // Determine session stage from primary session
+      const primary = sessions[0];
+      if (primary?.stage) setSessionStage(primary.stage);
+
+      // Init multi-scenario store
+      initScenarios(sessionInfos);
+      loadAllAgents();
+      loadAllHistory();
+
+      // Also load single-store data for intent history (used by N=1 and agent panels)
+      await singleStore.loadAgents(scenarioIds[0]);
+      await singleStore.loadHistory(scenarioIds[0]);
+      await singleStore.loadIntentHistory(scenarioIds[0]);
+
+      // Set initial state based on session stage
+      if (primary?.stage === 'simulating') {
+        // SSE will update running state
+      } else if (primary?.stage === 'simulation-complete' || primary?.stage === 'reflecting' || primary?.stage === 'reflection-complete' || primary?.stage === 'reviewing' || primary?.stage === 'completed') {
+        hasAutoProceeded.current = true;
+      }
+
+      // Connect all SSE streams
+      const disconnect = connectAll();
+      sseCleanupRef.current = disconnect;
     };
 
     init();
 
-    // Connect SSE for live updates; will close gracefully if simulation already done
-    const disconnect = connectSSE(id);
-    sseCleanupRef.current = disconnect;
-    return disconnect;
-  }, [id]);
+    return () => {
+      sseCleanupRef.current?.();
+    };
+  }, [id, searchParams.get('scenarios')]);
 
-
-  // Auto-proceed: when simulation finishes and toggle is on, navigate to reflection.
-  // Only fires when the session is still in a simulation stage — prevents triggering
-  // when the user navigates back to this page after reflection/review has started.
+  // ── Auto-proceed ──────────────────────────────────────────────────────────
   const simulationStages = ['simulating', 'simulation-paused', 'simulation-complete'];
 
   const handleAutoProceed = useCallback(async () => {
     if (!id || hasAutoProceeded.current) return;
-    // Hard guard: never auto-navigate away if we're already past the simulation stage
     if (!simulationStages.includes(sessionStage)) return;
     hasAutoProceeded.current = true;
     await fetch(`/api/sessions/${id}/stage`, {
@@ -149,41 +191,107 @@ const Simulation = () => {
   }, [id, navigate, sessionStage]);
 
   useEffect(() => {
-    // Only auto-proceed when in an active simulation stage — skip if user navigated
-    // back here from a later stage (reflecting, reviewing, completed, etc.)
-    if (isComplete && !isRunning && autoProceedRef.current && !hasAutoProceeded.current
+    if (allComplete && !anyRunning && autoProceedRef.current && !hasAutoProceeded.current
       && simulationStages.includes(sessionStage)) {
       handleAutoProceed();
     }
-  }, [isComplete, isRunning, handleAutoProceed, sessionStage]);
+  }, [allComplete, anyRunning, handleAutoProceed, sessionStage]);
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handlePauseResume = async () => {
-    if (!id) return;
-    if (isPaused) await resume(id);
-    else await pause(id);
+    const anyPaused = Object.values(scenarios).some(s => s.isPaused);
+    if (anyPaused) await resumeAll();
+    else await pauseAll();
   };
 
   const handleEndAndProceed = async () => {
-    if (!id) return;
     sseCleanupRef.current?.();
-    await abort(id);
-    await fetch(`/api/sessions/${id}/stage`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage: 'reflecting' }),
-    });
-    navigate(`/session/${id}/reflection`);
+    await endAndProceed();
+    if (id) {
+      await fetch(`/api/sessions/${id}/stage`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: 'reflecting' }),
+      });
+      navigate(`/session/${id}/reflection`);
+    }
   };
 
   const handleAbort = async () => {
-    if (!id) return;
     sseCleanupRef.current?.();
-    reset();
-    await abortAndReset(id);
-    navigate(`/session/${id}/design`);
+    await abortAll();
+    resetMulti();
+    singleStore.reset();
+    if (id) {
+      await singleStore.abortAndReset(id);
+      navigate(`/session/${id}/design`);
+    }
   };
 
-  const latestStats = statsHistory[statsHistory.length - 1] ?? null;
+  // ── Derived data for charts ───────────────────────────────────────────────
+  const scenarioMetas: ScenarioMeta[] = useMemo(() =>
+    scenarioOrder.map((sid, i) => ({
+      label: scenarios[sid]?.label ?? `Scenario ${i}`,
+      index: i,
+      sessionId: sid,
+    })),
+    [scenarioOrder, scenarios]
+  );
+
+  const scenariosDataForTelemetry = useMemo(() =>
+    scenarioOrder.map(sid => ({
+      label: scenarios[sid]?.label ?? sid,
+      data: scenarios[sid]?.macroHistory ?? [],
+    })),
+    [scenarioOrder, scenarios]
+  );
+
+  const scenariosDataForStats = useMemo(() =>
+    scenarioOrder.map(sid => ({
+      label: scenarios[sid]?.label ?? sid,
+      data: scenarios[sid]?.statsHistory ?? [],
+    })),
+    [scenarioOrder, scenarios]
+  );
+
+  // Merged data for each chart
+  const cpiData = useMemo(() => mergeScenarioData(scenariosDataForTelemetry, 'cpi'), [scenariosDataForTelemetry]);
+  const m0Data = useMemo(() => mergeScenarioData(scenariosDataForTelemetry, 'm0'), [scenariosDataForTelemetry]);
+  const m1Data = useMemo(() => mergeScenarioData(scenariosDataForTelemetry, 'm1'), [scenariosDataForTelemetry]);
+  const totalFiatData = useMemo(() => mergeScenarioData(scenariosDataForTelemetry, 'totalFiatSupply'), [scenariosDataForTelemetry]);
+
+  const wealthData = useMemo(() => mergeStatsData(scenariosDataForStats, 'avgWealth'), [scenariosDataForStats]);
+  const healthData = useMemo(() => mergeStatsData(scenariosDataForStats, 'avgHealth'), [scenariosDataForStats]);
+  const happinessData = useMemo(() => mergeStatsData(scenariosDataForStats, 'avgHappiness'), [scenariosDataForStats]);
+  const cortisolData = useMemo(() => mergeStatsData(scenariosDataForStats, 'avgCortisol'), [scenariosDataForStats]);
+  const dopamineData = useMemo(() => mergeStatsData(scenariosDataForStats, 'avgDopamine'), [scenariosDataForStats]);
+  const giniData = useMemo(() => mergeScenarioData(scenariosDataForTelemetry, 'giniCoefficient'), [scenariosDataForTelemetry]);
+  const trustData = useMemo(() => mergeScenarioData(scenariosDataForTelemetry, 'trustIndex'), [scenariosDataForTelemetry]);
+  const crimeData = useMemo(() => mergeScenarioData(scenariosDataForTelemetry, 'crimeRate'), [scenariosDataForTelemetry]);
+
+  // Bond yields need special handling — extract governmentYield from nested object
+  // For now, skip if not available as a top-level field
+
+  // Determine global state
+  const anyPaused = Object.values(scenarios).some(s => s.isPaused);
+  const anyError = Object.values(scenarios).find(s => s.error)?.error ?? null;
+
+  // Selected scenario data for side panels
+  const selectedFeedData = scenarios[selectedFeedScenario];
+  const selectedAgentData = scenarios[selectedAgentScenario];
+
+  const feedEntries = useMemo(() => {
+    const feed = selectedFeedData?.feed ?? [];
+    return [...feed].reverse();
+  }, [selectedFeedData?.feed]);
+
+  const selectedAgents = selectedAgentData?.agents ?? [];
+
+  // Lifecycle events from selected feed scenario
+  const allLifecycleEvents = useMemo(() =>
+    (selectedFeedData?.feed ?? []).flatMap(f => f.lifecycleEvents.map(e => ({ ...e, iterNum: f.number }))).reverse().slice(0, 30),
+    [selectedFeedData?.feed]
+  );
 
   const getAgentColor = (agent: { currentStats: { health: number }; isAlive: boolean }) => {
     if (!agent.isAlive) return 'var(--text-dim)';
@@ -193,67 +301,61 @@ const Simulation = () => {
     return 'var(--danger)';
   };
 
-  const progress = totalIterations > 0 ? (currentIteration / totalIterations) * 100 : 0;
-
-  // Reversed feed for display (newest first)
-  const reversedFeed = useMemo(() => [...feed].reverse(), [feed]);
-
-  // Lifecycle events across all iterations (newest first, capped at 30)
-  const allLifecycleEvents = useMemo(() =>
-    feed.flatMap(f => f.lifecycleEvents.map(e => ({ ...e, iterNum: f.number }))).reverse().slice(0, 30),
-    [feed]
+  // ── Scenario tabs component for side panels ───────────────────────────────
+  const ScenarioTabBar = ({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) => (
+    <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--glass-border)', paddingBottom: 4, marginBottom: 8 }}>
+      {scenarioOrder.map((sid, i) => (
+        <button key={sid} onClick={() => onSelect(sid)} style={{
+          fontSize: 12, fontWeight: 700,
+          color: selected === sid ? SCENARIO_COLORS[i % SCENARIO_COLORS.length] : 'var(--text-dim)',
+          borderBottom: selected === sid ? `2px solid ${SCENARIO_COLORS[i % SCENARIO_COLORS.length]}` : '2px solid transparent',
+          background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px',
+        }}>
+          {scenarios[sid]?.label ?? `Scenario ${i}`}
+        </button>
+      ))}
+    </div>
   );
-
 
   return (
     <div className="animate-fade-in" style={{ height: 'calc(100vh - 4rem)', display: 'flex', flexDirection: 'column' }}>
 
       {/* Top Bar: Progress and Controls */}
-      <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, marginRight: '2rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-            {isComplete ? (
-              <span style={{ color: 'var(--success)' }}><strong>Simulation Complete</strong></span>
-            ) : isRunning ? (
-              <span>
-                <strong style={{ color: 'var(--color-bright)' }}>Iteration {currentIteration}</strong>
-                {totalIterations > 0 && ` of ${totalIterations}`}
-                <Loader2 size={14} style={{ marginLeft: '0.5rem', animation: 'spin 1s linear infinite', display: 'inline' }} />
-              </span>
-            ) : isPaused ? (
-              <span style={{ color: 'var(--warning)' }}>Paused at iteration {currentIteration}</span>
-            ) : (
-              <span style={{ color: 'var(--text-muted)' }}>Waiting for simulation to start…</span>
-            )}
-            {totalIterations > 0 && (
-              <span style={{ color: 'var(--text-dim)' }}>{Math.round(progress)}%</span>
-            )}
-          </div>
-          <div style={{ height: '8px', background: 'var(--panel-alpha-10)', borderRadius: '4px', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%',
-              width: `${progress}%`,
-              background: isComplete
-                ? 'var(--success)'
-                : 'linear-gradient(90deg, var(--primary), var(--success))',
-              transition: 'width 1s linear',
-            }} />
-          </div>
+      <div className="glass-panel" style={{ padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+        {/* Multi-progress bars (D-28) */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, flex: 1, marginRight: '1.5rem' }}>
+          {scenarioOrder.map(sid => {
+            const s = scenarios[sid];
+            if (!s) return null;
+            return (
+              <ScenarioProgressBar
+                key={sid}
+                label={s.label}
+                current={s.currentIteration}
+                total={s.totalIterations}
+                color={s.color}
+                isComplete={s.isComplete}
+                isPaused={s.isPaused}
+                error={s.error}
+              />
+            );
+          })}
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        {/* Controls */}
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexShrink: 0 }}>
           {/* Auto-Proceed Toggle */}
           <div
             onClick={() => setAutoProceed(p => !p)}
             style={{
               display: 'flex', alignItems: 'center', gap: '0.5rem',
               cursor: 'pointer', userSelect: 'none',
-              padding: '0.75rem 0.75rem', borderRadius: '8px',
+              padding: '0.5rem 0.75rem', borderRadius: '8px',
               background: autoProceed ? 'rgba(16, 185, 129, 0.15)' : 'var(--panel-alpha-05)',
               border: `1px solid ${autoProceed ? 'rgba(16, 185, 129, 0.4)' : 'var(--glass-border)'}`,
               transition: 'all 0.2s ease',
             }}
-            title="When enabled, automatically proceed to Reflection when simulation completes"
+            title="When enabled, automatically proceed to Reflection when all scenarios complete"
           >
             <div style={{
               width: '32px', height: '18px', borderRadius: '9px',
@@ -271,7 +373,7 @@ const Simulation = () => {
             </div>
             <Zap size={14} color={autoProceed ? 'var(--success)' : 'var(--text-dim)'} />
             <span style={{ fontSize: '0.8rem', color: autoProceed ? 'var(--success)' : 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-              Auto Proceed
+              Auto
             </span>
           </div>
 
@@ -281,7 +383,7 @@ const Simulation = () => {
             style={{
               display: 'flex', alignItems: 'center', gap: '0.5rem',
               cursor: 'pointer', userSelect: 'none',
-              padding: '0.75rem 0.75rem', borderRadius: '8px',
+              padding: '0.5rem 0.75rem', borderRadius: '8px',
               background: earlyStoppingEnabled ? 'rgba(245, 158, 11, 0.15)' : 'var(--panel-alpha-05)',
               border: `1px solid ${earlyStoppingEnabled ? 'rgba(245, 158, 11, 0.4)' : 'var(--glass-border)'}`,
               transition: 'all 0.2s ease',
@@ -306,32 +408,42 @@ const Simulation = () => {
             </div>
             <ShieldAlert size={14} color={earlyStoppingEnabled ? 'var(--warning)' : 'var(--text-dim)'} />
             <span style={{ fontSize: '0.8rem', color: earlyStoppingEnabled ? 'var(--warning)' : 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-              Early Stop
+              Stop
             </span>
           </div>
 
-          {(isRunning || isPaused) && !isComplete && (
-            <button className="btn-secondary" onClick={handlePauseResume} style={{ width: '120px', justifyContent: 'center' }}>
-              {isPaused ? <><Play size={18} /> Resume</> : <><Pause size={18} /> Pause</>}
+          {/* Classic Telemetry button */}
+          <button
+            className="btn-secondary"
+            onClick={() => setShowTelemetryPanel(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem' }}
+            title="Show classic economy telemetry charts"
+          >
+            <BarChart3 size={16} />
+          </button>
+
+          {(anyRunning || anyPaused) && !allComplete && (
+            <button className="btn-secondary" onClick={handlePauseResume} style={{ width: '100px', justifyContent: 'center' }}>
+              {anyPaused ? <><Play size={16} /> Resume</> : <><Pause size={16} /> Pause</>}
             </button>
           )}
-          {!isComplete && (
+          {!allComplete && (
             <>
               <button
                 className="btn-secondary"
                 onClick={() => setConfirmDialog('end')}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                title="End simulation now and proceed to Reflection (keeps all completed iterations)"
+                title="End all simulations now and proceed to Reflection"
               >
-                <Square size={18} /> End & Proceed
+                <Square size={16} /> End
               </button>
               <button
                 className="btn-secondary"
                 style={{ color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
                 onClick={() => setConfirmDialog('abort')}
-                title="Cancel simulation and discard all data, returning to Design"
+                title="Cancel all simulations and discard data"
               >
-                <X size={18} /> Abort
+                <X size={16} /> Abort
               </button>
             </>
           )}
@@ -339,239 +451,289 @@ const Simulation = () => {
       </div>
 
       {/* Error banner */}
-      {error && (
-        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger)' }}>
+      {anyError && (
+        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger)' }}>
           <AlertCircle size={16} style={{ flexShrink: 0 }} />
-          <span style={{ flex: 1 }}>{error}</span>
-          <button
-            onClick={() => useSimulationStore.setState({ error: null })}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '0', display: 'flex', alignItems: 'center', flexShrink: 0 }}
-            title="Dismiss"
-          >
-            ✕
-          </button>
+          <span style={{ flex: 1 }}>{anyError}</span>
         </div>
       )}
 
-      {/* Main Dashboard — Three Columns */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1.2fr) minmax(250px, 1fr) minmax(300px, 1fr)', gap: '1.5rem', flex: 1, overflow: 'hidden' }}>
+      {/* Config Diff Header (D-27) — only for multi-scenario */}
+      {isMulti && (
+        <div style={{ marginBottom: '0.75rem' }}>
+          <ConfigDiffHeader scenarios={scenarioMetas} configs={scenarioConfigs} />
+        </div>
+      )}
 
-        {/* Col 1: Live Feed (virtualized) */}
-        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', flexShrink: 0 }}>
-            <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Activity size={18} color="var(--primary)" /> Live Feed
-            </h3>
-          </div>
-          <div style={{ flex: 1, padding: '1rem', overflowY: 'auto' }}>
-            {feed.length === 0 && !isRunning && (
-              <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', textAlign: 'center', marginTop: '2rem' }}>
-                No iterations yet.
-              </p>
-            )}
-            {/* Pending "next iteration" indicator */}
-            {isRunning && feed.length > 0 && (
-              <div style={{ paddingLeft: '1rem', borderLeft: '2px solid var(--primary)', opacity: 0.6, marginBottom: '1rem' }}>
-                <h4 style={{ fontSize: '0.9rem', color: 'var(--primary)' }}>
-                  Iteration {currentIteration} <Loader2 size={12} style={{ display: 'inline', animation: 'spin 1s linear infinite' }} />
-                </h4>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>Collecting agent intentions…</p>
+      {/* Main Dashboard — Three Columns with Collapsible Panels */}
+      <div style={{ display: 'flex', gap: 8, flex: 1, overflow: 'hidden' }}>
+
+        {/* Left: Live Feed (collapsible) */}
+        <CollapsiblePanel side="left" collapsed={leftCollapsed} onToggle={() => setLeftCollapsed(v => !v)} label="Live Feed">
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <div style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', flexShrink: 0 }}>
+              <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                <Activity size={18} color="var(--primary)" /> Live Feed
+              </h3>
+            </div>
+            {/* Scenario tabs when N>1 (D-26) */}
+            {isMulti && (
+              <div style={{ padding: '8px 1rem 0' }}>
+                <ScenarioTabBar selected={selectedFeedScenario} onSelect={setSelectedFeedScenario} />
               </div>
             )}
-            {/* Feed list (newest first) */}
-            {reversedFeed.map(entry => (
-              <div key={entry.number} style={{ marginBottom: '1rem' }}>
-                <div style={{
-                  paddingLeft: '1rem',
-                  borderLeft: `2px solid ${entry.number === currentIteration ? 'var(--primary)' : 'var(--glass-border)'}`,
-                }}>
-                  <h4 style={{
-                    fontSize: '0.9rem',
-                    color: entry.number === currentIteration ? 'var(--primary)' : 'var(--text-muted)',
-                    marginBottom: '0.5rem',
-                  }}>
-                    Iteration {entry.number}
-                    {entry.stats && (
-                      <span style={{ fontWeight: 'normal', marginLeft: '0.5rem', fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-                        · {entry.stats.aliveCount} alive
-                      </span>
-                    )}
+            <div style={{ flex: 1, padding: '1rem', overflowY: 'auto' }}>
+              {feedEntries.length === 0 && !anyRunning && (
+                <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', textAlign: 'center', marginTop: '2rem' }}>
+                  No iterations yet.
+                </p>
+              )}
+              {/* Pending indicator */}
+              {selectedFeedData?.isRunning && feedEntries.length > 0 && (
+                <div style={{ paddingLeft: '1rem', borderLeft: '2px solid var(--primary)', opacity: 0.6, marginBottom: '1rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', color: 'var(--primary)' }}>
+                    Iteration {selectedFeedData.currentIteration} <Loader2 size={12} style={{ display: 'inline', animation: 'spin 1s linear infinite' }} />
                   </h4>
-                  <p style={{ fontSize: '0.95rem', lineHeight: 1.5, color: 'var(--text-main)' }}>
-                    <MarkdownText>{entry.narrativeSummary}</MarkdownText>
-                  </p>
-                </div>
-              </div>
-            ))}
-            {isComplete && finalReport && (
-              <div style={{ paddingLeft: '1rem', borderLeft: '2px solid var(--success)', marginTop: '0.5rem' }}>
-                <h4 style={{ fontSize: '0.9rem', color: 'var(--success)', marginBottom: '0.5rem' }}>Final Report</h4>
-                <div style={{ fontSize: '0.9rem', lineHeight: 1.6, color: 'var(--text-main)' }}>
-                  <MarkdownText>{finalReport}</MarkdownText>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Col 2: Statistics */}
-        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', flexShrink: 0 }}>
-            <h3 style={{ fontSize: '1.1rem' }}>Statistics</h3>
-          </div>
-          <div style={{ flex: 1, padding: '1rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-            {latestStats ? (
-              <>
-                <StatCard
-                  label="Wealth"
-                  color="var(--warning)"
-                  icon={<CircleDollarSign size={16} />}
-                  avg={latestStats.avgWealth}
-                  min={latestStats.minWealth}
-                  max={latestStats.maxWealth}
-                  history={statsHistory.map(s => s.avgWealth)}
-                />
-                <StatCard
-                  label="Health"
-                  color="var(--success)"
-                  icon={<Heart size={16} />}
-                  avg={latestStats.avgHealth}
-                  min={latestStats.minHealth}
-                  max={latestStats.maxHealth}
-                  history={statsHistory.map(s => s.avgHealth)}
-                />
-                <StatCard
-                  label="Happiness"
-                  color="var(--primary)"
-                  icon={<Users size={16} />}
-                  avg={latestStats.avgHappiness}
-                  min={latestStats.minHappiness}
-                  max={latestStats.maxHappiness}
-                  history={statsHistory.map(s => s.avgHappiness)}
-                />
-                {latestStats.avgCortisol !== undefined && (
-                  <StatCard
-                    label="Cortisol"
-                    color={CHART_ORANGE}
-                    icon={<Activity size={16} />}
-                    avg={latestStats.avgCortisol}
-                    history={statsHistory.map(s => s.avgCortisol ?? 0)}
-                  />
-                )}
-                {latestStats.avgDopamine !== undefined && (
-                  <StatCard
-                    label="Dopamine"
-                    color={CHART_VIOLET}
-                    icon={<Zap size={16} />}
-                    avg={latestStats.avgDopamine}
-                    history={statsHistory.map(s => s.avgDopamine ?? 0)}
-                  />
-                )}
-                <div style={{ background: 'var(--panel-alpha-05)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><Users size={16} /> Population</span>
-                    <span>{latestStats.aliveCount} / {latestStats.totalCount}</span>
-                  </div>
-                  {latestStats.giniWealth !== undefined && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                      <span title="Wealth inequality: 0=equal, 1=totally unequal">Gini (wealth)</span>
-                      <span style={{ color: latestStats.giniWealth > 0.5 ? 'var(--danger)' : latestStats.giniWealth > 0.3 ? 'var(--warning)' : 'var(--success)' }}>
-                        {latestStats.giniWealth.toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', textAlign: 'center', marginTop: '2rem' }}>
-                Stats will appear after the first iteration.
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Col 3: Agent Grid + Lifecycle */}
-        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', flexShrink: 0 }}>
-            <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Users size={18} /> Agent Status
-            </h3>
-          </div>
-          <div style={{ flex: 1, padding: '1.5rem', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            {/* Agent dots — fixed height, no internal scroll needed */}
-            <div style={{ flexShrink: 0 }}>
-              {agents.length > 0 ? (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
-                  {agents.map(a => (
-                    <div
-                      key={a.id}
-                      style={{
-                        width: '14px', height: '14px',
-                        borderRadius: '50%',
-                        background: getAgentColor(a),
-                        boxShadow: a.isAlive ? `0 0 5px ${getAgentColor(a)}` : 'none',
-                        cursor: 'pointer',
-                        opacity: a.isAlive ? 1 : 0.3,
-                      }}
-                      title={`${a.name} (${a.role}) — W:${a.currentStats.wealth} H:${a.currentStats.health} Hap:${a.currentStats.happiness}${!a.isAlive ? ' [dead]' : ''}`}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div style={{ marginBottom: '1rem', color: 'var(--text-dim)', fontSize: '0.85rem' }}>
-                  Agent data loading…
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>Collecting agent intentions...</p>
                 </div>
               )}
-              {/* Tab bar */}
-              <div style={{ display: 'flex', borderBottom: '1px solid var(--glass-border)', marginBottom: '0.75rem', gap: 0 }}>
-                {(['intents', 'lifecycle'] as const).map(tab => (
-                  <button key={tab} onClick={() => setAgentStatusTab(tab)} style={{
-                    flex: 1, padding: '0.4rem 0', fontSize: '0.75rem', fontWeight: 600,
-                    textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer',
-                    border: 'none', borderBottom: `2px solid ${agentStatusTab === tab ? 'var(--primary)' : 'transparent'}`,
-                    background: 'transparent', color: agentStatusTab === tab ? 'var(--primary)' : 'var(--text-dim)',
-                    transition: 'color 0.15s, border-color 0.15s',
+              {feedEntries.map(entry => (
+                <div key={entry.number} style={{ marginBottom: '1rem' }}>
+                  <div style={{
+                    paddingLeft: '1rem',
+                    borderLeft: `2px solid ${entry.number === (selectedFeedData?.currentIteration ?? 0) ? 'var(--primary)' : 'var(--glass-border)'}`,
                   }}>
-                    {tab === 'intents' ? 'Intents' : 'Lifecycle'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Tab content — expands to fill remaining space */}
-            {agentStatusTab === 'lifecycle' ? (
-              allLifecycleEvents.length === 0 ? (
-                <div style={{ fontSize: '0.9rem', color: 'var(--text-dim)' }}>No events yet.</div>
-              ) : (
-                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                  {allLifecycleEvents.map((e, idx) => (
-                    <div key={idx} style={{ fontSize: '0.9rem', color: 'var(--text-dim)', paddingBottom: '0.5rem' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>Iter {e.iterNum}:</span>{' '}
-                      <span style={{ color: e.type === 'death' ? 'var(--danger)' : 'var(--primary)' }}>
-                        {e.type === 'death' ? '💀' : '🔄'}
-                      </span>{' '}
-                      {e.detail}
-                    </div>
-                  ))}
+                    <h4 style={{
+                      fontSize: '0.9rem',
+                      color: entry.number === (selectedFeedData?.currentIteration ?? 0) ? 'var(--primary)' : 'var(--text-muted)',
+                      marginBottom: '0.5rem',
+                    }}>
+                      Iteration {entry.number}
+                      {entry.stats && (
+                        <span style={{ fontWeight: 'normal', marginLeft: '0.5rem', fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+                          &middot; {entry.stats.aliveCount} alive
+                        </span>
+                      )}
+                    </h4>
+                    <p style={{ fontSize: '0.95rem', lineHeight: 1.5, color: 'var(--text-main)' }}>
+                      <MarkdownText>{entry.narrativeSummary}</MarkdownText>
+                    </p>
+                  </div>
                 </div>
-              )
-            ) : (
-              <AgentIntentPanel
-                agents={agents}
-                agentIntentHistory={agentIntentHistory}
-                pendingActionCodes={pendingActionCodes}
-                currentIteration={currentIteration}
-              />
-            )}
+              ))}
+              {selectedFeedData?.isComplete && selectedFeedData?.finalReport && (
+                <div style={{ paddingLeft: '1rem', borderLeft: '2px solid var(--success)', marginTop: '0.5rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', color: 'var(--success)', marginBottom: '0.5rem' }}>Final Report</h4>
+                  <div style={{ fontSize: '0.9rem', lineHeight: 1.6, color: 'var(--text-main)' }}>
+                    <MarkdownText>{selectedFeedData.finalReport}</MarkdownText>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </CollapsiblePanel>
+
+        {/* Center: Statistics — chart grid */}
+        <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+          <div style={{
+            display: bothCollapsed ? 'grid' : 'flex',
+            gridTemplateColumns: bothCollapsed ? 'repeat(auto-fill, minmax(420px, 1fr))' : undefined,
+            flexDirection: bothCollapsed ? undefined : 'column',
+            gap: bothCollapsed ? 24 : 16,
+          }}>
+            {/* 11 charts in D-25 order */}
+
+            {/* 1. CPI */}
+            <ScenarioChart
+              data={cpiData}
+              scenarios={scenarioMetas}
+              field="cpi"
+              title="Consumer Price Index"
+              yFormatter={(v: number) => v.toFixed(1)}
+            />
+
+            {/* 2. Money Supply — M0 as base, show totalFiatSupply and M1 */}
+            <ScenarioChart
+              data={totalFiatData}
+              scenarios={scenarioMetas}
+              field="totalFiatSupply"
+              title="Money Supply (M0 + Fiat)"
+              yFormatter={(v: number) => v.toFixed(0)}
+              chartType={!isMulti ? 'area' : 'line'}
+            />
+
+            {/* 3. Money Supply M1 */}
+            <ScenarioChart
+              data={m1Data}
+              scenarios={scenarioMetas}
+              field="m1"
+              title="M1 Money Supply"
+              yFormatter={(v: number) => v.toFixed(0)}
+            />
+
+            {/* 4. Gini Coefficient */}
+            <ScenarioChart
+              data={giniData}
+              scenarios={scenarioMetas}
+              field="giniCoefficient"
+              title="Wealth Inequality (Gini)"
+              yFormatter={(v: number) => v.toFixed(3)}
+            />
+
+            {/* 5. Avg Wealth */}
+            <ScenarioChart
+              data={wealthData}
+              scenarios={scenarioMetas}
+              field="avgWealth"
+              title="Average Wealth"
+              yFormatter={(v: number) => v.toFixed(0)}
+            />
+
+            {/* 6. Avg Health */}
+            <ScenarioChart
+              data={healthData}
+              scenarios={scenarioMetas}
+              field="avgHealth"
+              title="Average Health"
+              yFormatter={(v: number) => v.toFixed(1)}
+            />
+
+            {/* 7. Avg Happiness */}
+            <ScenarioChart
+              data={happinessData}
+              scenarios={scenarioMetas}
+              field="avgHappiness"
+              title="Average Happiness"
+              yFormatter={(v: number) => v.toFixed(1)}
+            />
+
+            {/* 8. Avg Cortisol */}
+            <ScenarioChart
+              data={cortisolData}
+              scenarios={scenarioMetas}
+              field="avgCortisol"
+              title="Average Cortisol"
+              yFormatter={(v: number) => v.toFixed(1)}
+            />
+
+            {/* 9. Avg Dopamine */}
+            <ScenarioChart
+              data={dopamineData}
+              scenarios={scenarioMetas}
+              field="avgDopamine"
+              title="Average Dopamine"
+              yFormatter={(v: number) => v.toFixed(1)}
+            />
+
+            {/* 10. Trust Index */}
+            <ScenarioChart
+              data={trustData}
+              scenarios={scenarioMetas}
+              field="trustIndex"
+              title="Trust Index"
+              yFormatter={(v: number) => (v * 100).toFixed(0) + '%'}
+            />
+
+            {/* 11. Crime Rate */}
+            <ScenarioChart
+              data={crimeData}
+              scenarios={scenarioMetas}
+              field="crimeRate"
+              title="Crime Rate"
+              yFormatter={(v: number) => (v * 100).toFixed(1) + '%'}
+            />
           </div>
         </div>
+
+        {/* Right: Agent Status (collapsible) */}
+        <CollapsiblePanel side="right" collapsed={rightCollapsed} onToggle={() => setRightCollapsed(v => !v)} label="Agent Status">
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <div style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', flexShrink: 0 }}>
+              <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                <Users size={18} /> Agent Status
+              </h3>
+            </div>
+            {/* Scenario tabs when N>1 (D-26) */}
+            {isMulti && (
+              <div style={{ padding: '8px 1rem 0' }}>
+                <ScenarioTabBar selected={selectedAgentScenario} onSelect={setSelectedAgentScenario} />
+              </div>
+            )}
+            <div style={{ flex: 1, padding: '1rem', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {/* Agent dots */}
+              <div style={{ flexShrink: 0 }}>
+                {selectedAgents.length > 0 ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+                    {selectedAgents.map(a => (
+                      <div
+                        key={a.id}
+                        style={{
+                          width: '14px', height: '14px',
+                          borderRadius: '50%',
+                          background: getAgentColor(a),
+                          boxShadow: a.isAlive ? `0 0 5px ${getAgentColor(a)}` : 'none',
+                          cursor: 'pointer',
+                          opacity: a.isAlive ? 1 : 0.3,
+                        }}
+                        title={`${a.name} (${a.role}) — W:${a.currentStats.wealth} H:${a.currentStats.health} Hap:${a.currentStats.happiness}${!a.isAlive ? ' [dead]' : ''}`}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: '1rem', color: 'var(--text-dim)', fontSize: '0.85rem' }}>
+                    Agent data loading...
+                  </div>
+                )}
+                {/* Tab bar */}
+                <div style={{ display: 'flex', borderBottom: '1px solid var(--glass-border)', marginBottom: '0.75rem', gap: 0 }}>
+                  {(['intents', 'lifecycle'] as const).map(tab => (
+                    <button key={tab} onClick={() => setAgentStatusTab(tab)} style={{
+                      flex: 1, padding: '0.4rem 0', fontSize: '0.75rem', fontWeight: 600,
+                      textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer',
+                      border: 'none', borderBottom: `2px solid ${agentStatusTab === tab ? 'var(--primary)' : 'transparent'}`,
+                      background: 'transparent', color: agentStatusTab === tab ? 'var(--primary)' : 'var(--text-dim)',
+                      transition: 'color 0.15s, border-color 0.15s',
+                    }}>
+                      {tab === 'intents' ? 'Intents' : 'Lifecycle'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tab content */}
+              {agentStatusTab === 'lifecycle' ? (
+                allLifecycleEvents.length === 0 ? (
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-dim)' }}>No events yet.</div>
+                ) : (
+                  <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                    {allLifecycleEvents.map((e, idx) => (
+                      <div key={idx} style={{ fontSize: '0.9rem', color: 'var(--text-dim)', paddingBottom: '0.5rem' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Iter {e.iterNum}:</span>{' '}
+                        <span style={{ color: e.type === 'death' ? 'var(--danger)' : 'var(--primary)' }}>
+                          {e.type === 'death' ? '\u{1F480}' : '\u{1F504}'}
+                        </span>{' '}
+                        {e.detail}
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                <AgentIntentPanel
+                  agents={selectedAgents}
+                  agentIntentHistory={agentIntentHistory}
+                  pendingActionCodes={pendingActionCodes}
+                  currentIteration={selectedAgentData?.currentIteration ?? 0}
+                />
+              )}
+            </div>
+          </div>
+        </CollapsiblePanel>
 
       </div>
 
-      {/* Action Bar — shown when simulation is complete and not running */}
-      {isComplete && !isRunning && (
-        <div className="glass-panel" style={{ padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem', flexShrink: 0 }}>
+      {/* Action Bar — shown when all scenarios complete */}
+      {allComplete && (
+        <div className="glass-panel" style={{ padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1rem', marginTop: '0.75rem', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: 'auto' }}>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Extra iterations:</label>
             <input
@@ -593,15 +755,26 @@ const Simulation = () => {
               <button
                 className="btn-primary"
                 onClick={async () => {
-                  if (!id) return;
+                  await addMoreIterations(extraIterations);
+                  // Reconnect SSE streams
                   sseCleanupRef.current?.();
-                  sseCleanupRef.current = await continueSimulation(id, extraIterations, earlyStoppingEnabled);
+                  sseCleanupRef.current = connectAll();
                   setSessionStage('simulating');
                 }}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
               >
                 <Play size={16} /> Add More Iterations
               </button>
+              {/* View Full Comparison (D-14, LSC-10) — only for multi-scenario */}
+              {isMulti && (
+                <button
+                  className="btn-primary"
+                  onClick={() => navigate(`/sessions/${scenarioOrder[0]}/compare/${scenarioOrder[1]}`)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--primary)', color: 'white', padding: '0.75rem 1.5rem', borderRadius: 8, fontSize: '0.9rem', fontWeight: 700 }}
+                >
+                  View Full Comparison
+                </button>
+              )}
               <button
                 className="btn-secondary"
                 onClick={async () => {
@@ -623,7 +796,7 @@ const Simulation = () => {
               className="btn-primary"
               onClick={async () => {
                 if (!id) return;
-                const newId = await forkSimulation(id);
+                const newId = await singleStore.forkSimulation(id);
                 navigate(`/session/${newId}/simulation`);
               }}
               style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
@@ -633,10 +806,12 @@ const Simulation = () => {
           )}
         </div>
       )}
+
       {/* Confirmation dialog */}
       {confirmDialog && (
         <ConfirmDialog
           variant={confirmDialog}
+          isMulti={isMulti}
           onConfirm={() => {
             setConfirmDialog(null);
             if (confirmDialog === 'end') handleEndAndProceed();
@@ -646,12 +821,12 @@ const Simulation = () => {
         />
       )}
 
-      {/* Economy Telemetry Terminal */}
+      {/* Economy Telemetry Terminal (classic) */}
       {showTelemetryPanel && id && (
         <TelemetryPanel
           sessionId={id}
           onClose={() => setShowTelemetryPanel(false)}
-          macroHistory={macroHistory}
+          macroHistory={scenarios[scenarioOrder[0]]?.macroHistory ?? []}
         />
       )}
     </div>
@@ -662,14 +837,14 @@ const Simulation = () => {
 
 interface ConfirmDialogProps {
   variant: 'end' | 'abort';
+  isMulti: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-function ConfirmDialog({ variant, onConfirm, onCancel }: ConfirmDialogProps) {
+function ConfirmDialog({ variant, isMulti, onConfirm, onCancel }: ConfirmDialogProps) {
   const isAbort = variant === 'abort';
   return (
-    /* Backdrop */
     <div
       onClick={onCancel}
       style={{
@@ -678,7 +853,6 @@ function ConfirmDialog({ variant, onConfirm, onCancel }: ConfirmDialogProps) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
-      {/* Panel */}
       <div
         onClick={e => e.stopPropagation()}
         className="glass-panel"
@@ -692,13 +866,11 @@ function ConfirmDialog({ variant, onConfirm, onCancel }: ConfirmDialogProps) {
             {isAbort ? 'Abort Simulation?' : 'End & Proceed to Reflection?'}
           </h3>
         </div>
-
         <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>
           {isAbort
-            ? 'This will cancel the simulation and permanently discard all completed iterations. The session will return to the Design stage.'
-            : 'This will stop the simulation at the current iteration and immediately proceed to Reflection. All completed iterations will be preserved.'}
+            ? `This will stop all running simulations. Results so far will be preserved. Continue?`
+            : `This will end all running simulations at their current iteration and proceed to reflection. Continue?`}
         </p>
-
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
           <button className="btn-secondary" onClick={onCancel}>
             Keep Running
@@ -726,7 +898,6 @@ const ACTION_COLORS: Record<string, string> = {
   STRIKE: '#f97316',
   STEAL: '#ef4444', SABOTAGE: '#dc2626',
   HELP: '#ec4899',
-  // Phase 3: elite privileged actions
   EMBEZZLE: '#c084fc', ADJUST_TAX: '#e879f9', SUPPRESS: '#fb7185',
   NONE: '#6b7280',
 };
@@ -741,7 +912,7 @@ function actionBadge(actionCode: string, actionTarget: string | null) {
         letterSpacing: '0.04em', fontFamily: 'monospace',
       }}>{actionCode}</span>
       {actionTarget && (
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>→ {actionTarget}</span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>&rarr; {actionTarget}</span>
       )}
     </span>
   );
@@ -780,7 +951,7 @@ interface AgentIntentPanelProps {
 }
 
 function AgentIntentPanel({ agents, agentIntentHistory, pendingActionCodes, currentIteration }: AgentIntentPanelProps) {
-  const citizenAgents = agents.filter(a => !('isCentralAgent' in a && a.isCentralAgent));
+  const citizenAgents = agents.filter(a => !('isCentralAgent' in a && (a as Record<string, unknown>).isCentralAgent));
   const sorted = [...citizenAgents].sort((a, b) => {
     if (a.isAlive !== b.isAlive) return a.isAlive ? -1 : 1;
     return a.name.localeCompare(b.name);
@@ -819,7 +990,6 @@ function AgentIntentCard({ agent, history, pending }: AgentIntentCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [expandedIntents, setExpandedIntents] = useState<Set<number>>(new Set());
 
-  // Current action: live pending if it exists, otherwise last in history
   const latestRecord = history[history.length - 1] ?? null;
   const currentActionCode = pending?.actionCode ?? latestRecord?.actionCode ?? null;
   const currentActionTarget = pending !== null ? pending.actionTarget : latestRecord?.actionTarget ?? null;
@@ -834,7 +1004,6 @@ function AgentIntentCard({ agent, history, pending }: AgentIntentCardProps) {
     });
   };
 
-  // Show history in reverse chronological order
   const historyDesc = [...history].reverse();
 
   return (
@@ -845,14 +1014,13 @@ function AgentIntentCard({ agent, history, pending }: AgentIntentCardProps) {
       opacity: agent.isAlive ? 1 : 0.55,
       overflow: 'hidden',
     }}>
-      {/* Card header */}
       <div style={{ padding: '0.5rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', marginBottom: '0.25rem' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 600, color: agent.isAlive ? 'var(--color-bright)' : 'var(--text-dim)' }}>
               {agent.name}
             </span>
-            {!agent.isAlive && <span style={{ fontSize: '0.68rem', color: 'var(--danger)' }}>†</span>}
+            {!agent.isAlive && <span style={{ fontSize: '0.68rem', color: 'var(--danger)' }}>&dagger;</span>}
           </div>
           {actionQueueBadges(currentActions, currentActionCode, currentActionTarget)}
         </div>
@@ -872,7 +1040,6 @@ function AgentIntentCard({ agent, history, pending }: AgentIntentCardProps) {
         )}
       </div>
 
-      {/* Expanded history */}
       {expanded && history.length > 0 && (
         <div style={{ borderTop: '1px solid var(--glass-border)', padding: '0.5rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
           {historyDesc.map(record => {
@@ -909,43 +1076,6 @@ function AgentIntentCard({ agent, history, pending }: AgentIntentCardProps) {
               </div>
             );
           })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── StatCard ──────────────────────────────────────────────────────────────────
-
-interface StatCardProps {
-  label: string;
-  color: string;
-  icon: React.ReactNode;
-  avg: number;
-  min?: number;
-  max?: number;
-  history: number[];
-}
-
-function StatCard({ label, color, icon, avg, min, max, history }: StatCardProps) {
-  const maxHistory = 12;
-  const recent = history.slice(-maxHistory);
-  const peak = Math.max(...recent, 1);
-
-  return (
-    <div style={{ background: 'var(--panel-alpha-05)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', color, marginBottom: '0.5rem' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>{icon} {label}</span>
-        <span>Avg: {avg}</span>
-      </div>
-      <div style={{ height: '30px', borderBottom: '1px dashed rgba(255,255,255,0.2)', display: 'flex', alignItems: 'flex-end', gap: '2px' }}>
-        {recent.map((v, i) => (
-          <div key={i} style={{ flex: 1, background: color, height: `${Math.round((v / peak) * 100)}%`, opacity: 0.6, minHeight: '2px' }} />
-        ))}
-      </div>
-      {min !== undefined && max !== undefined && (
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', textAlign: 'right' as const, marginTop: '0.5rem' }}>
-          min {min} / max {max}
         </div>
       )}
     </div>
