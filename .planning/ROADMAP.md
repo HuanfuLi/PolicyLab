@@ -69,7 +69,6 @@ Plans:
 - [x] 03-03-PLAN.md — Physics engine multipliers, simulationRunner wiring, prompts, export/import, SFC integration tests
 - [x] 03-04-PLAN.md — Gap closure: design-time budget configurability (server endpoint + DesignReview sliders)
 - [x] 03-05-PLAN.md — Gap closure: public goods quality fields in TelemetryLog + SSE telemetry population
-**UI hint**: yes
 
 ### Phase 4: Inflation Loop
 **Goal**: CPI is computed every iteration from actual market price data, M1 growth feeds back into AMM price levels, the central bank agent responds to CPI and M1 by adjusting reserve ratio and base rate, and citizen agents receive inflation context in their cognition prompts causing observable behavioral shifts
@@ -178,10 +177,10 @@ Plans:
 **Plans:** 8 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — DB schema (groupId/scenarioLabel), shared types, fork endpoint upgrade
+- [x] 08-01-PLAN.md — DB schema (groupId/scenarioLabel), shared types, fork endpoint upgrade
 - [ ] 08-02-PLAN.md — Multi-provider LLM load balancer with token bucket rate limiting
 - [ ] 08-03-PLAN.md — multiScenarioStore (N SSE connections), scenarioStore parallel execution
-- [ ] 08-04-PLAN.md — ScenarioChart, CollapsiblePanel, ConfigDiffHeader, ProgressBar, TelemetryPanel cleanup
+- [x] 08-04-PLAN.md — ScenarioChart, CollapsiblePanel, ConfigDiffHeader, ProgressBar, TelemetryPanel cleanup
 - [ ] 08-05-PLAN.md — Simulation page rewrite with multi-scenario charts, collapsible panels, top bar
 - [ ] 08-06-PLAN.md — Home page grouping, Reflection multi-scenario layout
 - [ ] 08-08-PLAN.md — AgentReview cross-scenario context, Artifacts combined policy brief
@@ -203,10 +202,17 @@ Plans:
 
 ### Phase 10: Fix simulation realism — agent economic behavior, inflation response, narrative grounding
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Make the simulation engine produce economically coherent outcomes by auto-creating enterprises from bootstrap data, wiring enterprise wage/production cycles through the banking system, implementing Taylor Rule central bank feedback with rate ceilings, grounding narratives in pre-interpreted telemetry digests with hard validation, and enriching agent reflections with personal stat trajectories
+**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-17, D-18, D-19, D-20, D-21, D-22, D-23, D-24, D-25, D-26, D-27, D-28, D-29
 **Depends on:** Phase 9
-**Plans:** 0 plans
+**Plans:** 8 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 10 to break down)
+- [ ] 10-01-PLAN.md — Wave 0: Types, DB schema, EconomyConfig extensions, test scaffolds
+- [ ] 10-02-PLAN.md — Enterprise engine: wages, insolvency, idle fallback, commodity mapping, cost pass-through
+- [ ] 10-03-PLAN.md — Enterprise bootstrap: location-mode auto-creation, creative-mode generation, bootstrap failure handling
+- [ ] 10-04-PLAN.md — Enterprise banking: deposit-mediated payroll, differentiated loans, liquidity injection, simulationRunner wiring
+- [ ] 10-05-PLAN.md — Inflation response: Taylor Rule, smoothing window, rate ceiling, agent context
+- [ ] 10-06-PLAN.md — Narrative grounding: telemetry digest, data-driven directive, validation + re-generation
+- [ ] 10-07-PLAN.md — Agent context: banking ROI prompts, reflection stat trajectory, runtime assertions
+- [ ] 10-08-PLAN.md — Integration verification + human approval of simulation realism

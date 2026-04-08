@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Milestone complete
-stopped_at: Completed 09-02-PLAN.md
-last_updated: "2026-04-07T05:24:08.981Z"
+status: Ready to execute
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-04-08T02:40:53.949Z"
 progress:
-  total_phases: 9
-  completed_phases: 7
-  total_plans: 29
-  completed_plans: 28
+  total_phases: 10
+  completed_phases: 6
+  total_plans: 46
+  completed_plans: 30
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** The deterministic economic engine must be realistic enough that simulation outcomes are meaningful for understanding real-world policy trade-offs.
-**Current focus:** Phase 09 — redesign-prompts-for-all
+**Current focus:** Phase 08 — live-scenario-comparison-real-time-overlaid-economic-charts-during-parallel-simulation-runs
 
 ## Current Position
 
-Phase: 09
-Plan: Not started
+Phase: 08 (live-scenario-comparison-real-time-overlaid-economic-charts-during-parallel-simulation-runs) — EXECUTING
+Plan: 3 of 8
 
 ## Performance Metrics
 
@@ -72,6 +72,8 @@ Plan: Not started
 | Phase 09 P01 | 688 | 3 tasks | 17 files |
 | Phase 09 P03 | 166 | 3 tasks | 4 files |
 | Phase 09 P02 | 477 | 4 tasks | 4 files |
+| Phase 08 P04 | 4 min | 2 tasks | 9 files |
+| Phase 08 P01 | 12 min | 2 tasks | 5 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -158,12 +160,16 @@ Recent decisions affecting current work:
 - [Phase 09]: D-11/D-12: Roster background changed from 1-2 to 5-8 sentence life stories with economic instinct requirement in both creative and location modes
 - [Phase 09]: ammMarketData added as optional last param to buildNaturalIntentPrompt -- Plan 04 wires it
 - [Phase 09]: D-15 satisfied by existing economyEvents in memoryStream; D-16 addressed by planner prompt economic goal examples
+- [Phase 08]: ConfigDiffHeader only renders scalar EconomyConfig diffs and hides for single-scenario mode. — This keeps the header concise for Plan 05 and avoids misleading output for nested objects until a dedicated formatter exists.
+- [Phase 08]: Session grouping stays nullable on the sessions table so existing sessions remain backward compatible.
+- [Phase 08]: GET /api/sessions/grouped computes scenarioCount with a correlated SQL count while preserving the flat session list endpoint.
 
 ### Roadmap Evolution
 
 - Phase 6 added: Scenario Entry — policymakers configure economic parameters and initial conditions at session design time
 - Phase 7 added: Real-World Scenario Bootstrap — location-based data-driven society design for policymakers
 - Phase 9 added: redesign prompts for all
+- Phase 10 added: Fix simulation realism — agent economic behavior, inflation response, narrative grounding
 
 ### Pending Todos
 
@@ -179,6 +185,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-07T05:16:54.284Z
-Stopped at: Completed 09-02-PLAN.md
+Last session: 2026-04-08T02:40:53.943Z
+Stopped at: Completed 08-01-PLAN.md
 Resume file: None
