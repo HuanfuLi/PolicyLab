@@ -227,8 +227,20 @@ export async function runPlanning(
         );
         const raw = await provider.chat(messages, {
             ...options,
-            maxTokens: 300,
+            maxTokens: 65536,
             temperature: 0.6,
+            jsonSchema: {
+                name: 'agent_plan',
+                schema: {
+                    type: 'object',
+                    properties: {
+                        goal: { type: 'string' },
+                        steps: { type: 'array', items: { type: 'string' } },
+                    },
+                    required: ['goal', 'steps'],
+                    additionalProperties: false,
+                },
+            },
         });
 
         const parsed = parseJSON<Record<string, unknown>>(raw);

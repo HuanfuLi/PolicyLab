@@ -27,7 +27,7 @@ export class GeminiProvider implements LLMProvider {
         try {
             const params: Record<string, unknown> = {
                 model: options.model ?? this.defaultModel,
-                max_tokens: options.maxTokens ?? 16384,
+                max_tokens: options.maxTokens ?? 65536,
                 messages: messages.map(m => ({
                     role: m.role as any,
                     content: typeof m.content === 'string' ? m.content : m.content.map(b => b.text).join('\n'),
@@ -65,7 +65,7 @@ export class GeminiProvider implements LLMProvider {
         try {
             const stream = await this.client.chat.completions.create({
                 model: options.model ?? this.defaultModel,
-                max_tokens: options.maxTokens ?? 16384,
+                max_tokens: options.maxTokens ?? 65536,
                 messages: messages.map(m => ({
                     role: m.role as any,
                     content: typeof m.content === 'string' ? m.content : m.content.map(b => b.text).join('\n'),

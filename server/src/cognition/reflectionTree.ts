@@ -164,8 +164,22 @@ export async function runReflection(
         const messages = buildReflectionPrompt(agentName, agentRole, recentMemories, currentStats);
         const raw = await provider.chat(messages, {
             ...options,
-            maxTokens: 400,
+            maxTokens: 65536,
             temperature: 0.7, // Some creativity for reflections
+            jsonSchema: {
+                name: 'agent_reflection',
+                schema: {
+                    type: 'object',
+                    properties: {
+                        reflection: { type: 'string' },
+                        economicSentiment: { type: 'string' },
+                        classConsciousness: { type: 'string' },
+                        primaryConcern: { type: 'string' },
+                    },
+                    required: ['reflection', 'economicSentiment', 'classConsciousness', 'primaryConcern'],
+                    additionalProperties: false,
+                },
+            },
         });
 
         const parsed = parseJSON<Record<string, unknown>>(raw);

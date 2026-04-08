@@ -171,7 +171,36 @@ router.post('/', async (req, res) => {
     const settings = readSettings();
     const provider = getProvider();
     const llmMessages = buildComparisonMessages(summary1, summary2);
-    const raw = await provider.chat(llmMessages, { model: settings.centralAgentModel });
+    const raw = await provider.chat(llmMessages, {
+      model: settings.centralAgentModel,
+      maxTokens: 65536,
+      jsonSchema: {
+        name: 'session_comparison',
+        schema: {
+          type: 'object',
+          properties: {
+            narrative: { type: 'string' },
+            dimensions: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  session1Score: { type: 'number' },
+                  session2Score: { type: 'number' },
+                  analysis: { type: 'string' },
+                },
+                required: ['name', 'session1Score', 'session2Score', 'analysis'],
+                additionalProperties: false,
+              },
+            },
+            verdict: { type: 'string' },
+          },
+          required: ['narrative', 'dimensions', 'verdict'],
+          additionalProperties: false,
+        },
+      },
+    });
     const parsed = parseJSON<{ narrative: string; dimensions: ComparisonResult['dimensions']; verdict: string }>(raw);
 
     const economyParamDiffs = computeParamDiffs(summary1.economyConfig, summary2.economyConfig);
@@ -283,7 +312,7 @@ router.post('/chat', async (req, res) => {
       history,
       message.trim()
     );
-    const reply = await provider.chat(llmMessages, { model: settings.centralAgentModel });
+    const reply = await provider.chat(llmMessages, { model: settings.centralAgentModel, maxTokens: 65536 });
 
     await db.insert(chatMessages).values({
       id: uuidv4(),

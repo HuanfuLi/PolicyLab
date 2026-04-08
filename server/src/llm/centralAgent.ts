@@ -44,7 +44,33 @@ export async function brainstorm(
 ): Promise<BrainstormResult> {
   const provider = getProvider();
   const messages = buildBrainstormMessages(idea, history, userMessage, currentChecklist);
-  const raw = await withRetry(() => provider.chat(messages, { maxTokens: 4096 }));
+  const raw = await withRetry(() => provider.chat(messages, {
+    maxTokens: 65536,
+    jsonSchema: {
+      name: 'brainstorm_response',
+      schema: {
+        type: 'object',
+        properties: {
+          reply: { type: 'string' },
+          checklist: {
+            type: 'object',
+            properties: {
+              governance: { type: 'boolean' },
+              economy: { type: 'boolean' },
+              legal: { type: 'boolean' },
+              culture: { type: 'boolean' },
+              infrastructure: { type: 'boolean' },
+            },
+            required: ['governance', 'economy', 'legal', 'culture', 'infrastructure'],
+            additionalProperties: false,
+          },
+          readyForDesign: { type: 'boolean' },
+        },
+        required: ['reply', 'checklist', 'readyForDesign'],
+        additionalProperties: false,
+      },
+    },
+  }));
 
   let parsed: { reply: string; checklist: BrainstormChecklist; readyForDesign: boolean };
   try {
@@ -137,7 +163,25 @@ export async function generateDesign(
   onProgress({ type: 'step_start', step: 'overview', stepIndex: 0, totalSteps: 3 });
 
   const overviewData = await withRetry(async () => {
-    const raw = await provider.chat(buildOverviewMessages(session.idea, brainstormSummary), { maxTokens: 8192 });
+    const raw = await provider.chat(buildOverviewMessages(session.idea, brainstormSummary), {
+      maxTokens: 65536,
+      jsonSchema: {
+        name: 'society_overview',
+        schema: {
+          type: 'object',
+          properties: {
+            societyName: { type: 'string' },
+            overview: { type: 'string' },
+            timeScale: { type: 'string' },
+            agentCount: { type: 'number' },
+            governanceModel: { type: 'string' },
+            economicModel: { type: 'string' },
+          },
+          required: ['societyName', 'overview', 'timeScale', 'agentCount', 'governanceModel', 'economicModel'],
+          additionalProperties: false,
+        },
+      },
+    });
     return parseJSON<{
       societyName: string;
       overview: string;
@@ -174,7 +218,20 @@ export async function generateDesign(
         overviewData.governanceModel,
         overviewData.economicModel
       ),
-      { maxTokens: 8192 }
+      {
+        maxTokens: 65536,
+        jsonSchema: {
+          name: 'law_document',
+          schema: {
+            type: 'object',
+            properties: {
+              law: { type: 'string' },
+            },
+            required: ['law'],
+            additionalProperties: false,
+          },
+        },
+      }
     );
     return parseJSON<{ law: string }>(raw);
   });
@@ -198,7 +255,61 @@ export async function generateDesign(
         overviewData.governanceModel,
         overviewData.economicModel
       ),
-      { maxTokens: 8192 }
+      {
+        maxTokens: 65536,
+        jsonSchema: {
+          name: 'agent_roster',
+          schema: {
+            type: 'object',
+            properties: {
+              agents: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    role: { type: 'string' },
+                    background: { type: 'string' },
+                    personalityTraits: { type: 'array', items: { type: 'string' } },
+                    initialStats: {
+                      type: 'object',
+                      properties: {
+                        wealth: { type: 'number' },
+                        health: { type: 'number' },
+                        happiness: { type: 'number' },
+                        cortisol: { type: 'number' },
+                        dopamine: { type: 'number' },
+                      },
+                      required: ['wealth', 'health', 'happiness'],
+                      additionalProperties: false,
+                    },
+                  },
+                  required: ['name', 'role', 'background', 'initialStats'],
+                  additionalProperties: false,
+                },
+              },
+              enterprises: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    name: { type: 'string' },
+                    ownerAgentName: { type: 'string' },
+                    sector: { type: 'string' },
+                    industry: { type: 'string' },
+                    initialEmployeeNames: { type: 'array', items: { type: 'string' } },
+                  },
+                  required: ['id', 'name', 'ownerAgentName', 'sector', 'industry'],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ['agents'],
+            additionalProperties: false,
+          },
+        },
+      }
     );
     const parsed = parseJSON<{
       agents: Array<{
@@ -357,7 +468,7 @@ export async function refine(
     userMessage
   );
 
-  const raw = await withRetry(() => provider.chat(messages, { maxTokens: 16384 }));
+  const raw = await withRetry(() => provider.chat(messages, { maxTokens: 65536 }));
   const parsed = parseJSON<{
     reply: string;
     artifactsUpdated: Array<'overview' | 'law' | 'agents'>;

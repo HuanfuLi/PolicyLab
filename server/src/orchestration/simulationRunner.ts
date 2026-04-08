@@ -1858,7 +1858,33 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             intent: i.intent,
           }));
           const legalityMessages = buildLegalityCheckPrompt(legalityInput, session.law, session.societyOverview ?? null);
-          const rawLegality = await provider.chat(legalityMessages, { model: settings.centralAgentModel });
+          const rawLegality = await provider.chat(legalityMessages, {
+            model: settings.centralAgentModel,
+            maxTokens: 65536,
+            jsonSchema: {
+              name: 'legality_check',
+              schema: {
+                type: 'object',
+                properties: {
+                  illegalAgents: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        agentId: { type: 'string' },
+                        actionCode: { type: 'string' },
+                        reason: { type: 'string' },
+                      },
+                      required: ['agentId', 'actionCode', 'reason'],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ['illegalAgents'],
+                additionalProperties: false,
+              },
+            },
+          });
           const parsedLegality = parseJSON<{ illegalAgents?: Array<{ agentId: string; actionCode: string; reason: string }> }>(rawLegality);
           if (Array.isArray(parsedLegality?.illegalAgents)) {
             for (const entry of parsedLegality.illegalAgents) {
@@ -1961,9 +1987,34 @@ export async function runSimulation(sessionId: string, totalIterations: number):
                       intent: i.intent,
                     }));
                     const legalityMsgs = buildLegalityCheckPrompt(legalityInput, session.law!, session.societyOverview ?? null);
-                    const rawLegality = await citizenProv.chat(legalityMsgs, { model: settings.citizenAgentModel });
-                    const clean = rawLegality.replace(/^```json?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-                    const parsed = JSON.parse(clean) as { illegalAgents?: Array<{ agentId: string; actionCode: string; reason: string }> };
+                    const rawLegality = await citizenProv.chat(legalityMsgs, {
+                      model: settings.citizenAgentModel,
+                      maxTokens: 65536,
+                      jsonSchema: {
+                        name: 'legality_check',
+                        schema: {
+                          type: 'object',
+                          properties: {
+                            illegalAgents: {
+                              type: 'array',
+                              items: {
+                                type: 'object',
+                                properties: {
+                                  agentId: { type: 'string' },
+                                  actionCode: { type: 'string' },
+                                  reason: { type: 'string' },
+                                },
+                                required: ['agentId', 'actionCode', 'reason'],
+                                additionalProperties: false,
+                              },
+                            },
+                          },
+                          required: ['illegalAgents'],
+                          additionalProperties: false,
+                        },
+                      },
+                    });
+                    const parsed = JSON.parse(rawLegality) as { illegalAgents?: Array<{ agentId: string; actionCode: string; reason: string }> };
                     return Array.isArray(parsed?.illegalAgents) ? parsed.illegalAgents : [];
                   } catch {
                     return [];
@@ -4255,7 +4306,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     });
     let finalReport = '';
     try {
-      const finalRaw = await provider.chat(finalMessages, { model: settings.centralAgentModel });
+      const finalRaw = await provider.chat(finalMessages, { model: settings.centralAgentModel, maxTokens: 65536 });
       finalReport = parseFinalReport(finalRaw);
     } catch {
       finalReport = `The simulation of "${session.idea}" concluded after ${endIter} iterations with ${finalStats.aliveCount} survivors.`;
@@ -4295,8 +4346,20 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
         try {
           const messages = buildPostMortemPrompt(input);
-          const raw = await citizenProv.chat(messages, { model: settings.citizenAgentModel });
-          const parsed = JSON.parse(raw.trim().replace(/^```json\s*/i, '').replace(/```\s*$/i, ''));
+          const raw = await citizenProv.chat(messages, {
+            model: settings.citizenAgentModel,
+            maxTokens: 65536,
+            jsonSchema: {
+              name: 'post_mortem',
+              schema: {
+                type: 'object',
+                properties: { postMortemCritique: { type: 'string' } },
+                required: ['postMortemCritique'],
+                additionalProperties: false,
+              },
+            },
+          });
+          const parsed = JSON.parse(raw);
           return `${agent.name} (${agent.role}, died Iter ${diedAtIteration}): "${parsed.postMortemCritique}"`;
         } catch {
           return null;

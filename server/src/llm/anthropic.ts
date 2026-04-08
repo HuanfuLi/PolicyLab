@@ -52,7 +52,7 @@ export class AnthropicProvider implements LLMProvider {
     if (options.jsonSchema) {
       const response = await this.client.messages.create({
         model: options.model ?? this.defaultModel,
-        max_tokens: options.maxTokens ?? 16384,
+        max_tokens: options.maxTokens ?? 65536,
         system,
         messages: mapped,
         tools: [{
@@ -75,7 +75,7 @@ export class AnthropicProvider implements LLMProvider {
 
     const response = await this.client.messages.create({
       model: options.model ?? this.defaultModel,
-      max_tokens: options.maxTokens ?? 16384,
+      max_tokens: options.maxTokens ?? 65536,
       system,
       messages: mapped,
     });
@@ -94,7 +94,7 @@ export class AnthropicProvider implements LLMProvider {
 
     const stream = this.client.messages.stream({
       model: options.model ?? this.defaultModel,
-      max_tokens: options.maxTokens ?? 16384,
+      max_tokens: options.maxTokens ?? 65536,
       system,
       messages: chatMessages.map(m => ({
         role: m.role as 'user' | 'assistant',

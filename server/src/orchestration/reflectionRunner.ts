@@ -117,7 +117,7 @@ export async function runReflection(sessionId: string): Promise<void> {
       try {
         const statTrajectory = buildStatTrajectory(agent.id, agent);
         const messages = buildAgentReflectionPrompt(agent, session, iterationSummaries, statTrajectory);
-        const raw = await citizenProv.chat(messages, { model: settings.citizenAgentModel });
+        const raw = await citizenProv.chat(messages, { model: settings.citizenAgentModel, maxTokens: 65536 });
         const { pass1 } = parseAgentReflection(raw);
         pass1Map.set(agent.id, pass1);
 
@@ -185,7 +185,7 @@ export async function runReflection(sessionId: string): Promise<void> {
 
     let evaluation = { verdict: '', strengths: [] as string[], weaknesses: [] as string[], analysis: '' };
     try {
-      const evalRaw = await provider.chat(evalMessages, { model: settings.centralAgentModel });
+      const evalRaw = await provider.chat(evalMessages, { model: settings.centralAgentModel, maxTokens: 65536 });
       evaluation = parseSocietyEvaluation(evalRaw);
     } catch {
       evaluation = {
@@ -218,7 +218,7 @@ export async function runReflection(sessionId: string): Promise<void> {
       const pass1 = pass1Map.get(agent.id) ?? '';
       try {
         const messages = buildAgentReflection2Prompt(agent, session, pass1, evaluation.analysis);
-        const raw = await citizenProv.chat(messages, { model: settings.citizenAgentModel });
+        const raw = await citizenProv.chat(messages, { model: settings.citizenAgentModel, maxTokens: 65536 });
         const { pass2 } = parseAgentReflection2(raw);
 
         // Broadcast BEFORE DB insert — frontend always receives pass2 even if DB fails

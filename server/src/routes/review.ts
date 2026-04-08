@@ -95,7 +95,7 @@ router.post('/:agentId/chat', async (req, res) => {
       history,
       message.trim()
     );
-    const reply = await provider.chat(messages, { model: settings.citizenAgentModel });
+    const reply = await provider.chat(messages, { model: settings.citizenAgentModel, maxTokens: 65536 });
 
     await db.insert(chatMessages).values({
       id: uuidv4(),

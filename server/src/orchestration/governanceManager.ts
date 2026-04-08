@@ -76,9 +76,20 @@ async function selectPoliticians(
   let franchiseSize = 1;
   try {
     const messages = buildFranchiseSizePrompt(agents.length, societyContext);
-    const raw = await provider.chat(messages, { model });
-    const clean = raw.replace(/^```json?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-    const parsed = JSON.parse(clean) as { franchiseSize?: number };
+    const raw = await provider.chat(messages, {
+      model,
+      maxTokens: 65536,
+      jsonSchema: {
+        name: 'franchise_size',
+        schema: {
+          type: 'object',
+          properties: { franchiseSize: { type: 'number' } },
+          required: ['franchiseSize'],
+          additionalProperties: false,
+        },
+      },
+    });
+    const parsed = JSON.parse(raw) as { franchiseSize?: number };
     if (typeof parsed?.franchiseSize === 'number' && isFinite(parsed.franchiseSize)) {
       franchiseSize = Math.min(agents.length, Math.max(1, Math.round(parsed.franchiseSize)));
     }
@@ -155,7 +166,29 @@ export async function runGovernanceCycle(params: {
   await Promise.allSettled(politicians.map(async (agent) => {
     try {
       const messages = buildProposalPrompt(agent, currentPolicy, societyContext, iterNum);
-      const raw = await citizenProv.chat(messages, { model: citizenModel });
+      const raw = await citizenProv.chat(messages, {
+        model: citizenModel,
+        maxTokens: 65536,
+        jsonSchema: {
+          name: 'policy_proposal',
+          schema: {
+            type: 'object',
+            properties: {
+              proposal: {
+                type: ['object', 'null'],
+                properties: {
+                  field: { type: 'string' },
+                  value: { type: 'number' },
+                  reasoning: { type: 'string' },
+                },
+                required: ['field', 'value', 'reasoning'],
+              },
+            },
+            required: ['proposal'],
+            additionalProperties: false,
+          },
+        },
+      });
       const parsed = safeJson(raw) as { proposal?: GovernancePolicyProposal | null } | null;
       if (!parsed?.proposal) return;
       const { field, value, reasoning } = parsed.proposal;
@@ -182,7 +215,34 @@ export async function runGovernanceCycle(params: {
   let ballot: GovernanceBallotItem[] = [];
   try {
     const messages = buildBallotPrompt(rawProposals, currentPolicy, societyContext);
-    const raw = await provider.chat(messages, { model });
+    const raw = await provider.chat(messages, {
+      model,
+      maxTokens: 65536,
+      jsonSchema: {
+        name: 'governance_ballot',
+        schema: {
+          type: 'object',
+          properties: {
+            ballot: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  field: { type: 'string' },
+                  proposedValue: { type: 'number' },
+                  description: { type: 'string' },
+                  impactForecast: { type: 'string' },
+                },
+                required: ['field', 'proposedValue', 'description'],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ['ballot'],
+          additionalProperties: false,
+        },
+      },
+    });
     const parsed = safeJson(raw) as { ballot?: GovernanceBallotItem[] } | null;
     if (Array.isArray(parsed?.ballot)) {
       ballot = parsed.ballot
@@ -220,7 +280,19 @@ export async function runGovernanceCycle(params: {
     await Promise.allSettled(politicians.map(async (agent) => {
       try {
         const messages = buildVotePrompt(agent, item, currentPolicy);
-        const raw = await citizenProv.chat(messages, { model: citizenModel });
+        const raw = await citizenProv.chat(messages, {
+          model: citizenModel,
+          maxTokens: 65536,
+          jsonSchema: {
+            name: 'vote_decision',
+            schema: {
+              type: 'object',
+              properties: { vote: { type: 'string' } },
+              required: ['vote'],
+              additionalProperties: false,
+            },
+          },
+        });
         const parsed = safeJson(raw) as { vote?: string } | null;
         if (parsed?.vote === 'YES') yesCount++;
         else if (parsed?.vote === 'NO') noCount++;

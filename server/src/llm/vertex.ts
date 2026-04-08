@@ -50,7 +50,7 @@ export class VertexProvider implements LLMProvider {
         }
 
         const generationConfig: Record<string, unknown> = {
-            maxOutputTokens: options.maxTokens ?? 16384,
+            maxOutputTokens: options.maxTokens ?? 65536,
             temperature: options.temperature,
         };
 
