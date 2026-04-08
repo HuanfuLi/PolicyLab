@@ -35,6 +35,8 @@ export interface Session {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  groupId: string | null;
+  scenarioLabel: string | null;
 }
 
 export interface SessionMetadata {
@@ -47,6 +49,8 @@ export interface SessionMetadata {
   completedIterations: number;
   createdAt: string;
   updatedAt: string;
+  groupId: string | null;
+  scenarioLabel: string | null;
 }
 
 export interface AgentStats {
@@ -390,6 +394,19 @@ export interface AppSettings {
   citizenVertexProjectId?: string;
   citizenVertexLocation?: string;
   maxMessageLength: number;
+  /** Optional multi-provider config for round-robin load balancing. */
+  providers?: ProviderConfig[];
+}
+
+export interface ProviderConfig {
+  provider: AppSettings['provider'];
+  apiKey: string;
+  baseUrl?: string;
+  model?: string;
+  /** Requests per minute. Null means unlimited local capacity. */
+  rateLimit?: number | null;
+  vertexProjectId?: string;
+  vertexLocation?: string;
 }
 
 export interface SettingsResponse {

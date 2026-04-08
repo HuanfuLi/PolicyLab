@@ -29,6 +29,8 @@ function rowToSession(row: typeof sessions.$inferSelect): Session {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     completedAt: row.completedAt ?? null,
+    groupId: row.groupId ?? null,
+    scenarioLabel: row.scenarioLabel ?? null,
   };
 }
 
@@ -80,6 +82,8 @@ export const sessionRepo = {
           completedIterations: Number(iterCount?.count ?? 0),
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
+          groupId: row.groupId ?? null,
+          scenarioLabel: row.scenarioLabel ?? null,
         };
       })
     );

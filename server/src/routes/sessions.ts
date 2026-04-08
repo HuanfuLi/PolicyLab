@@ -19,6 +19,8 @@ router.get('/', async (_req, res) => {
         stage: sessions.stage,
         createdAt: sessions.createdAt,
         updatedAt: sessions.updatedAt,
+        groupId: sessions.groupId,
+        scenarioLabel: sessions.scenarioLabel,
         agentCount: sql<number>`count(distinct ${agents.id})`,
         completedIterations: sql<number>`count(distinct ${iterations.id})`,
       })
@@ -38,6 +40,8 @@ router.get('/', async (_req, res) => {
       completedIterations: Number(row.completedIterations ?? 0),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      groupId: row.groupId ?? null,
+      scenarioLabel: row.scenarioLabel ?? null,
     }));
 
     res.json(result);

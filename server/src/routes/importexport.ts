@@ -64,6 +64,8 @@ router.get('/:id/export', async (req, res) => {
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       completedAt: session.completedAt ?? null,
+      groupId: session.groupId ?? null,
+      scenarioLabel: session.scenarioLabel ?? null,
     },
     agents: agentRows.map(a => ({
       id: a.id,
@@ -223,6 +225,8 @@ router.post('/import', async (req, res) => {
       createdAt: now,
       updatedAt: now,
       completedAt: src.completedAt ?? null,
+      groupId: src.groupId ?? null,
+      scenarioLabel: src.scenarioLabel ?? null,
     });
 
     // Insert agents
