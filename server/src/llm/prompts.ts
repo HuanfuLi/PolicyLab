@@ -1415,6 +1415,69 @@ Compare these two societies. Return JSON:
   ];
 }
 
+export interface PolicyBriefScenario {
+  label: string;
+  title: string;
+  societyOverview: string | null;
+  agentCount: number;
+  avgWealth: number;
+  avgHealth: number;
+  avgHappiness: number;
+  deaths: number;
+  verdict: string | null;
+  configDiffs?: Record<string, { baseline: number; scenario: number }>;
+  giniCoefficient?: number;
+  m1?: number;
+  loansOutstanding?: number;
+  infrastructureQuality?: number;
+  educationQuality?: number;
+}
+
+export function buildPolicyBriefPrompt(
+  scenarios: PolicyBriefScenario[]
+): LLMMessage[] {
+  const systemPrompt = `You are a policy analyst reviewing the outcomes of ${scenarios.length} parallel economic simulation scenarios. Generate a comprehensive markdown policy brief.
+
+The brief must include these sections:
+1. **Executive Summary** - 2-3 paragraph overview of key findings across all scenarios
+2. **Scenario Comparison Table** - markdown table comparing key parameters and outcomes
+3. **Key Findings Per Scenario** - brief analysis of each scenario's outcome
+4. **Agent Outcome Highlights** - how representative populations fared differently across scenarios
+5. **Policy Recommendations** - evidence-based recommendations from the simulation outcomes
+
+Write in professional policy analysis style. Use specific data from the scenarios. Output ONLY the markdown content, no JSON wrapper.`;
+
+  const scenarioDescriptions = scenarios.map((s, i) => {
+    let text = `=== SCENARIO ${i + 1}: "${s.label}" (${s.title}) ===
+Overview: ${(s.societyOverview ?? '(none)').slice(0, 400)}
+Population: ${s.agentCount} agents, Deaths: ${s.deaths}
+Final averages -- wealth: ${s.avgWealth.toFixed(1)}, health: ${s.avgHealth.toFixed(1)}/100, happiness: ${s.avgHappiness.toFixed(1)}/100
+Evaluation verdict: ${s.verdict ?? '(none)'}`;
+
+    const econ: string[] = [];
+    if (s.giniCoefficient !== undefined) econ.push(`Gini: ${s.giniCoefficient.toFixed(3)}`);
+    if (s.m1 !== undefined) econ.push(`M1: ${s.m1.toFixed(0)}`);
+    if (s.loansOutstanding !== undefined) econ.push(`Loans: ${s.loansOutstanding.toFixed(0)}`);
+    if (s.infrastructureQuality !== undefined) econ.push(`Infrastructure: ${s.infrastructureQuality.toFixed(1)}`);
+    if (s.educationQuality !== undefined) econ.push(`Education: ${s.educationQuality.toFixed(1)}`);
+    if (econ.length > 0) text += `\nEconomic telemetry: ${econ.join(', ')}`;
+
+    if (s.configDiffs && Object.keys(s.configDiffs).length > 0) {
+      const diffs = Object.entries(s.configDiffs)
+        .map(([key, v]) => `${key}: ${v.baseline} -> ${v.scenario}`)
+        .join(', ');
+      text += `\nConfig changes from baseline: ${diffs}`;
+    }
+
+    return text;
+  }).join('\n\n');
+
+  return [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: `Generate a policy brief comparing these ${scenarios.length} scenarios:\n\n${scenarioDescriptions}` },
+  ];
+}
+
 export function buildComparisonChatMessages(
   session1Title: string,
   session2Title: string,
