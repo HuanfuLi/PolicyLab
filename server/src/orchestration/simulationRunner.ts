@@ -1982,6 +1982,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       const humiliatedAgentIds = new Set<string>();
       // Phase B: per-enterprise revenue/wage ledger for this iteration
       const enterpriseLedgerMap = new Map<string, EnterpriseLedger>();
+      // Phase 10: Track agent income this iteration for income tax calculation
+      const agentIterationIncome = new Map<string, number>();
       // Phase Sheriff C: accumulated seized wealth to redistribute as UBI at end of iteration
       let seizedWealthPool = 0;
 
@@ -2128,10 +2130,15 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             const treasury = sessionStateTreasury.get(sessionId) ?? 0;
             if (treasury < physics.wealthDelta) {
               // Treasury exhausted — cap income at remaining balance
+              const actualIncome = treasury;
               weekState.wealthDelta -= (physics.wealthDelta - treasury);
               sessionStateTreasury.set(sessionId, 0);
+              // Track actual income earned (after treasury cap) for taxation
+              agentIterationIncome.set(agent.id, (agentIterationIncome.get(agent.id) ?? 0) + actualIncome);
             } else {
               sessionStateTreasury.set(sessionId, treasury - physics.wealthDelta);
+              // Track WORK income for taxation
+              agentIterationIncome.set(agent.id, (agentIterationIncome.get(agent.id) ?? 0) + physics.wealthDelta);
             }
           }
 
@@ -2308,6 +2315,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               ownerState.events.push(`Paid wage ${employment.wage} to ${employment.employeeId}`);
               employeeState.wealthDelta += employment.wage;
               employeeState.events.push(`Received wage ${employment.wage} from ${enterpriseId}`);
+              // Track enterprise wage income for taxation
+              agentIterationIncome.set(employment.employeeId, (agentIterationIncome.get(employment.employeeId) ?? 0) + employment.wage);
             }
             // Phase B: record total wages in ledger
             {
@@ -3139,9 +3148,40 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // SFC: all spending flows from treasury to agents (direct transfers).
       let fiscalPublicGoodsQuality: { infrastructureQuality: number; educationQuality: number; defenseQuality: number; welfareQuality: number } | null = null;
       if (economyConfig.fiscalEnabled) {
+        // ── Income tax collection (D-32) ──────────────────────────────────────
+        // Collect income tax from agents before budget execution so tax revenue
+        // replenishes the treasury for spending. SFC-neutral: wealth transfer from agents to treasury.
+        const incomeTaxRate = economyConfig.incomeTaxRate ?? 0.15;
+        if (incomeTaxRate > 0 && agentIterationIncome.size > 0) {
+          const taxResult = fiscalEngine.computeIncomeTax({
+            agentIncomes: Array.from(agentIterationIncome.entries()).map(([agentId, income]) => ({ agentId, income })),
+            taxRate: incomeTaxRate,
+          });
+
+          // Deduct tax from each agent's wealth (SFC: agent → treasury transfer)
+          for (const { agentId, taxAmount } of taxResult.perAgentTax) {
+            const agentUpdate = statUpdates.find(u => u.id === agentId);
+            if (agentUpdate) agentUpdate.wealth -= taxAmount;
+          }
+
+          // Add tax revenue to treasury
+          const currentTreasury = sessionStateTreasury.get(sessionId) ?? 0;
+          sessionStateTreasury.set(sessionId, currentTreasury + taxResult.totalRevenue);
+
+          // Append tax traces to physics trace log
+          if (taxResult.trace.length > 0) {
+            const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
+            sessionLastPhysicsTraces.set(sessionId,
+              existingTrace + '\n' + taxResult.trace.join('\n'));
+          }
+        }
+
         const budgetAllocation = fiscalRepo.getActiveBudget(sessionId) ?? DEFAULT_BUDGET_ALLOCATION;
         const currentPublicGoods = fiscalRepo.getPublicGoodsState(sessionId);
         const treasuryBalance = sessionStateTreasury.get(sessionId) ?? 0;
+
+        // Compute total economy fiat for GDP-scaled public goods quality (D-31)
+        const totalEconomyFiat = statUpdates.reduce((sum, u) => sum + Math.max(0, u.wealth), 0) + treasuryBalance;
 
         const fiscalDelta = fiscalEngine.executeBudget({
           treasuryBalance,
@@ -3158,6 +3198,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             : { iterationNumber: 0, ...DEFAULT_PUBLIC_GOODS_INITIAL },
           aliveAgentIds: aliveAgents.map(a => a.id),
           iterationNumber: iterNum,
+          totalEconomyFiat,
         });
 
         // Lift quality scores to outer scope for iterTelemetry population
