@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ECONOMY_CONFIG, type EconomyConfig } from '@policylab/shared';
-import { computeInflation, type InflationInput } from '../inflationEngine.js';
+import { computeInflation, computeTaylorRule, type InflationInput, type TaylorRuleInput } from '../inflationEngine.js';
 
 const basePrices = {
   food: 100,
@@ -155,5 +155,90 @@ describe('computeInflation', () => {
     expect(result.trace.some((line) => /cpi/i.test(line))).toBe(true);
     expect(result.trace.some((line) => /m1/i.test(line))).toBe(true);
     expect(result.trace.some((line) => /amm/i.test(line))).toBe(true);
+  });
+});
+
+function makeTaylorInput(overrides: Partial<TaylorRuleInput> = {}): TaylorRuleInput {
+  return {
+    currentInflationRate: 0.00167,
+    inflationTarget: 0.00167,
+    neutralRate: 0.00167,
+    outputGapEstimate: 0,
+    rateCeiling: 0.0125,
+    inflationCoeff: 0.5,
+    outputCoeff: 0.5,
+    ...overrides,
+  };
+}
+
+describe('Taylor Rule (D-14, D-15)', () => {
+  it('computes target rate above neutral when inflation exceeds target', () => {
+    const result = computeTaylorRule(makeTaylorInput({
+      currentInflationRate: 0.05,
+      inflationTarget: 0.00167,
+      neutralRate: 0.00167,
+    }));
+    // High inflation should push raw rate well above neutral, hitting the ceiling
+    expect(result.targetRate).toBe(0.0125);
+    expect(result.ceilingHit).toBe(true);
+  });
+
+  it('computes accommodative rate when inflation below target', () => {
+    const result = computeTaylorRule(makeTaylorInput({
+      currentInflationRate: 0.001,
+      inflationTarget: 0.00167,
+      neutralRate: 0.00167,
+    }));
+    // Low inflation should yield rate below ceiling
+    expect(result.targetRate).toBeGreaterThan(0.001);
+    expect(result.targetRate).toBeLessThan(0.0125);
+    expect(result.ceilingHit).toBe(false);
+  });
+
+  it('applies reserve ratio adjustment when ceiling hit', () => {
+    const result = computeTaylorRule(makeTaylorInput({
+      currentInflationRate: 0.05,
+    }));
+    expect(result.ceilingHit).toBe(true);
+    expect(result.reserveRatioAdjustment).toBeGreaterThan(0);
+  });
+
+  it('no reserve adjustment when rate below ceiling', () => {
+    const result = computeTaylorRule(makeTaylorInput({
+      currentInflationRate: 0.001,
+    }));
+    expect(result.ceilingHit).toBe(false);
+    expect(result.reserveRatioAdjustment).toBe(0);
+  });
+
+  it('generates trace with rate details', () => {
+    const result = computeTaylorRule(makeTaylorInput());
+    expect(result.trace.some(l => l.includes('[CB] Taylor Rule:'))).toBe(true);
+    expect(result.trace.some(l => l.includes('[CB] Raw rate='))).toBe(true);
+  });
+
+  it('never returns negative rate', () => {
+    const result = computeTaylorRule(makeTaylorInput({
+      currentInflationRate: -0.1,
+      outputGapEstimate: -0.5,
+    }));
+    expect(result.targetRate).toBeGreaterThanOrEqual(0.001);
+  });
+});
+
+describe('Smoothing Window (D-13)', () => {
+  it('uses 2-iteration window by default', () => {
+    // DEFAULT_ECONOMY_CONFIG.inflationSmoothingWindow should be 2
+    expect(DEFAULT_ECONOMY_CONFIG.inflationSmoothingWindow).toBe(2);
+  });
+
+  it('averages last 2 CPI values with smoothingWindow=2', () => {
+    // With history [90, 95, 100, 110, 121] and window=2, only last 2 used: [110, 121]
+    const result = computeInflation(makeInput({
+      recentCpiHistory: [90, 95, 100, 110, 121],
+      economyConfig: makeConfig({ inflationSmoothingWindow: 2 }),
+    }));
+    // From window [110, 121]: rate = ((121/110)-1)*100 = 10.0
+    expect(result.inflationExpectations).toBeCloseTo(10, 0);
   });
 });
