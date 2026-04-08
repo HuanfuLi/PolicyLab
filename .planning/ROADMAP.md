@@ -175,7 +175,7 @@ Plans:
   9. Users can add new scenarios to existing groups from Design Review; only new scenarios run
   10. After all scenarios finish, "View Full Comparison" button links to Phase 6's 8-dimension comparison page
   11. TelemetryPanel modal Economic tab removed (data now inline); Classic tab preserved
-**Plans:** 7 plans
+**Plans:** 8 plans
 
 Plans:
 - [ ] 08-01-PLAN.md — DB schema (groupId/scenarioLabel), shared types, fork endpoint upgrade
@@ -183,7 +183,8 @@ Plans:
 - [ ] 08-03-PLAN.md — multiScenarioStore (N SSE connections), scenarioStore parallel execution
 - [ ] 08-04-PLAN.md — ScenarioChart, CollapsiblePanel, ConfigDiffHeader, ProgressBar, TelemetryPanel cleanup
 - [ ] 08-05-PLAN.md — Simulation page rewrite with multi-scenario charts, collapsible panels, top bar
-- [ ] 08-06-PLAN.md — Home page grouping, Reflection/Review/Artifacts multi-scenario adaptations
+- [ ] 08-06-PLAN.md — Home page grouping, Reflection multi-scenario layout
+- [ ] 08-08-PLAN.md — AgentReview cross-scenario context, Artifacts combined policy brief
 - [ ] 08-07-PLAN.md — Load balancer wiring, integration fixes, end-to-end human verification
 
 ### Phase 9: Redesign Prompts for All
