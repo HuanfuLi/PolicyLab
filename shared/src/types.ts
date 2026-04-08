@@ -574,6 +574,20 @@ export interface EconomyConfig {
 export type EnterpriseSector = 'agriculture' | 'industry' | 'services' | 'government';
 export type EnterpriseCommodity = 'food' | 'tools' | 'raw_materials' | 'luxury_goods' | 'none';
 
+export interface EnterpriseBlueprint {
+  id: string;
+  name: string;
+  ownerId: string;
+  sector: EnterpriseSector;
+  industry: string;
+  commodityOutput: EnterpriseCommodity;
+  initialCapital: number;
+  initialInventory: Record<string, number>;
+  employees: string[];
+  wage: number;
+  isServiceEnterprise: boolean;
+}
+
 export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   bankingEnabled: true,
   capitalMarketsEnabled: false,
@@ -915,25 +929,6 @@ export interface LocationProfile {
   infrastructure?: DataPoint<string>;
 }
 
-// ── Enterprise Bootstrap Types (Phase 10) ────────────────────────────────────
-
-export type EnterpriseSector = 'agriculture' | 'industry' | 'services' | 'government';
-export type EnterpriseCommodity = 'food' | 'tools' | 'raw_materials' | 'luxury_goods' | 'none';
-
-export interface EnterpriseBlueprint {
-  id: string;
-  name: string;
-  ownerId: string;
-  sector: EnterpriseSector;
-  industry: string;
-  commodityOutput: EnterpriseCommodity;
-  initialCapital: number;
-  initialInventory: Record<string, number>;
-  employees: string[];
-  wage: number;
-  isServiceEnterprise: boolean;
-}
-
 export interface ScenarioTab {
   id: string;
   name: string;
@@ -941,24 +936,6 @@ export interface ScenarioTab {
   economyConfig: Partial<EconomyConfig>;
   budgetAllocation?: BudgetAllocation;
   deltas?: Record<string, { from: number | boolean; to: number | boolean }>;
-}
-
-// ── Phase 10: Enterprise Blueprint Types ────────────────────────────────────
-export type EnterpriseSector = 'agriculture' | 'industry' | 'services' | 'government';
-export type EnterpriseCommodity = 'food' | 'tools' | 'raw_materials' | 'luxury_goods' | 'none';
-
-export interface EnterpriseBlueprint {
-  id: string;
-  name: string;
-  ownerId: string;
-  sector: EnterpriseSector;
-  industry: string;
-  commodityOutput: EnterpriseCommodity;
-  initialCapital: number;
-  initialInventory: Record<string, number>;
-  employees: string[];
-  wage: number;
-  isServiceEnterprise: boolean;
 }
 
 // ── AMM State (moved from mechanics for cross-module sharing) ───────────────

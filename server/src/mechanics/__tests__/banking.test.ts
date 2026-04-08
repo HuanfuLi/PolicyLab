@@ -15,6 +15,7 @@ import {
   processDefault,
   accrueDepositInterest,
   processIteration,
+  processLiquidityInjection,
 } from '../bankingEngine.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -404,5 +405,120 @@ describe('processIteration', () => {
     expect(Array.isArray(result.loanUpdates)).toBe(true);
     expect(Array.isArray(result.wealthDeltas)).toBe(false); // it's a Map
     expect(result.wealthDeltas instanceof Map).toBe(true);
+  });
+});
+
+// ── Differentiated Loan Products (D-25) ─────────────────────────────────────
+
+describe('Differentiated Loan Products (D-25)', () => {
+  const bank = makeAgent({ id: 'bank-1', type: 'bank', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+  const borrower = makeAgent({ id: 'borrower-1', currentStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+
+  it('business loan rate = baseLoanInterestRate * (1 - businessLoanRateDiscount)', () => {
+    const result = processLoanRequest({
+      bank,
+      borrower,
+      principal: 50,
+      economyConfig: { ...defaultConfig, businessLoanRateDiscount: 0.3 },
+      currentDeposits: [],
+      iterationNumber: 1,
+      loanProductType: 'business',
+    });
+    expect('rejected' in result).toBe(false);
+    if ('rejected' in result) return;
+    // 0.005 * (1 - 0.3) = 0.0035
+    expect(result.loan.interestRate).toBeCloseTo(0.0035);
+  });
+
+  it('business loan term = defaultLoanTermIterations * businessLoanTermMultiplier', () => {
+    const result = processLoanRequest({
+      bank,
+      borrower,
+      principal: 50,
+      economyConfig: { ...defaultConfig, businessLoanRateDiscount: 0.3, businessLoanTermMultiplier: 1.5 },
+      currentDeposits: [],
+      iterationNumber: 1,
+      loanProductType: 'business',
+    });
+    expect('rejected' in result).toBe(false);
+    if ('rejected' in result) return;
+    // 20 * 1.5 = 30
+    expect(result.loan.termIterations).toBe(30);
+    expect(result.loan.dueAtIteration).toBe(31); // issuedAt=1 + term=30
+  });
+
+  it('personal loan uses unchanged rate and term', () => {
+    const result = processLoanRequest({
+      bank,
+      borrower,
+      principal: 50,
+      economyConfig: { ...defaultConfig, businessLoanRateDiscount: 0.3, businessLoanTermMultiplier: 1.5 },
+      currentDeposits: [],
+      iterationNumber: 1,
+      loanProductType: 'personal',
+    });
+    expect('rejected' in result).toBe(false);
+    if ('rejected' in result) return;
+    expect(result.loan.interestRate).toBe(0.005);
+    expect(result.loan.termIterations).toBe(20);
+  });
+
+  it('loanProductType stored in returned contract', () => {
+    const result = processLoanRequest({
+      bank,
+      borrower,
+      principal: 50,
+      economyConfig: defaultConfig,
+      currentDeposits: [],
+      iterationNumber: 1,
+      loanProductType: 'business',
+    });
+    expect('rejected' in result).toBe(false);
+    if ('rejected' in result) return;
+    expect(result.loan.loanProductType).toBe('business');
+  });
+});
+
+// ── Central Bank Liquidity Injection (D-26) ─────────────────────────────────
+
+describe('Central Bank Liquidity Injection (D-26)', () => {
+  it('injects when reserve ratio below threshold', () => {
+    const result = processLiquidityInjection({
+      bankReserves: 2,   // 2/100 = 2% < 5%
+      totalDeposits: 100,
+      config: { liquidityInjectionThreshold: 0.05, liquidityInjectionCap: 0.05 },
+    });
+    expect(result.injectionAmount).toBeGreaterThan(0);
+  });
+
+  it('injection capped at liquidityInjectionCap * totalDeposits', () => {
+    const result = processLiquidityInjection({
+      bankReserves: 0,   // 0% << 5%
+      totalDeposits: 1000,
+      config: { liquidityInjectionThreshold: 0.05, liquidityInjectionCap: 0.05 },
+    });
+    // cap = 0.05 * 1000 = 50
+    expect(result.injectionAmount).toBeLessThanOrEqual(50);
+  });
+
+  it('zero injection when reserves are healthy', () => {
+    const result = processLiquidityInjection({
+      bankReserves: 20,  // 20/100 = 20% > 5%
+      totalDeposits: 100,
+      config: { liquidityInjectionThreshold: 0.05, liquidityInjectionCap: 0.05 },
+    });
+    expect(result.injectionAmount).toBe(0);
+    expect(result.trace).toHaveLength(0);
+  });
+
+  it('trace includes reserve ratio and injection amount', () => {
+    const result = processLiquidityInjection({
+      bankReserves: 2,
+      totalDeposits: 100,
+      config: { liquidityInjectionThreshold: 0.05, liquidityInjectionCap: 0.05 },
+    });
+    expect(result.trace.length).toBeGreaterThan(0);
+    expect(result.trace[0]).toContain('Liquidity injection');
+    expect(result.trace[0]).toContain('2.0%'); // reserve ratio
   });
 });
