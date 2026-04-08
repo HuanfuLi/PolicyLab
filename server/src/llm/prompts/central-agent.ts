@@ -213,6 +213,8 @@ export function buildResolutionPrompt(
   lockedVariables?: string[],
   /** D4: Physics trace log from the previous iteration — grounds narrative in actual math. */
   physicsLog?: string | null,
+  /** D-18: Pre-interpreted telemetry digest for data-driven narrative grounding. */
+  telemetryDigest?: string | null,
 ): LLMMessage[] {
   const agentList = intents.map(ai => {
     const agent = agents.find(a => a.id === ai.agentId);
@@ -233,11 +235,15 @@ export function buildResolutionPrompt(
     ? `\n\nCONTROLLED VARIABLE METHOD: The following variables are ABSOLUTELY LOCKED and will not change, regardless of any agent actions or events: ${lockedVariables.join(', ')}. Consider this when evaluating consequences or resolving conflicts, and do not narrate changes to these variables.`
     : '';
 
+  const telemetryDigestBlock = telemetryDigest
+    ? `\n\n${telemetryDigest}`
+    : '';
+
   const systemPrompt = `You are the Central Agent (omniscient narrator) resolving iteration ${iterationNumber} of a society simulation.
 
 Society: "${session.idea}"
 Time scale: ${session.timeScale ?? '1 iteration = 1 week'}
-${previousSummary ? `\nPrevious iteration summary:\n${previousSummary.slice(0, 600)}` : ''}${physicsLogBlock}${metricsBlock}${lockedNote}
+${previousSummary ? `\nPrevious iteration summary:\n${previousSummary.slice(0, 600)}` : ''}${physicsLogBlock}${metricsBlock}${telemetryDigestBlock}${lockedNote}
 
 Agent intentions this iteration:
 ${agentList}
@@ -245,7 +251,7 @@ ${agentList}
 Laws (excerpt):
 ${session.law?.slice(0, 500) ?? '(no laws)'}
 
-NARRATIVE DIRECTIVE — FRICTION FIRST: Prioritise narrating the FRICTION, INEQUALITY, and DISRUPTION of this iteration. Do not default to a 'balanced' or 'harmonious' summary. If agents are suffering, starving, or if wealth is concentrating in a few hands, your narrative must be a harsh, unflinching reflection of that systemic reality. Social drama, class conflict, and desperation are more truthful than false consensus.
+NARRATIVE DIRECTIVE — DATA-DRIVEN GROUNDING: Your narrative tone MUST match the telemetry data provided in the TELEMETRY DIGEST above. If metrics are improving, narrate cautious optimism tempered by remaining challenges. If metrics are declining, narrate crisis and struggle. Also incorporate citizen sentiment — if population mood shows widespread distress, reflect desperation; if satisfaction is high, reflect collective progress. NEVER contradict the numbers in the digest. Include at least 2 specific data points from the digest as embedded numbers in your prose (e.g., "Food prices fell 15% to 4.88 fiat/unit as agricultural output surged").
 
 Resolve all agent intentions simultaneously, considering:
 - How agent actions interact with each other
@@ -417,6 +423,8 @@ export function buildMergeResolutionMessages(
   previousSummary: string | null,
   iterationMetrics?: string | null,
   lockedVariables?: string[],
+  /** D-18: Pre-interpreted telemetry digest for data-driven narrative grounding. */
+  telemetryDigest?: string | null,
 ): LLMMessage[] {
   const summaryList = groupSummaries.map((s, i) => `Group ${i + 1}: ${s}`).join('\n');
   const metricsBlock = iterationMetrics
@@ -427,17 +435,21 @@ export function buildMergeResolutionMessages(
     ? `\n\nCONTROLLED VARIABLE METHOD: The following variables are ABSOLUTELY LOCKED and will not change, regardless of any agent actions or events: ${lockedVariables.join(', ')}. Do not narrate changes to these variables.`
     : '';
 
+  const telemetryDigestBlock = telemetryDigest
+    ? `\n\n${telemetryDigest}`
+    : '';
+
   const systemPrompt = `You are the Central Agent synthesising iteration ${iterationNumber} of a society simulation.
 You have received summaries from ${groupSummaries.length} sub-groups.
 
 Society: "${session.idea}"
 Time scale: ${session.timeScale ?? '1 iteration = 1 week'}
-${previousSummary ? `\nPrevious iteration:\n${previousSummary.slice(0, 400)}` : ''}${metricsBlock}${mergeLockedNote}
+${previousSummary ? `\nPrevious iteration:\n${previousSummary.slice(0, 400)}` : ''}${metricsBlock}${telemetryDigestBlock}${mergeLockedNote}
 
 Sub-group summaries:
 ${summaryList}
 
-NARRATIVE DIRECTIVE — FRICTION FIRST: Prioritise narrating the FRICTION, INEQUALITY, and DISRUPTION of this iteration. Do not smooth over suffering or wealth gaps with diplomatic language. If the data shows desperation, hoarding, or class conflict, your synthesis must reflect that brutal reality — not paper over it.
+NARRATIVE DIRECTIVE — DATA-DRIVEN GROUNDING: Your narrative tone MUST match the telemetry data provided in the TELEMETRY DIGEST above. If metrics are improving, narrate cautious optimism tempered by remaining challenges. If metrics are declining, narrate crisis and struggle. Also incorporate citizen sentiment — if population mood shows widespread distress, reflect desperation; if satisfaction is high, reflect collective progress. NEVER contradict the numbers in the digest. Include at least 2 specific data points from the digest as embedded numbers in your prose (e.g., "Food prices fell 15% to 4.88 fiat/unit as agricultural output surged").
 
 Synthesise these into one coherent society-wide narrative and identify any society-level lifecycle events.
 
