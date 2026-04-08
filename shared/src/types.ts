@@ -605,7 +605,7 @@ export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
     raw_materials: 0.15,
   },
   m1InflationCoeff: 0.3,
-  inflationSmoothingWindow: 3,
+  inflationSmoothingWindow: 2,
   productivityGrowthEstimate: 0.01,
   inflationAmmThreshold: 0.5,
   inflationAmmCap: 2.0,

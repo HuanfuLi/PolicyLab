@@ -77,6 +77,7 @@ describe('computeInflation', () => {
   it('computes inflationExpectations as the rolling mean of recent CPI inflation rates', () => {
     const result = computeInflation(makeInput({
       recentCpiHistory: [100, 110, 132],
+      economyConfig: makeConfig({ inflationSmoothingWindow: 3 }),
     }));
 
     expect(result.inflationExpectations).toBeCloseTo(15, 6);

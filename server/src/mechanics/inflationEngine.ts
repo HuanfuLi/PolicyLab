@@ -23,6 +23,50 @@ export interface InflationOutput {
   trace: string[];
 }
 
+export interface TaylorRuleInput {
+  currentInflationRate: number;  // per-iteration CPI inflation rate (decimal, not %)
+  inflationTarget: number;       // per-iteration target (default: 0.00167)
+  neutralRate: number;           // per-iteration neutral real rate (default: 0.00167)
+  outputGapEstimate: number;     // (employedAgents/totalAgents - 0.95) / 0.95
+  rateCeiling: number;           // max rate (default: 0.0125)
+  inflationCoeff: number;        // response to inflation gap (default: 0.5)
+  outputCoeff: number;           // response to output gap (default: 0.5)
+}
+
+export interface TaylorRuleOutput {
+  targetRate: number;            // recommended per-iteration lending rate
+  ceilingHit: boolean;           // true if rate was clamped
+  reserveRatioAdjustment: number; // +delta when ceiling hit, 0 otherwise
+  trace: string[];
+}
+
+export function computeTaylorRule(input: TaylorRuleInput): TaylorRuleOutput {
+  const inflationGap = input.currentInflationRate - input.inflationTarget;
+  const rawRate = input.neutralRate
+    + input.currentInflationRate
+    + input.inflationCoeff * inflationGap
+    + input.outputCoeff * input.outputGapEstimate;
+
+  const clampedRate = Math.max(0.001, Math.min(input.rateCeiling, rawRate));
+  const ceilingHit = rawRate > input.rateCeiling;
+
+  // When rate ceiling hit, shift to quantity restriction (per D-15)
+  const reserveRatioAdjustment = ceilingHit
+    ? Math.min(0.05, (rawRate - input.rateCeiling) * 0.5)
+    : 0;
+
+  return {
+    targetRate: clampedRate,
+    ceilingHit,
+    reserveRatioAdjustment,
+    trace: [
+      `[CB] Taylor Rule: r*=${input.neutralRate.toFixed(4)}, pi=${input.currentInflationRate.toFixed(4)}, pi*=${input.inflationTarget.toFixed(4)}, gap=${inflationGap.toFixed(4)}`,
+      `[CB] Raw rate=${rawRate.toFixed(4)}, clamped=${clampedRate.toFixed(4)}, ceiling=${ceilingHit}`,
+      ...(ceilingHit ? [`[CB] Ceiling hit -- reserve ratio adjustment: +${reserveRatioAdjustment.toFixed(4)}`] : []),
+    ],
+  };
+}
+
 function computeHistoryInflationRates(cpiHistory: number[]): number[] {
   const rates: number[] = [];
 
