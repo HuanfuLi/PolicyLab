@@ -87,6 +87,18 @@ export function getDeposit(
 }
 
 /**
+ * Get a deposit account by its primary key (id).
+ */
+export function getDepositById(id: string): DepositAccount | undefined {
+  const rows = db
+    .select()
+    .from(depositAccounts)
+    .where(eq(depositAccounts.id, id))
+    .all();
+  return rows.length > 0 ? rowToDeposit(rows[0]) : undefined;
+}
+
+/**
  * Get all deposit accounts for a session.
  */
 export function getDepositsBySession(sessionId: string): DepositAccount[] {

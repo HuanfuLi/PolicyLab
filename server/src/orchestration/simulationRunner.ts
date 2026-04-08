@@ -1291,10 +1291,12 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         const blueprints = enterpriseRepo.getEnterprises(sessionId);
         const bankAgent = agents.find(a => a.type === 'bank' && a.isAlive);
         for (const bp of blueprints) {
+          // Resolve owner: ownerId may be UUID (new sessions) or name (legacy sessions)
+          const ownerAgent = agents.find(a => a.id === bp.ownerId) ?? agents.find(a => a.name === bp.ownerId);
           existingRegistry.set(bp.id, {
             id: bp.id,
-            ownerId: bp.ownerId,
-            ownerName: agents.find(a => a.id === bp.ownerId)?.name ?? 'Unknown',
+            ownerId: ownerAgent?.id ?? bp.ownerId,
+            ownerName: ownerAgent?.name ?? 'Unknown',
             industry: bp.industry,
             employees: new Set(bp.employees),
             applicants: new Set(),
@@ -1302,9 +1304,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             minSkill: 0,
           });
           // Create enterprise deposit account with initial capital (D-24)
-          // ownerAgentId must reference a valid agents(id) — use the enterprise owner's agent ID.
-          // If owner not found (e.g. ownerId is a name not UUID), skip deposit creation.
-          const ownerAgent = agents.find(a => a.id === bp.ownerId || a.name === bp.ownerId);
+          // ownerAgentId must reference a valid agents(id) FK
           if (bankAgent && ownerAgent) {
             const entDepositId = `ent_${bp.id}`;
             bankingRepo.upsertDeposit({
@@ -1798,6 +1798,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             agentId: intentRecord.agentId,
             agentName: intentRecord.agentName,
             intent: intentRecord.intent,
+            reasoning: intentRecord.reasoning ?? '',
             actionCode: intentRecord.primaryActionCode ?? 'NONE',
             actionTarget: intentRecord.primaryActionTarget ?? null,
             actions: intentRecord.actions?.map(action => ({
@@ -3537,7 +3538,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           // 2. Build EnterpriseInput array from registry with treasury from deposit accounts
           const enterpriseInputs: EnterpriseInput[] = [...entRegistry.values()].map(ent => {
             const entDepositId = `ent_${ent.id}`;
-            const deposit = bankingRepo.getDeposit(entDepositId, bankAgent?.id ?? '');
+            const deposit = bankingRepo.getDepositById(entDepositId);
             return {
               id: ent.id,
               ownerId: ent.ownerId,
@@ -3559,8 +3560,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           for (const payment of wageDelta.wagePayments) {
             const entDepositId = `ent_${payment.fromEnterprise}`;
             if (bankAgent) {
-              // Debit enterprise deposit
-              const entDeposit = bankingRepo.getDeposit(entDepositId, bankAgent.id);
+              // Debit enterprise deposit (lookup by deposit ID, not ownerAgentId)
+              const entDeposit = bankingRepo.getDepositById(entDepositId);
               if (entDeposit) {
                 bankingRepo.updateDepositBalance(entDeposit.id, entDeposit.balance - payment.amount, iterNum);
               }
@@ -4400,8 +4401,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       try { simulationManager.broadcast(sessionId, { type: 'error', message: err.message }); } catch { /* best-effort */ }
     } else {
       const message = err instanceof Error ? err.message : 'Simulation error';
+      const stack = err instanceof Error ? err.stack?.split('\n').slice(0, 8).join('\n') : '';
       try { simulationManager.broadcast(sessionId, { type: 'error', message }); } catch { /* best-effort */ }
-      console.error(`[SimulationRunner] Session ${sessionId}:`, err);
+      console.error(`[SimulationRunner] Session ${sessionId}: ${message}\n${stack}`);
     }
 
     // Always mark session as finished so it never gets stuck in 'running' state

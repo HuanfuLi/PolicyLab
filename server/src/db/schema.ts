@@ -281,7 +281,7 @@ export const fiscalBudgets = sqliteTable('fiscal_budgets', {
 // ── Enterprise Persistence (Phase 10) ─────────────────────────────────────
 export const enterprises = sqliteTable('enterprises', {
   id: text('id').primaryKey(),
-  sessionId: text('session_id').notNull().references(() => sessions.id),
+  sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   ownerId: text('owner_id').notNull(),
   sector: text('sector').notNull(),        // 'agriculture' | 'industry' | 'services' | 'government'

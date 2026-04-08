@@ -30,6 +30,7 @@ export type SimulationEvent =
       agentId: string;
       agentName: string;
       intent: string;
+      reasoning: string;
       actionCode: string;
       actionTarget: string | null;
       actions?: Array<{ actionCode: string; parameters: Record<string, unknown> }>;

@@ -481,6 +481,8 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
     }
 
     // Generate and persist enterprise blueprints (Phase 10)
+    // Map agent names → UUIDs so enterprises reference valid agent IDs
+    const agentNameToId = new Map(citizenRows.map(r => [r.name, r.id]));
     const enterpriseBlueprints = generateEnterprises(
       blueprints,
       profile,
@@ -488,6 +490,13 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
       finalConfig.minimumWage ?? 5,
     );
     for (const bp of enterpriseBlueprints) {
+      // Resolve ownerId from agent name to UUID (generateEnterprises uses names)
+      const ownerUuid = agentNameToId.get(bp.ownerId);
+      if (ownerUuid) bp.ownerId = ownerUuid;
+      // Resolve employee names to UUIDs
+      bp.employees = bp.employees
+        .map(name => agentNameToId.get(name) ?? name)
+        .filter(id => agentNameToId.has(id) || /^[0-9a-f-]{36}$/i.test(id));
       insertEnterprise(id, bp);
     }
 

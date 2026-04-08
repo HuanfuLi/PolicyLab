@@ -9,6 +9,7 @@ type SSEEvent =
       agentId: string;
       agentName: string;
       intent: string;
+      reasoning: string;
       actionCode: string;
       actionTarget: string | null;
       actions?: ActionQueueRecord[];
@@ -39,6 +40,7 @@ export interface AgentIntentRecord {
   actionTarget: string | null;
   actions: ActionQueueRecord[];
   narrative: string;
+  reasoning: string;
 }
 
 export interface IterationFeed {
@@ -202,6 +204,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
           actionTarget: i.actionTarget,
           actions: i.actions ?? [],
           narrative: i.narrative,
+          reasoning: i.reasoning ?? '',
         }));
       }
       set({ agentIntentHistory: history });
@@ -274,7 +277,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
               const agentHistory = agentIntentHistory[event.agentId] ?? [];
               const alreadyRecorded = agentHistory.some(r => r.iterationNumber === currentIteration);
               if (!alreadyRecorded && currentIteration > 0) {
-                const newRecord = {
+                const newRecord: AgentIntentRecord = {
                   agentId: event.agentId,
                   agentName: event.agentName,
                   iterationNumber: currentIteration,
@@ -282,6 +285,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
                   actionTarget: event.actionTarget,
                   actions: event.actions ?? [],
                   narrative: event.intent,
+                  reasoning: event.reasoning ?? '',
                 };
                 // Append new record; if over cap, drop the oldest entry (shift)
                 const updated = [...agentHistory, newRecord];
