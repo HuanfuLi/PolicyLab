@@ -18,7 +18,14 @@ interface ScenarioState {
   setActiveTab: (tabId: string) => void;
   updateScenarioConfig: (tabId: string, patch: Partial<EconomyConfig>) => void;
   updateScenarioBudget: (tabId: string, budget: BudgetAllocation) => void;
-  runAllScenarios: (baseSessionId: string, iterations?: number) => Promise<string[]>;
+  runAllScenarios: (baseSessionId: string, iterations?: number, navigate?: (url: string) => void) => Promise<string[]>;
+  addAndRunNewScenarios: (
+    baseSessionId: string,
+    existingGroupId: string,
+    existingSessionIds: string[],
+    iterations: number,
+    navigate?: (url: string) => void,
+  ) => Promise<string[]>;
   reset: () => void;
 }
 
@@ -177,29 +184,38 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
     }));
   },
 
-  runAllScenarios: async (baseSessionId: string, iterations?: number): Promise<string[]> => {
+  runAllScenarios: async (baseSessionId: string, iterations?: number, navigate?: (url: string) => void): Promise<string[]> => {
     const { tabs, runningScenarios } = get();
     if (runningScenarios) return []; // Prevent concurrent calls
+    const baselineTab = tabs.find(t => t.isBaseline);
     const nonBaseline = tabs.filter(t => !t.isBaseline);
-    if (nonBaseline.length === 0) return [];
+    if (!baselineTab) return [];
 
     set({ runningScenarios: true });
-    const sessionIds: Record<string, string> = {};
-    const allForkIds: string[] = [];
+    const groupId = crypto.randomUUID();
+    const iterationCounts = new Set([iterations ?? 20]);
+    if (iterationCounts.size !== 1) {
+      set({ runningScenarios: false });
+      throw new Error('All scenarios must use the same iteration count (D-12)');
+    }
 
     try {
-      // Step 1: Fork and configure each scenario sequentially
-      for (const tab of nonBaseline) {
-        // Fork the session
+      const groupRes = await fetch(`/api/sessions/${baseSessionId}/group`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId, scenarioLabel: baselineTab.name }),
+      });
+      if (!groupRes.ok) throw new Error('Failed to assign scenario group to base session');
+
+      const forkPairs = await Promise.all(nonBaseline.map(async (tab) => {
         const forkRes = await fetch(`/api/sessions/${baseSessionId}/fork`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ iterations, groupId, scenarioLabel: tab.name }),
         });
         if (!forkRes.ok) throw new Error(`Fork failed for scenario "${tab.name}"`);
-        const { id: forkId } = await forkRes.json();
+        const { id: forkId } = await forkRes.json() as { id: string };
 
-        // Patch the fork's config with the scenario overrides
         const configRes = await fetch(`/api/sessions/${forkId}/config`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -210,35 +226,111 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
         });
         if (!configRes.ok) throw new Error(`Config patch failed for scenario "${tab.name}"`);
 
-        sessionIds[tab.id] = forkId;
-        allForkIds.push(forkId);
-      }
+        return [tab.id, forkId] as const;
+      }));
 
-      set({ scenarioSessionIds: sessionIds });
+      const scenarioSessionIds = Object.fromEntries([
+        [baselineTab.id, baseSessionId],
+        ...forkPairs,
+      ]);
+      const allSessionIds = [baseSessionId, ...forkPairs.map(([, forkId]) => forkId)];
 
-      // Step 2: Start simulations sequentially (per Research open question 3)
-      const simBody = iterations ? { iterations } : {};
-
-      // Start baseline first
-      const baseSimRes = await fetch(`/api/sessions/${baseSessionId}/simulate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(simBody),
-      });
-      if (!baseSimRes.ok) throw new Error('Failed to start baseline simulation');
-
-      // Then each fork
-      for (const forkId of allForkIds) {
-        const forkSimRes = await fetch(`/api/sessions/${forkId}/simulate`, {
+      await Promise.all(allSessionIds.map(async (sessionId) => {
+        const simRes = await fetch(`/api/sessions/${sessionId}/simulate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(simBody),
+          body: JSON.stringify(iterations ? { iterations } : {}),
         });
-        if (!forkSimRes.ok) throw new Error(`Failed to start simulation for fork ${forkId}`);
-      }
+        if (!simRes.ok) throw new Error(`Failed to start simulation for session ${sessionId}`);
+      }));
 
+      set({
+        scenarioSessionIds,
+        runningScenarios: false,
+      });
+
+      navigate?.(`/sessions/${baseSessionId}/simulate?scenarios=${allSessionIds.join(',')}`);
+      return allSessionIds;
+    } catch (err) {
       set({ runningScenarios: false });
-      return allForkIds;
+      throw err;
+    }
+  },
+
+  addAndRunNewScenarios: async (
+    baseSessionId: string,
+    existingGroupId: string,
+    existingSessionIds: string[],
+    iterations: number,
+    navigate?: (url: string) => void,
+  ): Promise<string[]> => {
+    const { tabs, runningScenarios, scenarioSessionIds } = get();
+    if (runningScenarios) return [];
+
+    const baselineTab = tabs.find(t => t.isBaseline);
+    if (!baselineTab) return [];
+
+    const existingMappings = { ...scenarioSessionIds, [baselineTab.id]: baseSessionId };
+    const newTabs = tabs.filter((tab) => !existingMappings[tab.id]);
+    if (newTabs.length === 0) {
+      const allIds = Array.from(new Set(existingSessionIds));
+      navigate?.(`/sessions/${baseSessionId}/simulate?scenarios=${allIds.join(',')}`);
+      return allIds;
+    }
+
+    const iterationCounts = new Set([iterations]);
+    if (iterationCounts.size !== 1) {
+      throw new Error('All scenarios must use the same iteration count (D-12)');
+    }
+
+    set({ runningScenarios: true });
+
+    try {
+      const forkPairs = await Promise.all(newTabs.map(async (tab) => {
+        const forkRes = await fetch(`/api/sessions/${baseSessionId}/fork`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ iterations, groupId: existingGroupId, scenarioLabel: tab.name }),
+        });
+        if (!forkRes.ok) throw new Error(`Fork failed for scenario "${tab.name}"`);
+        const { id: forkId } = await forkRes.json() as { id: string };
+
+        const configRes = await fetch(`/api/sessions/${forkId}/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            economyConfig: tab.economyConfig,
+            ...(tab.budgetAllocation ? { budgetAllocation: tab.budgetAllocation } : {}),
+          }),
+        });
+        if (!configRes.ok) throw new Error(`Config patch failed for scenario "${tab.name}"`);
+
+        return [tab.id, forkId] as const;
+      }));
+
+      const newIds = forkPairs.map(([, forkId]) => forkId);
+      await Promise.all(newIds.map(async (sessionId) => {
+        const simRes = await fetch(`/api/sessions/${sessionId}/simulate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ iterations }),
+        });
+        if (!simRes.ok) throw new Error(`Failed to start simulation for session ${sessionId}`);
+      }));
+
+      const mergedMappings = {
+        ...existingMappings,
+        ...Object.fromEntries(forkPairs),
+      };
+      const allIds = [...existingSessionIds, ...newIds];
+
+      set({
+        scenarioSessionIds: mergedMappings,
+        runningScenarios: false,
+      });
+
+      navigate?.(`/sessions/${baseSessionId}/simulate?scenarios=${allIds.join(',')}`);
+      return allIds;
     } catch (err) {
       set({ runningScenarios: false });
       throw err;
