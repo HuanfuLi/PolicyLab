@@ -278,6 +278,23 @@ export const fiscalBudgets = sqliteTable('fiscal_budgets', {
   createdAt: text('created_at').notNull(),
 });
 
+// ── Enterprise Persistence (Phase 10) ─────────────────────────────────────
+export const enterprises = sqliteTable('enterprises', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => sessions.id),
+  name: text('name').notNull(),
+  ownerId: text('owner_id').notNull(),
+  sector: text('sector').notNull(),        // 'agriculture' | 'industry' | 'services' | 'government'
+  industry: text('industry').notNull(),
+  commodityOutput: text('commodity_output').notNull(), // 'food' | 'tools' | 'raw_materials' | 'luxury_goods' | 'none'
+  initialCapital: real('initial_capital').notNull(),
+  wage: real('wage').notNull(),
+  isServiceEnterprise: integer('is_service_enterprise', { mode: 'boolean' }).notNull().default(false),
+  consecutiveInsolvencyIterations: integer('consecutive_insolvency_iterations').notNull().default(0),
+  isBankrupt: integer('is_bankrupt', { mode: 'boolean' }).notNull().default(false),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+});
+
 /**
  * Persistent public goods quality scores per iteration.
  * One row per session per iteration — latest row is the current state.

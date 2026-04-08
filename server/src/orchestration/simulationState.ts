@@ -78,6 +78,12 @@ export const sessionLastPhysicsTraces = new Map<string, string>();
 /** Fiscal Policy: multiplier effects from the previous iteration's public goods state. */
 export const sessionFiscalMultipliers = new Map<string, MultiplierEffects>();
 
+/** Per-enterprise consecutive insolvency counter (per D-06). Reset on successful payroll. */
+export const sessionEnterpriseInsolvency = new Map<string, Map<string, number>>();
+
+/** Per-agent consecutive idle iterations counter (per D-09). Reset on WORK/PRODUCE action. */
+export const sessionAgentIdleCounter = new Map<string, Map<string, number>>();
+
 // ── Trace Helper ────────────────────────────────────────────────────────────
 
 const MAX_TRACE_SIZE = 50_000; // 50 KB cap per session to prevent unbounded growth
@@ -112,6 +118,18 @@ export function getEmploymentRegistry(sessionId: string): Map<string, Employment
   return reg;
 }
 
+export function getEnterpriseInsolvency(sessionId: string): Map<string, number> {
+  let m = sessionEnterpriseInsolvency.get(sessionId);
+  if (!m) { m = new Map(); sessionEnterpriseInsolvency.set(sessionId, m); }
+  return m;
+}
+
+export function getAgentIdleCounter(sessionId: string): Map<string, number> {
+  let m = sessionAgentIdleCounter.get(sessionId);
+  if (!m) { m = new Map(); sessionAgentIdleCounter.set(sessionId, m); }
+  return m;
+}
+
 // ── Cleanup ─────────────────────────────────────────────────────────────────
 
 /** Clean up all in-memory state for a finished/aborted session. */
@@ -130,4 +148,6 @@ export function cleanupSessionState(sessionId: string): void {
   sessionPriceHistory.delete(sessionId);
   sessionEnterpriseRegistry.delete(sessionId);
   sessionEmploymentRegistry.delete(sessionId);
+  sessionEnterpriseInsolvency.delete(sessionId);
+  sessionAgentIdleCounter.delete(sessionId);
 }
