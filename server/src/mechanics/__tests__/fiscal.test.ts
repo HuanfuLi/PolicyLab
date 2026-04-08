@@ -9,6 +9,7 @@ import {
   executeBudget,
   updatePublicGoodsQuality,
   getMultiplierEffects,
+  computeIncomeTax,
 } from '../fiscalEngine.js';
 import type { BudgetAllocation, EconomyConfig, PublicGoodsState } from '@policylab/shared';
 
@@ -396,5 +397,74 @@ describe('getMultiplierEffects', () => {
     expect(effects.skillGainBonus).toBe(0);
     expect(effects.enforcementBonus).toBe(0);
     expect(effects.welfarePerAgent).toBe(0);
+  });
+});
+
+// ── Income Tax Tests ────────────────────────────────────────────────────────
+
+describe('computeIncomeTax', () => {
+  it('collects 15% tax from 3 agents earning 100, 200, 300 → total 90', () => {
+    const result = computeIncomeTax({
+      agentIncomes: [
+        { agentId: 'a1', income: 100 },
+        { agentId: 'a2', income: 200 },
+        { agentId: 'a3', income: 300 },
+      ],
+      taxRate: 0.15,
+    });
+
+    expect(result.totalRevenue).toBeCloseTo(90, 5);
+    expect(result.perAgentTax).toHaveLength(3);
+    expect(result.perAgentTax.find(t => t.agentId === 'a1')?.taxAmount).toBeCloseTo(15, 5);
+    expect(result.perAgentTax.find(t => t.agentId === 'a2')?.taxAmount).toBeCloseTo(30, 5);
+    expect(result.perAgentTax.find(t => t.agentId === 'a3')?.taxAmount).toBeCloseTo(45, 5);
+  });
+
+  it('collects 0 tax with 0% rate', () => {
+    const result = computeIncomeTax({
+      agentIncomes: [
+        { agentId: 'a1', income: 100 },
+        { agentId: 'a2', income: 200 },
+      ],
+      taxRate: 0,
+    });
+
+    expect(result.totalRevenue).toBe(0);
+    expect(result.perAgentTax).toHaveLength(0);
+  });
+
+  it('skips agents with zero income', () => {
+    const result = computeIncomeTax({
+      agentIncomes: [
+        { agentId: 'a1', income: 0 },
+        { agentId: 'a2', income: 50 },
+        { agentId: 'a3', income: -10 },
+      ],
+      taxRate: 0.15,
+    });
+
+    expect(result.totalRevenue).toBeCloseTo(7.5, 5);
+    expect(result.perAgentTax).toHaveLength(1);
+    expect(result.perAgentTax[0].agentId).toBe('a2');
+  });
+
+  it('produces trace describing tax collection', () => {
+    const result = computeIncomeTax({
+      agentIncomes: [{ agentId: 'a1', income: 100 }],
+      taxRate: 0.10,
+    });
+
+    expect(result.trace.length).toBeGreaterThan(0);
+    expect(result.trace[0]).toContain('Income tax');
+  });
+
+  it('handles empty agent list', () => {
+    const result = computeIncomeTax({
+      agentIncomes: [],
+      taxRate: 0.15,
+    });
+
+    expect(result.totalRevenue).toBe(0);
+    expect(result.perAgentTax).toHaveLength(0);
   });
 });

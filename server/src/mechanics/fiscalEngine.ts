@@ -18,6 +18,42 @@
  */
 import type { BudgetAllocation, EconomyConfig, PublicGoodsState } from '@policylab/shared';
 
+// ── Income Tax types ─────────────────────────────────────────────────────────
+
+export interface TaxInput {
+  agentIncomes: Array<{ agentId: string; income: number }>; // income earned this iteration (wages, enterprise revenue)
+  taxRate: number; // from EconomyConfig.incomeTaxRate
+}
+
+export interface TaxOutput {
+  totalRevenue: number;
+  perAgentTax: Array<{ agentId: string; taxAmount: number }>;
+  trace: string[];
+}
+
+/**
+ * Compute income tax for all agents with positive income.
+ * Flat rate applied to each agent's gross income. Zero/negative income is exempt.
+ * Returns per-agent deductions and total treasury revenue.
+ */
+export function computeIncomeTax(input: TaxInput): TaxOutput {
+  const perAgentTax: Array<{ agentId: string; taxAmount: number }> = [];
+  let totalRevenue = 0;
+
+  for (const { agentId, income } of input.agentIncomes) {
+    if (income <= 0 || input.taxRate <= 0) continue;
+    const tax = income * input.taxRate;
+    perAgentTax.push({ agentId, taxAmount: tax });
+    totalRevenue += tax;
+  }
+
+  return {
+    totalRevenue,
+    perAgentTax,
+    trace: [`[FISCAL] Income tax collected: ${totalRevenue.toFixed(2)} from ${perAgentTax.length} agents at ${(input.taxRate * 100).toFixed(1)}% rate`],
+  };
+}
+
 // ── Return types ──────────────────────────────────────────────────────────────
 
 export interface MultiplierEffects {
