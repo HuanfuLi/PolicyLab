@@ -247,21 +247,28 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
       ]);
       const allSessionIds = [baseSessionId, ...forkPairs.map(([, forkId]) => forkId)];
 
-      await Promise.all(allSessionIds.map(async (sessionId) => {
-        const simRes = await fetch(`/api/sessions/${sessionId}/simulate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(iterations ? { iterations } : {}),
-        });
-        if (!simRes.ok) throw new Error(`Failed to start simulation for session ${sessionId}`);
-      }));
-
       set({
         scenarioSessionIds,
         runningScenarios: false,
       });
 
+      // Navigate FIRST — simulations run in background via SSE.
+      // This ensures the user sees the Simulation page immediately
+      // even if some simulation starts fail (e.g., 409 from already-running session).
       navigate?.(`/session/${baseSessionId}/simulation?scenarios=${allSessionIds.join(',')}`);
+
+      // Fire-and-forget: start all simulations in parallel.
+      // Errors are reported via SSE error events on the Simulation page.
+      Promise.all(allSessionIds.map(async (sessionId) => {
+        const simRes = await fetch(`/api/sessions/${sessionId}/simulate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(iterations ? { iterations } : {}),
+        });
+        if (!simRes.ok) {
+          console.warn(`[scenarioStore] Failed to start simulation for ${sessionId}: ${simRes.status}`);
+        }
+      })).catch(err => console.error('[scenarioStore] Batch simulation start error:', err));
 
       return allSessionIds;
     } catch (err) {
