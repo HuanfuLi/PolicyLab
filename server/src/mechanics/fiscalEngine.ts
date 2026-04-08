@@ -18,6 +18,42 @@
  */
 import type { BudgetAllocation, EconomyConfig, PublicGoodsState } from '@policylab/shared';
 
+// ── Income Tax types ─────────────────────────────────────────────────────────
+
+export interface TaxInput {
+  agentIncomes: Array<{ agentId: string; income: number }>; // income earned this iteration (wages, enterprise revenue)
+  taxRate: number; // from EconomyConfig.incomeTaxRate
+}
+
+export interface TaxOutput {
+  totalRevenue: number;
+  perAgentTax: Array<{ agentId: string; taxAmount: number }>;
+  trace: string[];
+}
+
+/**
+ * Compute income tax for all agents with positive income.
+ * Flat rate applied to each agent's gross income. Zero/negative income is exempt.
+ * Returns per-agent deductions and total treasury revenue.
+ */
+export function computeIncomeTax(input: TaxInput): TaxOutput {
+  const perAgentTax: Array<{ agentId: string; taxAmount: number }> = [];
+  let totalRevenue = 0;
+
+  for (const { agentId, income } of input.agentIncomes) {
+    if (income <= 0 || input.taxRate <= 0) continue;
+    const tax = income * input.taxRate;
+    perAgentTax.push({ agentId, taxAmount: tax });
+    totalRevenue += tax;
+  }
+
+  return {
+    totalRevenue,
+    perAgentTax,
+    trace: [`[FISCAL] Income tax collected: ${totalRevenue.toFixed(2)} from ${perAgentTax.length} agents at ${(input.taxRate * 100).toFixed(1)}% rate`],
+  };
+}
+
 // ── Return types ──────────────────────────────────────────────────────────────
 
 export interface MultiplierEffects {
@@ -55,9 +91,24 @@ const QUALITY_GAIN_SCALE_FACTOR = 0.264;
 
 // ── Pure helper functions ─────────────────────────────────────────────────────
 
+// Target spending-to-GDP ratio for full quality gain effect (10% of GDP per category).
+// At this ratio, quality gain reaches maximum per iteration.
+const TARGET_SPENDING_RATIO = 0.10;
+
+// GDP-scaled gain: max achievable quality gain per iteration when spending ratio >= target.
+// At 100% effect (spendingRatio >= target), gain is 75 quality points per iteration
+// (before diminishing returns). With quality clamp at 100, achieving max quality
+// requires sustained significant spending over multiple iterations.
+const GDP_SCALED_MAX_GAIN_PER_ITER = 75;
+
 /**
  * Update a single quality score given spending and config.
- * Gain formula: (spendAmount ^ diminishingExponent) * SCALE_FACTOR
+ *
+ * Two formulas:
+ * - Legacy (gdpScaling off): gain = (spendAmount ^ diminishingExponent) * SCALE_FACTOR
+ * - GDP-scaled (gdpScaling on): effectiveGain = GDP_SCALED_MAX_GAIN * min(1, spendingRatio / targetRatio)
+ *   then diminishing returns: qualityDelta = effectiveGain ^ diminishingExponent
+ *
  * If spendAmount <= 0, apply decay instead.
  * Result is clamped to [0, 100].
  */
@@ -66,13 +117,27 @@ export function updatePublicGoodsQuality(params: {
   spendAmount: number;
   decayRate: number;
   diminishingExponent: number;
+  gdpScaling?: boolean;
+  totalEconomyFiat?: number;
 }): number {
-  const { currentQuality, spendAmount, decayRate, diminishingExponent } = params;
+  const { currentQuality, spendAmount, decayRate, diminishingExponent, gdpScaling, totalEconomyFiat } = params;
 
   let newQuality: number;
   if (spendAmount > 0) {
-    const gain = Math.pow(spendAmount, diminishingExponent) * QUALITY_GAIN_SCALE_FACTOR;
-    newQuality = currentQuality + gain;
+    if (gdpScaling && totalEconomyFiat && totalEconomyFiat > 0) {
+      // GDP-scaled formula: quality proportional to spending commitment relative to economy size.
+      // ratioEffect goes from 0 (no spending) to 1.0 (spending >= targetRatio of GDP).
+      // Diminishing returns applied to ratioEffect so marginal gains decrease.
+      const spendingRatio = spendAmount / totalEconomyFiat;
+      const ratioEffect = Math.min(1.0, spendingRatio / TARGET_SPENDING_RATIO);
+      const diminishedEffect = Math.pow(ratioEffect, diminishingExponent);
+      const gain = GDP_SCALED_MAX_GAIN_PER_ITER * diminishedEffect;
+      newQuality = currentQuality + gain;
+    } else {
+      // Legacy formula: absolute spending drives quality
+      const gain = Math.pow(spendAmount, diminishingExponent) * QUALITY_GAIN_SCALE_FACTOR;
+      newQuality = currentQuality + gain;
+    }
   } else {
     newQuality = currentQuality - decayRate;
   }
@@ -128,6 +193,7 @@ export function getMultiplierEffectsFromQuality(
  * @param currentPublicGoods - Current quality state (will be updated)
  * @param aliveAgentIds - IDs of alive agents to receive payments
  * @param iterationNumber - Current simulation iteration (for updated public goods snapshot)
+ * @param totalEconomyFiat - Total economy fiat (GDP proxy) for spending-to-GDP scaling
  */
 export function executeBudget(params: {
   treasuryBalance: number;
@@ -136,6 +202,7 @@ export function executeBudget(params: {
   currentPublicGoods: Omit<PublicGoodsState, 'id' | 'sessionId'>;
   aliveAgentIds: string[];
   iterationNumber: number;
+  totalEconomyFiat?: number;
 }): FiscalDelta {
   const {
     treasuryBalance,
@@ -144,11 +211,13 @@ export function executeBudget(params: {
     currentPublicGoods,
     aliveAgentIds,
     iterationNumber,
+    totalEconomyFiat,
   } = params;
 
   const spendingRate = economyConfig.budgetSpendingRate ?? 0.10;
   const decayRate = economyConfig.publicGoodsDecayRate ?? 0.5;
   const diminishingExponent = economyConfig.publicGoodsGainDiminishing ?? 0.7;
+  const gdpScaling = economyConfig.publicGoodsSpendingToGdpScaling ?? false;
 
   const trace: string[] = [];
   const agentPayments = new Map<string, number>();
@@ -171,24 +240,32 @@ export function executeBudget(params: {
         spendAmount: 0,
         decayRate,
         diminishingExponent,
+        gdpScaling,
+        totalEconomyFiat,
       }),
       educationQuality: updatePublicGoodsQuality({
         currentQuality: currentPublicGoods.educationQuality,
         spendAmount: 0,
         decayRate,
         diminishingExponent,
+        gdpScaling,
+        totalEconomyFiat,
       }),
       defenseQuality: updatePublicGoodsQuality({
         currentQuality: currentPublicGoods.defenseQuality,
         spendAmount: 0,
         decayRate,
         diminishingExponent,
+        gdpScaling,
+        totalEconomyFiat,
       }),
       welfareQuality: updatePublicGoodsQuality({
         currentQuality: currentPublicGoods.welfareQuality,
         spendAmount: 0,
         decayRate,
         diminishingExponent,
+        gdpScaling,
+        totalEconomyFiat,
       }),
     };
 
@@ -227,6 +304,8 @@ export function executeBudget(params: {
     spendAmount: infraSpend,
     decayRate,
     diminishingExponent,
+    gdpScaling,
+    totalEconomyFiat,
   });
 
   const educationQuality = updatePublicGoodsQuality({
@@ -234,6 +313,8 @@ export function executeBudget(params: {
     spendAmount: educSpend,
     decayRate,
     diminishingExponent,
+    gdpScaling,
+    totalEconomyFiat,
   });
 
   const defenseQuality = updatePublicGoodsQuality({
@@ -241,6 +322,8 @@ export function executeBudget(params: {
     spendAmount: defSpend,
     decayRate,
     diminishingExponent,
+    gdpScaling,
+    totalEconomyFiat,
   });
 
   const welfareQuality = updatePublicGoodsQuality({
@@ -248,6 +331,8 @@ export function executeBudget(params: {
     spendAmount: welfareSpend,
     decayRate,
     diminishingExponent,
+    gdpScaling,
+    totalEconomyFiat,
   });
 
   if (infraSpend > 0) {

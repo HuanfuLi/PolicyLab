@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 10-07-PLAN.md
-last_updated: "2026-04-08T20:41:07.248Z"
+stopped_at: Completed 10-05b-PLAN.md
+last_updated: "2026-04-08T20:43:17.225Z"
 progress:
   total_phases: 10
   completed_phases: 6
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 10 (fix-simulation-realism-agent-economic-behavior-inflation-response-narrative-grounding) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 
 ## Performance Metrics
 
@@ -83,6 +83,7 @@ Plan: 7 of 9
 | Phase 10 P04 | 611 | 2 tasks | 7 files |
 | Phase 10 P05 | 6 | 3 tasks | 4 files |
 | Phase 10 P07 | 387 | 2 tasks | 5 files |
+| Phase 10 P05b | 423 | 3 tasks | 4 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -187,6 +188,8 @@ Recent decisions affecting current work:
 - [Phase 10]: Reserve ratio adjustment capped at +0.05 per iteration to prevent runaway tightening
 - [Phase 10]: StatTrajectoryEntry uses final agent stats since per-iteration stats not persisted; actions from resolvedActions table
 - [Phase 10]: assertAgentContext logs warnings instead of throwing to avoid crashing simulations
+- [Phase 10]: Income tax collected before budget execution so revenue funds spending
+- [Phase 10]: GDP scaling target ratio 10% per category; max gain 75 quality points/iteration
 
 ### Roadmap Evolution
 
@@ -209,6 +212,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-08T20:41:07.243Z
-Stopped at: Completed 10-07-PLAN.md
+Last session: 2026-04-08T20:43:17.221Z
+Stopped at: Completed 10-05b-PLAN.md
 Resume file: None

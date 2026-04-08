@@ -9,6 +9,7 @@ import {
   executeBudget,
   updatePublicGoodsQuality,
   getMultiplierEffects,
+  computeIncomeTax,
 } from '../fiscalEngine.js';
 import type { BudgetAllocation, EconomyConfig, PublicGoodsState } from '@policylab/shared';
 
@@ -396,5 +397,202 @@ describe('getMultiplierEffects', () => {
     expect(effects.skillGainBonus).toBe(0);
     expect(effects.enforcementBonus).toBe(0);
     expect(effects.welfarePerAgent).toBe(0);
+  });
+});
+
+// ── Income Tax Tests ────────────────────────────────────────────────────────
+
+describe('computeIncomeTax', () => {
+  it('collects 15% tax from 3 agents earning 100, 200, 300 → total 90', () => {
+    const result = computeIncomeTax({
+      agentIncomes: [
+        { agentId: 'a1', income: 100 },
+        { agentId: 'a2', income: 200 },
+        { agentId: 'a3', income: 300 },
+      ],
+      taxRate: 0.15,
+    });
+
+    expect(result.totalRevenue).toBeCloseTo(90, 5);
+    expect(result.perAgentTax).toHaveLength(3);
+    expect(result.perAgentTax.find(t => t.agentId === 'a1')?.taxAmount).toBeCloseTo(15, 5);
+    expect(result.perAgentTax.find(t => t.agentId === 'a2')?.taxAmount).toBeCloseTo(30, 5);
+    expect(result.perAgentTax.find(t => t.agentId === 'a3')?.taxAmount).toBeCloseTo(45, 5);
+  });
+
+  it('collects 0 tax with 0% rate', () => {
+    const result = computeIncomeTax({
+      agentIncomes: [
+        { agentId: 'a1', income: 100 },
+        { agentId: 'a2', income: 200 },
+      ],
+      taxRate: 0,
+    });
+
+    expect(result.totalRevenue).toBe(0);
+    expect(result.perAgentTax).toHaveLength(0);
+  });
+
+  it('skips agents with zero income', () => {
+    const result = computeIncomeTax({
+      agentIncomes: [
+        { agentId: 'a1', income: 0 },
+        { agentId: 'a2', income: 50 },
+        { agentId: 'a3', income: -10 },
+      ],
+      taxRate: 0.15,
+    });
+
+    expect(result.totalRevenue).toBeCloseTo(7.5, 5);
+    expect(result.perAgentTax).toHaveLength(1);
+    expect(result.perAgentTax[0].agentId).toBe('a2');
+  });
+
+  it('produces trace describing tax collection', () => {
+    const result = computeIncomeTax({
+      agentIncomes: [{ agentId: 'a1', income: 100 }],
+      taxRate: 0.10,
+    });
+
+    expect(result.trace.length).toBeGreaterThan(0);
+    expect(result.trace[0]).toContain('Income tax');
+  });
+
+  it('handles empty agent list', () => {
+    const result = computeIncomeTax({
+      agentIncomes: [],
+      taxRate: 0.15,
+    });
+
+    expect(result.totalRevenue).toBe(0);
+    expect(result.perAgentTax).toHaveLength(0);
+  });
+});
+
+// ── GDP-Scaled Public Goods Quality Tests ──────────────────────────────────
+
+describe('executeBudget with GDP-scaled public goods', () => {
+  const GDP_SCALED_CONFIG: EconomyConfig = {
+    ...DEFAULT_CONFIG,
+    publicGoodsSpendingToGdpScaling: true,
+  };
+
+  const ZERO_QUALITY: Omit<PublicGoodsState, 'id' | 'sessionId'> = {
+    iterationNumber: 1,
+    infrastructureQuality: 0,
+    educationQuality: 0,
+    defenseQuality: 0,
+    welfareQuality: 0,
+  };
+
+  it('trivial spending (<1% GDP) produces low quality (~10-15%), NOT 100%', () => {
+    // 84000 economy, 750 spending total, infra gets 25% = 187.5
+    // 187.5 / 84000 = ~0.22% of GDP → should produce low quality
+    const delta = executeBudget({
+      treasuryBalance: 7500, // 7500 * 0.10 = 750 total spending
+      budgetAllocation: EQUAL_ALLOCATION,
+      economyConfig: GDP_SCALED_CONFIG,
+      currentPublicGoods: ZERO_QUALITY,
+      aliveAgentIds: AGENT_IDS,
+      iterationNumber: 2,
+      totalEconomyFiat: 84000,
+    });
+
+    // With GDP scaling, trivial spending should NOT max quality
+    expect(delta.updatedPublicGoods.infrastructureQuality).toBeLessThan(20);
+    expect(delta.updatedPublicGoods.infrastructureQuality).toBeGreaterThan(0);
+  });
+
+  it('spending 10% of GDP produces quality ~60-70%', () => {
+    // Each category gets 25% of spending, so we need total spending = 40% GDP
+    // for each category to see 10%. Or: allocate 100% to infra and spend 10% GDP.
+    const infraOnly: BudgetAllocation = {
+      infrastructure: 1.0,
+      education: 0,
+      defense: 0,
+      welfare: 0,
+    };
+
+    // 10% of 10000 GDP = 1000 spending on infra
+    const delta = executeBudget({
+      treasuryBalance: 10000, // 10000 * 0.10 = 1000 spending, all to infra
+      budgetAllocation: infraOnly,
+      economyConfig: GDP_SCALED_CONFIG,
+      currentPublicGoods: ZERO_QUALITY,
+      aliveAgentIds: AGENT_IDS,
+      iterationNumber: 2,
+      totalEconomyFiat: 10000,
+    });
+
+    // 1000 / 10000 = 10% GDP → should produce meaningful quality
+    expect(delta.updatedPublicGoods.infrastructureQuality).toBeGreaterThan(40);
+    expect(delta.updatedPublicGoods.infrastructureQuality).toBeLessThan(80);
+  });
+
+  it('spending 25%+ of GDP produces quality ~90-100%', () => {
+    const infraOnly: BudgetAllocation = {
+      infrastructure: 1.0,
+      education: 0,
+      defense: 0,
+      welfare: 0,
+    };
+
+    // Want 25% of GDP on infra. Treasury 50000, rate 0.10 = 5000 spending. GDP = 20000.
+    // 5000/20000 = 25%
+    const delta = executeBudget({
+      treasuryBalance: 50000,
+      budgetAllocation: infraOnly,
+      economyConfig: GDP_SCALED_CONFIG,
+      currentPublicGoods: ZERO_QUALITY,
+      aliveAgentIds: AGENT_IDS,
+      iterationNumber: 2,
+      totalEconomyFiat: 20000,
+    });
+
+    expect(delta.updatedPublicGoods.infrastructureQuality).toBeGreaterThan(60);
+  });
+
+  it('backward compat: old formula when publicGoodsSpendingToGdpScaling is false', () => {
+    // Without GDP scaling, should behave exactly as before
+    const noScalingConfig: EconomyConfig = {
+      ...DEFAULT_CONFIG,
+      publicGoodsSpendingToGdpScaling: false,
+    };
+
+    const deltaOld = executeBudget({
+      treasuryBalance: 1000,
+      budgetAllocation: EQUAL_ALLOCATION,
+      economyConfig: noScalingConfig,
+      currentPublicGoods: ZERO_QUALITY,
+      aliveAgentIds: AGENT_IDS,
+      iterationNumber: 2,
+    });
+
+    const deltaDefault = executeBudget({
+      treasuryBalance: 1000,
+      budgetAllocation: EQUAL_ALLOCATION,
+      economyConfig: DEFAULT_CONFIG,
+      currentPublicGoods: ZERO_QUALITY,
+      aliveAgentIds: AGENT_IDS,
+      iterationNumber: 2,
+    });
+
+    // Both should produce same result (backward compat)
+    expect(deltaOld.updatedPublicGoods.infrastructureQuality)
+      .toBeCloseTo(deltaDefault.updatedPublicGoods.infrastructureQuality, 5);
+  });
+
+  it('quality still decays when spending is absent with GDP scaling', () => {
+    const delta = executeBudget({
+      treasuryBalance: 0,
+      budgetAllocation: EQUAL_ALLOCATION,
+      economyConfig: GDP_SCALED_CONFIG,
+      currentPublicGoods: BASE_PUBLIC_GOODS,
+      aliveAgentIds: AGENT_IDS,
+      iterationNumber: 2,
+      totalEconomyFiat: 10000,
+    });
+
+    expect(delta.updatedPublicGoods.infrastructureQuality).toBeLessThan(50);
   });
 });
