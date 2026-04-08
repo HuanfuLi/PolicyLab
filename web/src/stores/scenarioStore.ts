@@ -10,7 +10,7 @@ interface ScenarioState {
   runningScenarios: boolean;
   scenarioSessionIds: Record<string, string>; // tab.id -> forked session ID
 
-  initFromSession: (config: Partial<EconomyConfig>, budget: BudgetAllocation) => void;
+  initFromSession: (config: Partial<EconomyConfig>, budget: BudgetAllocation, savedTabs?: ScenarioTab[]) => void;
   syncBaseline: (config: Partial<EconomyConfig>, budget: BudgetAllocation) => void;
   addScenario: (name: string) => void;
   removeScenario: (tabId: string) => void;
@@ -72,7 +72,7 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
   runningScenarios: false,
   scenarioSessionIds: {},
 
-  initFromSession: (config: Partial<EconomyConfig>, budget: BudgetAllocation) => {
+  initFromSession: (config: Partial<EconomyConfig>, budget: BudgetAllocation, savedTabs?: ScenarioTab[]) => {
     const { tabs } = get();
     // Only initialize if tabs are empty
     if (tabs.length > 0) return;
@@ -80,6 +80,18 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
     // Merge with defaults so ALL params are in the baseline (not just bootstrap-provided ones).
     // This ensures computeDeltas can detect changes to any param, not just the ~13 from bootstrap.
     const fullConfig: Partial<EconomyConfig> = { ...DEFAULT_ECONOMY_CONFIG, ...config };
+
+    // Restore saved tabs if available (survives page refresh)
+    if (savedTabs && savedTabs.length > 0) {
+      const baseline = savedTabs.find(t => t.isBaseline) ?? savedTabs[0];
+      set({
+        tabs: savedTabs,
+        activeTabId: baseline.id,
+        baselineConfig: { ...fullConfig },
+        baselineBudget: { ...budget },
+      });
+      return;
+    }
 
     const baselineId = crypto.randomUUID();
     const baselineTab: ScenarioTab = {
