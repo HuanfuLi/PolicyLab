@@ -183,10 +183,9 @@ const Simulation = () => {
   const msScenarios = useMemo(() => Object.values(multiStore.scenarios), [multiStore.scenarios]);
   const scenarioMetas: ScenarioMeta[] = useMemo(
     () => multiStore.scenarioOrder.map((sid, i) => ({
-      id: sid,
+      index: i,
       label: multiStore.scenarios[sid]?.label ?? sid.slice(0, 8),
-      color: SCENARIO_COLORS[i % SCENARIO_COLORS.length],
-      dashPattern: ['', '8 4', '4 4', '2 4'][i % 4],
+      sessionId: sid,
     })),
     [multiStore.scenarioOrder, multiStore.scenarios],
   );
@@ -539,13 +538,16 @@ const Simulation = () => {
               /* Multi-scenario overlaid charts */
               <>
                 {(() => {
-                  const allMacro = Object.fromEntries(
-                    multiStore.scenarioOrder.map(sid => [sid, multiStore.scenarios[sid]?.macroHistory ?? []])
-                  );
+                  // Transform store data into mergeScenarioData's expected format
+                  const macroScenarios = multiStore.scenarioOrder.map(sid => ({
+                    label: multiStore.scenarios[sid]?.label ?? sid.slice(0, 8),
+                    data: multiStore.scenarios[sid]?.macroHistory ?? [],
+                  }));
+                  if (macroScenarios.every(s => s.data.length === 0)) return null;
                   const fields = ['cpiIndex', 'm1', 'm2', 'totalFiatSupply', 'giniCoefficient'] as const;
                   const labels: Record<string, string> = { cpiIndex: 'CPI', m1: 'Money Supply (M1)', m2: 'Money Supply (M2)', totalFiatSupply: 'Fiat Supply', giniCoefficient: 'Gini Coefficient' };
                   return fields.map(field => {
-                    const merged = mergeScenarioData(allMacro, scenarioMetas, field);
+                    const merged = mergeScenarioData(macroScenarios, field);
                     if (merged.length === 0) return null;
                     return (
                       <ScenarioChart
@@ -560,13 +562,15 @@ const Simulation = () => {
                   }).filter(Boolean);
                 })()}
                 {(() => {
-                  const allStats = Object.fromEntries(
-                    multiStore.scenarioOrder.map(sid => [sid, multiStore.scenarios[sid]?.statsHistory ?? []])
-                  );
+                  const statsScenarios = multiStore.scenarioOrder.map(sid => ({
+                    label: multiStore.scenarios[sid]?.label ?? sid.slice(0, 8),
+                    data: multiStore.scenarios[sid]?.statsHistory ?? [],
+                  }));
+                  if (statsScenarios.every(s => s.data.length === 0)) return null;
                   const statFields = ['avgWealth', 'avgHealth', 'avgHappiness'] as const;
                   const statLabels: Record<string, string> = { avgWealth: 'Avg Wealth', avgHealth: 'Avg Health', avgHappiness: 'Avg Happiness' };
                   return statFields.map(field => {
-                    const merged = mergeStatsData(allStats, scenarioMetas, field);
+                    const merged = mergeStatsData(statsScenarios, field);
                     if (merged.length === 0) return null;
                     return (
                       <ScenarioChart
