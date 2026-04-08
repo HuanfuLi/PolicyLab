@@ -219,9 +219,13 @@ router.post('/:id/bootstrap', async (req, res) => {
             { maxTokens: 2048 },
           ),
         );
+        console.log('[bootstrap] Scenario interpretation raw:', scenarioRaw.slice(0, 500));
         const overrides = parseJSON<{ parameterOverrides: Record<string, number | boolean> }>(scenarioRaw);
-        if (overrides.parameterOverrides) {
+        if (overrides.parameterOverrides && Object.keys(overrides.parameterOverrides).length > 0) {
+          console.log('[bootstrap] Applying scenario overrides:', JSON.stringify(overrides.parameterOverrides));
           finalConfig = { ...finalConfig, ...overrides.parameterOverrides };
+        } else {
+          console.warn('[bootstrap] Scenario interpretation returned no overrides');
         }
       } catch (err) {
         console.warn('[bootstrap] Scenario interpretation failed, using base config:', err);

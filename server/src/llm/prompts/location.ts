@@ -113,15 +113,19 @@ export function buildScenarioInterpretationMessages(
 Current economic configuration:
 ${configSummary}
 
-Available parameters you can override (all numeric values are per-iteration rates unless noted):
-- reserveRequirement: 0.0-1.0 (bank reserve ratio)
-- baseLoanInterestRate: per-iteration (e.g., 0.005 = ~6% annual)
-- depositInterestRate: per-iteration
+Available parameters you can override. IMPORTANT: interest rates are PER-ITERATION (1 iteration ≈ 1 month). To convert annual rates to per-iteration, divide by 12.
+
+- reserveRequirement: 0.0-1.0 (bank reserve ratio, e.g., 0.10 = 10%)
+- baseLoanInterestRate: per-iteration rate (current value shown above; multiply by 12 for annual equivalent. Example: 0.00435/iter ≈ 5.2%/year. To set 20% annual → 0.0167/iter)
+- depositInterestRate: per-iteration rate (same conversion as loan rate)
+- baseTaxRate: 0.0-1.0 (per-iteration tax rate, e.g., 0.02 = 2% per iteration)
 - budgetSpendingRate: 0.0-1.0 (fraction of treasury spent per iteration)
-- infrastructureMultiplier: productivity bonus per quality point
-- educationMultiplier: skill gain bonus per quality point
-- defenseMultiplier: enforcement bonus per quality point
-- welfareMultiplier: UBI supplement per quality point
+- infrastructureMultiplier: productivity bonus per quality point (default ~0.002)
+- educationMultiplier: skill gain bonus per quality point (default ~0.003)
+- defenseMultiplier: enforcement bonus per quality point (default ~0.001)
+- welfareMultiplier: UBI supplement per quality point (default ~0.005)
+
+When the user says "raise X by Y%", apply the percentage change to the CURRENT value shown above. For example, if current baseLoanInterestRate is 0.00435 and user says "raise by 20%", the new value is 0.00435 * 1.20 = 0.00522. But if user says "set interest rate TO 20%", convert: 20% annual / 12 = 0.0167 per iteration.
 
 You MUST respond with ONLY valid JSON (no markdown, no preamble, no code fences):
 {
