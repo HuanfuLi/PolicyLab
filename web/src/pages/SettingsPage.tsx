@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Server, CheckCircle2, AlertTriangle, Key, XCircle, ToggleLeft, ToggleRight, FlaskConical } from 'lucide-react';
+import { Server, CheckCircle2, AlertTriangle, Key, XCircle, ToggleLeft, ToggleRight, FlaskConical, Plus, Trash2 } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
-import type { AppSettings } from '@policylab/shared';
+import type { AppSettings, ProviderConfig, ProviderConfigResponse, LLMProviderType } from '@policylab/shared';
 import PhysicsLaboratory from './PhysicsLaboratory';
 
 type Provider = AppSettings['provider'];
@@ -12,6 +12,7 @@ const PROVIDERS: { id: Provider; name: string }[] = [
   { id: 'gemini', name: 'Gemini (Google AI Studio)' },
   { id: 'vertex', name: 'Vertex AI (Google Cloud)' },
   { id: 'local', name: 'Local (LM Studio/Ollama)' },
+  { id: 'custom', name: 'Custom (OpenAI-compatible)' },
 ];
 
 const apiKeyPlaceholder: Record<string, string> = {
@@ -50,6 +51,7 @@ const DEFAULT_CENTRAL: Record<Provider, string> = {
   gemini: 'gemini-3-flash-preview',
   vertex: 'gemini-1.5-flash-001',
   local: '',
+  custom: '',
 };
 
 const DEFAULT_CITIZEN: Record<Provider, string> = {
@@ -58,6 +60,7 @@ const DEFAULT_CITIZEN: Record<Provider, string> = {
   gemini: 'gemini-2.5-flash-lite',
   vertex: 'gemini-1.5-flash-001',
   local: '',
+  custom: '',
 };
 
 function getModelOptions(p: Provider) {
@@ -74,6 +77,17 @@ type SavedConfig = {
   vertexProjectId?: string;
   vertexLocation?: string;
 };
+
+interface ExtraProviderSlot {
+  provider: LLMProviderType;
+  apiKey: string;
+  hasApiKey: boolean;
+  baseUrl: string;
+  model: string;
+  rateLimit: string; // stored as string for input; empty = unlimited
+  vertexProjectId: string;
+  vertexLocation: string;
+}
 
 const SettingsPage = () => {
   const { settings, testStatus, testMessage, loadSettings, updateSettings, testConnection } = useSettingsStore();
@@ -102,6 +116,9 @@ const SettingsPage = () => {
   const [citizenBaseUrl, setCitizenBaseUrl] = useState('http://localhost:1234/v1');
   const [citizenVertexProjectId, setCitizenVertexProjectId] = useState('');
   const [citizenVertexLocation, setCitizenVertexLocation] = useState('');
+
+  // Extra providers for parallel simulation
+  const [extraProviders, setExtraProviders] = useState<ExtraProviderSlot[]>([]);
 
   // Stores per-provider form values so switching back restores what the user entered
   const savedConfigs = useRef<Partial<Record<Provider, SavedConfig>>>({});
@@ -137,6 +154,21 @@ const SettingsPage = () => {
       setCitizenVertexLocation(settings.citizenVertexLocation ?? '');
     } else {
       setSeparateCitizen(false);
+    }
+    // Restore extra providers
+    if (settings.providers && settings.providers.length > 0) {
+      setExtraProviders(settings.providers.map((p: ProviderConfigResponse) => ({
+        provider: p.provider,
+        apiKey: '',
+        hasApiKey: p.hasApiKey,
+        baseUrl: p.baseUrl ?? 'http://localhost:1234/v1',
+        model: p.model,
+        rateLimit: p.rateLimit != null ? String(p.rateLimit) : '',
+        vertexProjectId: p.vertexProjectId ?? '',
+        vertexLocation: p.vertexLocation ?? '',
+      })));
+    } else {
+      setExtraProviders([]);
     }
   }, [settings]);
 
@@ -187,9 +219,21 @@ const SettingsPage = () => {
         (updates as Record<string, unknown>).citizenVertexLocation = null;
       }
 
+      // Extra providers for load balancer
+      updates.providers = extraProviders.map(ep => ({
+        provider: ep.provider,
+        ...(ep.apiKey.trim() ? { apiKey: ep.apiKey.trim() } : {}),
+        baseUrl: ep.baseUrl,
+        model: ep.model,
+        rateLimit: ep.rateLimit.trim() ? Number(ep.rateLimit) : null,
+        vertexProjectId: ep.vertexProjectId || undefined,
+        vertexLocation: ep.vertexLocation || undefined,
+      }));
+
       await updateSettings(updates as Parameters<typeof updateSettings>[0]);
       setApiKey('');
       setCitizenApiKey('');
+      setExtraProviders(prev => prev.map(ep => ({ ...ep, apiKey: '', hasApiKey: ep.hasApiKey || !!ep.apiKey.trim() })));
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save settings');
     } finally {
@@ -266,6 +310,42 @@ const SettingsPage = () => {
                 />
               </div>
             );
+            if (provider === 'custom') {
+              const hasSavedKey = Boolean(settings?.hasApiKey && !apiKey);
+              return (
+                <>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
+                      Endpoint URL <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>(OpenAI-compatible API base)</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="input-glass"
+                      value={baseUrl}
+                      onChange={e => setBaseUrl(e.target.value)}
+                      placeholder="https://api.example.com/v1"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
+                      API Key{' '}
+                      {hasSavedKey && <span style={{ color: 'var(--success)', fontSize: '0.8rem' }}>(saved)</span>}
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <Key size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+                      <input
+                        type="password"
+                        placeholder={hasSavedKey ? '............. (leave blank to keep)' : 'API key for this endpoint'}
+                        className="input-glass"
+                        style={{ paddingLeft: '3rem' }}
+                        value={apiKey}
+                        onChange={e => setApiKey(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </>
+              );
+            }
             if (provider === 'vertex') return (
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <div style={{ flex: 1 }}>
@@ -315,22 +395,6 @@ const SettingsPage = () => {
               </div>
             );
           })()}
-
-          {/* Local endpoint field */}
-          {provider === 'local' && (
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
-                Endpoint URL <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>(e.g. http://127.0.0.1:1234/v1)</span>
-              </label>
-              <input
-                type="text"
-                className="input-glass"
-                value={baseUrl}
-                onChange={e => setBaseUrl(e.target.value)}
-                placeholder="http://127.0.0.1:1234/v1"
-              />
-            </div>
-          )}
 
           {/* Model selectors */}
           <div style={{ display: 'grid', gridTemplateColumns: separateCitizen ? '1fr' : '1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
@@ -449,7 +513,7 @@ const SettingsPage = () => {
               })()}
 
               {/* Citizen base URL */}
-              {citizenProvider === 'local' && (
+              {(citizenProvider === 'local' || citizenProvider === 'custom') && (
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
                     Citizen Endpoint URL
@@ -459,7 +523,7 @@ const SettingsPage = () => {
                     className="input-glass"
                     value={citizenBaseUrl}
                     onChange={e => setCitizenBaseUrl(e.target.value)}
-                    placeholder="http://127.0.0.1:1234/v1"
+                    placeholder={citizenProvider === 'custom' ? 'https://api.example.com/v1' : 'http://127.0.0.1:1234/v1'}
                   />
                 </div>
               )}
@@ -480,6 +544,165 @@ const SettingsPage = () => {
               </div>
             </div>
           )}
+        </div>
+
+        <hr style={{ border: 'none', borderTop: '1px solid var(--glass-border)', margin: '0 0 2rem' }} />
+
+        {/* Additional Providers for Parallel Simulation */}
+        <div style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.25rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
+                Additional Providers for Parallel Simulation
+              </label>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                Add extra LLM endpoints to distribute citizen agent calls via round-robin.
+              </span>
+            </div>
+            <button
+              className="btn-secondary"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}
+              onClick={() => setExtraProviders(prev => [...prev, {
+                provider: 'local' as LLMProviderType,
+                apiKey: '',
+                hasApiKey: false,
+                baseUrl: 'http://localhost:1234/v1',
+                model: '',
+                rateLimit: '',
+                vertexProjectId: '',
+                vertexLocation: '',
+              }])}
+            >
+              <Plus size={16} /> Add Provider
+            </button>
+          </div>
+
+          {extraProviders.length === 0 && (
+            <div style={{
+              color: 'var(--text-muted)', fontSize: '0.9rem', padding: '1.25rem',
+              background: 'var(--panel-alpha-05)', border: '1px solid var(--glass-border)',
+              borderRadius: '8px', textAlign: 'center',
+            }}>
+              No additional providers. The primary citizen provider will be used alone.
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            {extraProviders.map((ep, idx) => {
+              const epModelOptions = getModelOptions(ep.provider);
+              const epNeedsApiKey = ep.provider !== 'local' && ep.provider !== 'vertex';
+              const updateSlot = (patch: Partial<ExtraProviderSlot>) =>
+                setExtraProviders(prev => prev.map((s, i) => i === idx ? { ...s, ...patch } : s));
+              const removeSlot = () =>
+                setExtraProviders(prev => prev.filter((_, i) => i !== idx));
+
+              return (
+                <div key={idx} style={{
+                  border: '1px solid var(--glass-border)', borderRadius: '8px', padding: '1.25rem',
+                  background: 'var(--panel-alpha-02)',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <span style={{ fontSize: '0.9rem', color: 'var(--text-dim)' }}>Provider {idx + 1}</span>
+                    <button
+                      className="btn-secondary"
+                      onClick={removeSlot}
+                      style={{ padding: '0.4rem', color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.3)' }}
+                      title="Remove provider"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                    {/* Provider type */}
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>Provider</label>
+                      <select className="input-glass" value={ep.provider} onChange={e => {
+                        const p = e.target.value as LLMProviderType;
+                        updateSlot({ provider: p, model: DEFAULT_CITIZEN[p] || '', apiKey: '', hasApiKey: false });
+                      }}>
+                        {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Model */}
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>Model</label>
+                      {epModelOptions ? (
+                        <select className="input-glass" value={ep.model} onChange={e => updateSlot({ model: e.target.value })}>
+                          {epModelOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                        </select>
+                      ) : (
+                        <input type="text" className="input-glass" placeholder="e.g. liquid/lfm2.5-1.2b"
+                          value={ep.model} onChange={e => updateSlot({ model: e.target.value })} />
+                      )}
+                    </div>
+
+                    {/* API Key (if needed) */}
+                    {epNeedsApiKey && (
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
+                          API Key{' '}
+                          {ep.hasApiKey && <span style={{ color: 'var(--success)', fontSize: '0.8rem' }}>(saved)</span>}
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <Key size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+                          <input type="password" className="input-glass"
+                            style={{ paddingLeft: '3rem' }}
+                            placeholder={ep.hasApiKey ? '............. (leave blank to keep)' : apiKeyPlaceholder[ep.provider] ?? ''}
+                            value={ep.apiKey} onChange={e => updateSlot({ apiKey: e.target.value })} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Endpoint URL (local or custom) */}
+                    {(ep.provider === 'local' || ep.provider === 'custom') && (
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
+                          Endpoint URL <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>
+                            {ep.provider === 'custom' ? '(OpenAI-compatible API base)' : '(e.g. http://127.0.0.1:1234/v1)'}
+                          </span>
+                        </label>
+                        <input type="text" className="input-glass" value={ep.baseUrl}
+                          onChange={e => updateSlot({ baseUrl: e.target.value })}
+                          placeholder={ep.provider === 'custom' ? 'https://api.example.com/v1' : 'http://127.0.0.1:1234/v1'} />
+                      </div>
+                    )}
+
+                    {/* Vertex fields */}
+                    {ep.provider === 'vertex' && (
+                      <>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
+                            Google Cloud Project ID <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>(optional)</span>
+                          </label>
+                          <input type="text" className="input-glass" value={ep.vertexProjectId}
+                            onChange={e => updateSlot({ vertexProjectId: e.target.value })} placeholder="e.g. my-agent-project-123" />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
+                            Location <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>(optional)</span>
+                          </label>
+                          <input type="text" className="input-glass" value={ep.vertexLocation}
+                            onChange={e => updateSlot({ vertexLocation: e.target.value })} placeholder="e.g. us-central1" />
+                        </div>
+                      </>
+                    )}
+
+                    {/* Rate Limit */}
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
+                        Rate Limit <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>(calls/min, empty = unlimited)</span>
+                      </label>
+                      <input type="number" className="input-glass" style={{ maxWidth: '150px' }}
+                        value={ep.rateLimit} onChange={e => updateSlot({ rateLimit: e.target.value })}
+                        min={1} placeholder="No limit" />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <hr style={{ border: 'none', borderTop: '1px solid var(--glass-border)', margin: '0 0 2rem' }} />

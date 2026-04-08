@@ -208,6 +208,14 @@ export async function generateDesign(
         personalityTraits?: string[];
         initialStats: { wealth: number; health: number; happiness: number; cortisol?: number; dopamine?: number };
       }>;
+      enterprises?: Array<{
+        id: string;
+        name: string;
+        ownerAgentName: string;
+        sector: string;
+        industry: string;
+        initialEmployeeNames?: string[];
+      }>;
     }>(raw);
 
     if (!Array.isArray(parsed.agents) || parsed.agents.length === 0) {

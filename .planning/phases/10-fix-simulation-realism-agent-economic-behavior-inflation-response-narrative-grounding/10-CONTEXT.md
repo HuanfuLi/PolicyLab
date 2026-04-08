@@ -54,12 +54,19 @@ Fix the simulation engine so that running a policy scenario (e.g., China +30% mi
 - **D-28:** Role-based commodity mapping: Farms -> food, Factories -> tools + raw_materials, Artisan/merchant enterprises -> luxury_goods. Maps to existing 4-commodity AMM.
 - **D-29:** Service enterprises (schools, clinics) provide multiplier effects only — boost education/health quality via existing fiscal multiplier system. No commodity output. Revenue from government budget (tax-funded public services).
 
+### CPI & Fiscal Fixes (from simulation analysis 2026-04-08)
+- **D-30:** Initialize `cpiBasePrices` from AMM spot prices at iteration 0/1 instead of all zeros. The Laspeyres index divides by base prices — zero base prices produce undefined CPI, which defaults to 100 forever. This is the root cause of frozen CPI independent of enterprise activity.
+- **D-31:** Rebalance public goods quality scaling: (A) cap quality gain by spending-to-GDP ratio so that <1% GDP spending cannot produce 100% quality, AND (B) rebalance decay/gain parameters so 100% quality requires near-maximum treasury commitment. Current params allow instant saturation from iteration 2 onward, making fiscal trade-offs meaningless.
+- **D-32:** Add flat income/production tax. A configurable tax rate (stored in EconomyConfig) is applied to WORK income and enterprise revenue each iteration, flowing back to the treasury. Without taxation the treasury is a one-way drain that always depletes, making government insolvency inevitable.
+
 ### Claude's Discretion
 - Exact Taylor Rule parameters (neutral rate, inflation target, response coefficients) — researcher should investigate standard calibrations
 - How enterprise capital is split between multiple enterprises in same sector — planner decides allocation algorithm
 - Exact threshold for central bank liquidity injection trigger
 - How narrative validation assertions are implemented (regex, LLM judge, or keyword matching)
 - Enterprise naming during bootstrap (LLM-generated contextual names)
+- Exact tax rate default and whether it's flat or progressive (D-32)
+- Exact public goods scaling formula (D-31) — as long as 100% quality requires significant spending commitment
 
 </decisions>
 

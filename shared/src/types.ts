@@ -900,6 +900,8 @@ export interface LocationProfile {
     depositInterestRate?: DataPoint;
     interestRateSpread?: DataPoint;
     stockMarketCap?: DataPoint;
+    enterpriseDensity?: DataPoint; // IC.BUS.NDNS.ZS -- businesses per 1000 people
+    newBusinesses?: DataPoint;      // IC.BUS.NREG -- new registrations count
   };
   fiscal: {
     taxRevenuePctGdp?: DataPoint;
@@ -911,6 +913,25 @@ export interface LocationProfile {
   };
   governance?: DataPoint<string>;
   infrastructure?: DataPoint<string>;
+}
+
+// ── Enterprise Bootstrap Types (Phase 10) ────────────────────────────────────
+
+export type EnterpriseSector = 'agriculture' | 'industry' | 'services' | 'government';
+export type EnterpriseCommodity = 'food' | 'tools' | 'raw_materials' | 'luxury_goods' | 'none';
+
+export interface EnterpriseBlueprint {
+  id: string;
+  name: string;
+  ownerId: string;
+  sector: EnterpriseSector;
+  industry: string;
+  commodityOutput: EnterpriseCommodity;
+  initialCapital: number;
+  initialInventory: Record<string, number>;
+  employees: string[];
+  wage: number;
+  isServiceEnterprise: boolean;
 }
 
 export interface ScenarioTab {

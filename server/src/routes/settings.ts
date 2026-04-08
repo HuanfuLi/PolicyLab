@@ -40,6 +40,15 @@ router.get('/', (_req, res) => {
       vertexLocation: s.vertexLocation,
       citizenVertexProjectId: s.citizenVertexProjectId,
       citizenVertexLocation: s.citizenVertexLocation,
+      providers: (s.providers ?? []).map(p => ({
+        provider: p.provider,
+        hasApiKey: !!(p.apiKey && p.apiKey.length > 0),
+        baseUrl: p.baseUrl,
+        model: p.model,
+        rateLimit: p.rateLimit,
+        vertexProjectId: p.vertexProjectId,
+        vertexLocation: p.vertexLocation,
+      })),
     });
   } catch (err) {
     console.error('GET /settings error:', err);
@@ -72,6 +81,18 @@ router.put('/', (req, res) => {
       delete body.citizenApiKey;
     }
 
+    // Preserve existing API keys for provider slots when frontend sends empty keys
+    if (body.providers && Array.isArray(body.providers)) {
+      const existing = current.providers ?? [];
+      body.providers = body.providers.map((slot, i) => {
+        if ((!slot.apiKey || slot.apiKey.trim() === '') && existing[i]?.apiKey) {
+          const { apiKey: _drop, ...rest } = slot;
+          return { ...rest, apiKey: existing[i].apiKey };
+        }
+        return slot;
+      });
+    }
+
     const updated = writeSettings(body);
     invalidateProvider();
 
@@ -97,6 +118,15 @@ router.put('/', (req, res) => {
       vertexLocation: updated.vertexLocation,
       citizenVertexProjectId: updated.citizenVertexProjectId,
       citizenVertexLocation: updated.citizenVertexLocation,
+      providers: (updated.providers ?? []).map(p => ({
+        provider: p.provider,
+        hasApiKey: !!(p.apiKey && p.apiKey.length > 0),
+        baseUrl: p.baseUrl,
+        model: p.model,
+        rateLimit: p.rateLimit,
+        vertexProjectId: p.vertexProjectId,
+        vertexLocation: p.vertexLocation,
+      })),
     });
   } catch (err) {
     console.error('PUT /settings error:', err);
@@ -129,10 +159,12 @@ router.post('/test', async (req, res) => {
       ...(body.vertexLocation?.trim() ? { vertexLocation: body.vertexLocation.trim() } : {}),
     };
 
-    // Resolve API key for the provider being tested from per-provider storage
-    if (!body.apiKey?.trim() && testProvider !== 'local') {
+    // Resolve API key for the provider being tested from per-provider storage.
+    // 'custom' stores its key directly in apiKey, not in the apiKeys map.
+    const apiKeyProviders = ['claude', 'openai', 'gemini', 'vertex'] as const;
+    if (!body.apiKey?.trim() && (apiKeyProviders as readonly string[]).includes(testProvider)) {
       const savedKeys = saved.apiKeys ?? {};
-      testSettings.apiKey = savedKeys[testProvider] ?? '';
+      testSettings.apiKey = savedKeys[testProvider as typeof apiKeyProviders[number]] ?? '';
     }
 
     // Validate: cloud providers (except Vertex) require an API key

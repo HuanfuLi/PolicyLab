@@ -89,6 +89,8 @@ export async function fetchLocationData(
     WB_INDICATORS.depositInterestRate,
     WB_INDICATORS.interestRateSpread,
     WB_INDICATORS.stockMarketCap,
+    WB_INDICATORS.enterpriseDensity,
+    WB_INDICATORS.newBusinesses,
   ];
   const econResults = await fetchIndicatorBatch(countryCode, econCodes);
 
@@ -150,6 +152,8 @@ export async function fetchLocationData(
       depositInterestRate: toDataPoint(allResults, 'depositInterestRate'),
       interestRateSpread: toDataPoint(allResults, 'interestRateSpread'),
       stockMarketCap: toDataPoint(allResults, 'stockMarketCap'),
+      enterpriseDensity: toDataPoint(allResults, 'enterpriseDensity'),
+      newBusinesses: toDataPoint(allResults, 'newBusinesses'),
     },
     fiscal: {
       taxRevenuePctGdp: toDataPoint(allResults, 'taxRevenuePctGdp'),

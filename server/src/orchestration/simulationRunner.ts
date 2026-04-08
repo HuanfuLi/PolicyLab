@@ -20,7 +20,7 @@ import { agentIntents, resolvedActions, iterations as iterationsTable, ammSnapsh
 import { asc, eq, sql } from 'drizzle-orm';
 import { agentRepo } from '../db/repos/agentRepo.js';
 import { sessionRepo } from '../db/repos/sessionRepo.js';
-import { getProvider, getCitizenProvider } from '../llm/gateway.js';
+import { getProvider, getLoadBalancer } from '../llm/gateway.js';
 import { readSettings } from '../settings.js';
 import { runGovernanceCycle, getSessionPolicy } from './governanceManager.js';
 import type { SessionPolicy } from '@policylab/shared';
@@ -984,7 +984,7 @@ function applyEnterpriseAction(params: {
 export async function runSimulation(sessionId: string, totalIterations: number): Promise<void> {
   const settings = readSettings();
   const provider = getProvider();
-  const citizenProv = getCitizenProvider();
+  const citizenProv = getLoadBalancer();
   const summaries: Array<{ number: number; summary: string }> = [];
 
   try {

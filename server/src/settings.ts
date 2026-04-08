@@ -34,13 +34,15 @@ export function readSettings(): AppSettings {
     const merged = { ...DEFAULT_SETTINGS, ...stored };
 
     // Migration: if apiKeys doesn't exist but apiKey does, seed apiKeys from apiKey
+    type ApiKeyProvider = 'claude' | 'openai' | 'gemini' | 'vertex';
+    const hasApiKeyMap = (p: string): p is ApiKeyProvider => !['local', 'custom'].includes(p);
     if (!merged.apiKeys) merged.apiKeys = {};
-    if (merged.apiKey && merged.provider !== 'local' && !merged.apiKeys[merged.provider]) {
+    if (merged.apiKey && hasApiKeyMap(merged.provider) && !merged.apiKeys[merged.provider]) {
       merged.apiKeys[merged.provider] = merged.apiKey;
     }
 
     // Ensure apiKey reflects the active provider's key from apiKeys
-    if (merged.provider !== 'local') {
+    if (hasApiKeyMap(merged.provider)) {
       merged.apiKey = merged.apiKeys[merged.provider] ?? '';
     }
 
@@ -58,16 +60,19 @@ export function writeSettings(updates: Partial<AppSettings>): AppSettings {
 
   const next: AppSettings = { ...current, ...updates, apiKeys: mergedApiKeys };
 
-  // If a new apiKey was explicitly provided, store it for the target provider
+  // If a new apiKey was explicitly provided, store it for the target provider.
+  // 'custom' and 'local' providers store the key directly in apiKey (not the per-provider map).
+  type ApiKeyProvider = 'claude' | 'openai' | 'gemini' | 'vertex';
+  const hasApiKeyMap = (p: string): p is ApiKeyProvider => !['local', 'custom'].includes(p);
   if (updates.apiKey && updates.apiKey.trim()) {
-    const targetProvider = next.provider;
-    if (targetProvider !== 'local') {
-      next.apiKeys![targetProvider] = updates.apiKey;
+    if (hasApiKeyMap(next.provider)) {
+      next.apiKeys![next.provider] = updates.apiKey;
     }
   }
 
-  // Always resolve apiKey from apiKeys for the active provider
-  if (next.provider !== 'local') {
+  // Resolve apiKey from per-provider storage for known cloud providers.
+  // 'custom' keeps its own apiKey directly (not in the map).
+  if (hasApiKeyMap(next.provider)) {
     next.apiKey = next.apiKeys![next.provider] ?? '';
   }
 

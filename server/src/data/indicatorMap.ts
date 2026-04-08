@@ -42,6 +42,10 @@ export const WB_INDICATORS = {
   educationExpPctGdp: 'SE.XPD.TOTL.GD.ZS',
   govDebtPctGdp: 'GC.DOD.TOTL.GD.ZS',  // Central gov debt % GDP (bond yield proxy)
 
+  // ── Enterprise Density (Phase 10 — D-01) ──────────────────────────────────
+  enterpriseDensity: 'IC.BUS.NDNS.ZS',   // Business density (per 1000 people)
+  newBusinesses: 'IC.BUS.NREG',           // New businesses registered (count)
+
   // ── Infrastructure ────────────────────────────────────────────────────────
   electricityAccess: 'EG.ELC.ACCS.ZS',
   internetUsers: 'IT.NET.USER.ZS',

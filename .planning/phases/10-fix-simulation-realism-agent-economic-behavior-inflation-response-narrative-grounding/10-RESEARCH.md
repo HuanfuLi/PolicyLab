@@ -94,6 +94,9 @@ The critical insight from code review: enterprises currently only exist when age
 | D-27 | Fail bootstrap on LLM enrichment failure | Modify bootstrap.ts error handling (line 237-259) |
 | D-28 | Role-based commodity mapping | Extend industryToItemType (line 290) for factories -> tools+raw_materials |
 | D-29 | Service enterprises via fiscal multipliers | New enterprise type that integrates with fiscalEngine.ts |
+| D-30 | CPI base price auto-initialization from AMM spot prices | cpiBasePrices all-zero check in simulationRunner before computeInflation; snapshot AMM prices as base |
+| D-31 | Public goods quality spending-to-GDP scaling + decay rebalance | Scale gain by categorySpending/totalFiat ratio; trivial spending cannot max quality |
+| D-32 | Flat income/production tax on WORK income and enterprise revenue | computeIncomeTax in fiscalEngine.ts; wired after wage settlement, before budget execution |
 </phase_requirements>
 
 ## Standard Stack
@@ -450,6 +453,9 @@ Standard Taylor Rule parameters from macroeconomic literature:
 | D-28 | Role-based commodity mapping | unit | `npx vitest run server/src/mechanics/__tests__/enterpriseEngine.test.ts -x` | Wave 0 |
 | D-17/18/19 | Telemetry digest + data-driven narrative | integration | Manual review of generated narratives | Manual |
 | D-21/22 | Agent stat trajectory + data injection audit | integration | Manual review of reflection outputs | Manual |
+| D-30 | CPI base price auto-init from AMM spot prices | unit | `npx vitest run server/src/mechanics/__tests__/inflationEngine.test.ts -x` | Extends existing |
+| D-31 | Public goods spending-to-GDP scaling | unit | `npx vitest run server/src/mechanics/__tests__/fiscalEngine.test.ts -x` | Extends existing |
+| D-32 | Income/production tax collection | unit | `npx vitest run server/src/mechanics/__tests__/fiscalEngine.test.ts -x` | Extends existing |
 
 ### Sampling Rate
 - **Per task commit:** `npm run test -w server -- --run`

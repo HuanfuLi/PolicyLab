@@ -180,11 +180,27 @@ You MUST respond with ONLY valid JSON (no markdown, no preamble, no code fences)
         "dopamine": 50
       }
     }
+  ],
+  "enterprises": [
+    {
+      "id": "ent_1",
+      "name": "string - contextual enterprise name (e.g. 'Riverside Farm', 'Iron Works Factory')",
+      "ownerAgentName": "string - exact name of an agent from the agents array above who owns this enterprise",
+      "sector": "agriculture|industry|services|government",
+      "industry": "string - specific industry (farming, manufacturing, trading, education, healthcare, etc.)",
+      "initialEmployeeNames": ["string - exact names of agents from the agents array who work here"]
+    }
   ]
 }
 
 Rules:
 - Generate EXACTLY ${agentCount} agents
+- Generate 1-3 enterprises per distinct economic sector present in the agent roster
+- Each enterprise must have an owner who is one of the agents (preferably elite/specialist roles like merchants, leaders, engineers)
+- Service/government enterprises (schools, clinics) should have sector "government"
+- Agriculture enterprises produce food, industry produces tools, services produce luxury goods
+- Assign employees from agents whose roles match the enterprise sector
+- Every working agent should be either an enterprise owner or employee
 - All names must be unique and culturally consistent with the society
 - Roles should reflect the society's governance and economic models
 - Stats: 'health' and 'happiness' must be integers between 0 and 100. 'wealth' is starting fiat currency (integer, typically 10-100 for initial balance). 'cortisol' is baseline stress (0-100, default 20; higher for oppressed/dangerous roles like prisoners or soldiers). 'dopamine' is baseline satisfaction (0-100, default 50; higher for privileged/creative roles, lower for exploited roles).

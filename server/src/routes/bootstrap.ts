@@ -259,7 +259,15 @@ router.post('/:id/bootstrap', async (req, res) => {
         }
       }
     } catch (err) {
-      console.warn('[bootstrap] Agent roster LLM enrichment failed, using defaults:', err);
+      console.error('[bootstrap] Agent roster LLM enrichment failed — aborting bootstrap:', err);
+      sendEvent({
+        type: 'error',
+        step: 'agent_enrichment',
+        message: 'Agent background generation failed. Please retry.',
+      } as any);
+      clearInterval(heartbeatInterval);
+      res.end();
+      return;
     }
 
     // 5e: Generate law document via LLM
