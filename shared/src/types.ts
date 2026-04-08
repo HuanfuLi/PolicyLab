@@ -570,6 +570,10 @@ export interface EconomyConfig {
   publicGoodsSpendingToGdpScaling?: boolean;
 }
 
+// ── Enterprise Types (Phase 10) ─────────────────────────────────────────
+export type EnterpriseSector = 'agriculture' | 'industry' | 'services' | 'government';
+export type EnterpriseCommodity = 'food' | 'tools' | 'raw_materials' | 'luxury_goods' | 'none';
+
 export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   bankingEnabled: true,
   capitalMarketsEnabled: false,
