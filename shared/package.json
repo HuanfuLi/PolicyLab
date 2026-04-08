@@ -8,6 +8,7 @@
   "main": "./src/types.ts",
   "exports": {
     ".": "./src/types.ts",
-    "./economy": "./src/economyTypes.ts"
+    "./economy": "./src/economyTypes.ts",
+    "./scenarioDataMerge": "./src/scenarioDataMerge.ts"
   }
 }
