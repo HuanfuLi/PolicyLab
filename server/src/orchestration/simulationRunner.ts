@@ -70,7 +70,7 @@ import * as capitalMarketRepo from '../db/repos/capitalMarketRepo.js';
 import * as fiscalEngine from '../mechanics/fiscalEngine.js';
 import * as fiscalRepo from '../db/repos/fiscalRepo.js';
 import { DEFAULT_BUDGET_ALLOCATION, DEFAULT_PUBLIC_GOODS_INITIAL } from '@policylab/shared';
-import { computeInflation } from '../mechanics/inflationEngine.js';
+import { computeInflation, computeTaylorRule } from '../mechanics/inflationEngine.js';
 import * as macroSnapshotRepo from '../db/repos/macroSnapshotRepo.js';
 // Phase 1 Economy imports
 import { getOrderBook, clearOrderBook, restoreOrderBook, isOrderBookWarm } from '../mechanics/orderBook.js';
@@ -306,6 +306,32 @@ function industryToItemType(industry: string): ItemType {
 
 function getAgentPeakSkill(skills: SkillMatrix): number {
   return Math.max(...Object.values(skills).map(entry => Math.round(entry.level)));
+}
+
+/**
+ * Runtime assertion: verify agent context includes accurate personal data before LLM call (D-22).
+ * Logs warnings rather than throwing — catches data injection bugs without crashing the simulation.
+ */
+function assertAgentContext(agentId: string, agent: import('@policylab/shared').Agent): void {
+  const stats = agent.currentStats;
+  if (typeof stats.wealth !== 'number' || isNaN(stats.wealth)) {
+    console.warn(`[ASSERTION] Agent ${agentId}: wealth is not a valid number (got ${stats.wealth})`);
+  }
+  if (typeof stats.health !== 'number' || isNaN(stats.health)) {
+    console.warn(`[ASSERTION] Agent ${agentId}: health is not a valid number (got ${stats.health})`);
+  }
+  if (typeof stats.happiness !== 'number' || isNaN(stats.happiness)) {
+    console.warn(`[ASSERTION] Agent ${agentId}: happiness is not a valid number (got ${stats.happiness})`);
+  }
+  if (stats.wealth < 0) {
+    console.warn(`[ASSERTION] Agent ${agentId}: negative wealth (${stats.wealth})`);
+  }
+  if (stats.health < 0 || stats.health > 100) {
+    console.warn(`[ASSERTION] Agent ${agentId}: health out of range (${stats.health})`);
+  }
+  if (stats.happiness < 0 || stats.happiness > 100) {
+    console.warn(`[ASSERTION] Agent ${agentId}: happiness out of range (${stats.happiness})`);
+  }
 }
 
 function buildMarketBoardEntries(sessionId: string, marketState?: MarketState): MarketBoardEntry[] {
@@ -571,8 +597,12 @@ function getInflationBasketPrices(
 
 function buildInflationContext(state?: InflationState): string | undefined {
   if (!state) return undefined;
-  const direction = state.inflationRate >= 0 ? 'up' : 'down';
-  return `Economic conditions: CPI is ${state.cpi.toFixed(1)} (${direction} ${Math.abs(state.inflationRate).toFixed(1)}% from base). Inflation running at ${state.inflationRate.toFixed(1)}% this period. Consider adjusting wage demands or consumption strategy.`;
+  const direction = state.inflationRate > 0 ? 'rising' : state.inflationRate < 0 ? 'falling' : 'stable';
+  const urgency = Math.abs(state.inflationRate) > 5 ? 'URGENT' : Math.abs(state.inflationRate) > 2 ? 'Notable' : 'Mild';
+  return `INFLATION REPORT: CPI at ${state.cpi.toFixed(1)} (${direction} ${Math.abs(state.inflationRate).toFixed(1)}% this period). ` +
+    `Inflation trend: ${urgency}. ` +
+    `Prices have ${direction === 'rising' ? 'increased' : direction === 'falling' ? 'decreased' : 'held steady'} — ` +
+    `adjust your economic decisions accordingly (spending, saving, wage negotiations).`;
 }
 
 function applyInflationFeedback(pool: AutomatedMarketMaker, factor: number): void {
@@ -1666,6 +1696,21 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             agent.currentStats.wealth,
             agent.currentStats.health,
           );
+
+          // Runtime assertion: verify agent context includes accurate personal data (D-22)
+          assertAgentContext(agent.id, agent);
+
+          // Build enterprise employment context (D-23)
+          const empRecord = employmentRegistry.get(agent.id);
+          let enterpriseContext: string | undefined;
+          if (empRecord) {
+            const ent = enterpriseRegistry.get(empRecord.enterpriseId);
+            const industryLabel = ent?.industry ?? 'unknown';
+            enterpriseContext = `You work at enterprise ${empRecord.enterpriseId} earning ${empRecord.wage} fiat per iteration. Your employer is in the ${industryLabel} sector.`;
+          } else if (agent.type !== 'bank' && agent.role !== 'central_bank') {
+            enterpriseContext = 'You are currently unemployed. Consider APPLY_FOR_JOB at available enterprises.';
+          }
+
           const messages = buildNaturalIntentPrompt(
             agent, session, previousSummary, iterNum,
             economyContext, cognitiveContext, isFirstIteration, aliveAgentNames,
@@ -1683,6 +1728,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             inflationContext,
             centralBankContext,
             ammMarketData,
+            enterpriseContext,
           );
 
           // throwOnExhaustion: true — after all retries, throw instead of silently defaulting to REST.
@@ -3554,6 +3600,45 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
         if (inflationOutput.trace.length > 0) {
           appendTrace(sessionId, inflationOutput.trace.join('\n'));
+        }
+
+        // Taylor Rule central bank response (D-14, D-15)
+        if (persistedEconomyConfig.centralBankEnabled) {
+          const employedCount = citizenAgents.filter(a => employmentRegistry.has(a.id)).length;
+          const totalAlive = aliveAgents.filter(a => (a.currentStats as Record<string, number>).health > 0).length;
+          const outputGap = totalAlive > 0 ? (employedCount / totalAlive - 0.95) / 0.95 : 0;
+
+          const taylorResult = computeTaylorRule({
+            currentInflationRate: inflationOutput.inflationRate / 100,
+            inflationTarget: persistedEconomyConfig.taylorInflationTarget ?? 0.00167,
+            neutralRate: persistedEconomyConfig.taylorNeutralRate ?? 0.00167,
+            outputGapEstimate: outputGap,
+            rateCeiling: persistedEconomyConfig.centralBankRateCeiling ?? 0.0125,
+            inflationCoeff: persistedEconomyConfig.taylorInflationCoeff ?? 0.5,
+            outputCoeff: persistedEconomyConfig.taylorOutputCoeff ?? 0.5,
+          });
+
+          // Apply Taylor Rule output: update session-level base rate
+          persistedEconomyConfig.baseLoanInterestRate = taylorResult.targetRate;
+
+          // If ceiling hit, also adjust reserve requirement (D-15)
+          if (taylorResult.ceilingHit && taylorResult.reserveRatioAdjustment > 0) {
+            persistedEconomyConfig.reserveRequirement = Math.min(0.50,
+              (persistedEconomyConfig.reserveRequirement ?? 0.10) + taylorResult.reserveRatioAdjustment
+            );
+          }
+
+          // Persist rate changes to session config
+          session.config = {
+            ...configRoot,
+            economyConfig: {
+              ...((configRoot.economyConfig as Record<string, unknown> | undefined) ?? {}),
+              ...persistedEconomyConfig,
+            },
+          };
+          await sessionRepo.updateConfig(sessionId, session.config as Record<string, unknown>);
+
+          appendTrace(sessionId, taylorResult.trace.join('\n'));
         }
       }
 
