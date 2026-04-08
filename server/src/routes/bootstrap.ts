@@ -246,7 +246,7 @@ router.post('/:id/bootstrap', async (req, res) => {
       const rosterRaw = await withRetry(() =>
         provider.chat(
           buildLocationAgentRosterMessages(profile, blueprints, scenario),
-          { maxTokens: 8192 },
+          { maxTokens: 16384 },
         ),
       );
       const rosterData = parseJSON<{
@@ -261,15 +261,15 @@ router.post('/:id/bootstrap', async (req, res) => {
         }
       }
     } catch (err) {
-      console.error('[bootstrap] Agent roster LLM enrichment failed — aborting bootstrap:', err);
+      console.warn('[bootstrap] Agent roster LLM enrichment failed, continuing with default backgrounds:', err);
       sendEvent({
-        type: 'error',
-        step: 'agent_enrichment',
-        message: 'Agent background generation failed. Please retry.',
+        type: 'step_fallback',
+        step: 'generation',
+        stepIndex: 5,
+        fallbackSource: 'llm',
+        message: 'Agent background generation failed — using role-based defaults',
       } as any);
-      clearInterval(heartbeatInterval);
-      res.end();
-      return;
+      // Continue with stub backgrounds already set on blueprints
     }
 
     // 5e: Generate law document via LLM
