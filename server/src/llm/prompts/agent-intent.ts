@@ -210,6 +210,8 @@ export function buildNaturalIntentPrompt(
     foodReserve: number;
     fiatReserve: number;
   },
+  /** Phase 10: Enterprise employment context (D-23). */
+  enterpriseContext?: string,
 ): LLMMessage[] {
   // Static prefix: identical across all agent calls in an iteration → cacheable
   const staticPrefix = `You live in a society built on the idea: "${session.idea}"
@@ -445,7 +447,7 @@ ${marketBoardBlock}
 
 ${employmentBoardBlock}
 
-${personalStatusBlock}${legalRiskBlock}
+${personalStatusBlock}${enterpriseContext ? `\n${enterpriseContext}` : ''}${legalRiskBlock}
 
 ${actionDictionary}`;
 

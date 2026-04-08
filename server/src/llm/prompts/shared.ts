@@ -93,7 +93,7 @@ export const ACTION_SCHEMAS: Partial<Record<ActionCode, ActionSchema>> = {
   },
   // Capital Markets actions
   BUY_SHARES: {
-    description: 'Buy shares in an enterprise to earn dividends and a piece of the profits (BUY_SHARES). Specify the enterprise owner.',
+    description: 'Invest in an enterprise by purchasing shares (BUY_SHARES). BENEFIT: Receive dividend payments proportional to your ownership when the enterprise profits. Specify the enterprise owner.',
     params: '{ "target": string, "quantity": number }',
   },
   SELL_SHARES: {
@@ -110,19 +110,19 @@ export const ACTION_SCHEMAS: Partial<Record<ActionCode, ActionSchema>> = {
   },
   // Banking Foundation actions
   DEPOSIT: {
-    description: 'Put your cash in the bank for safekeeping -- it earns interest there (DEPOSIT).',
+    description: 'Deposit fiat into your bank account (DEPOSIT). BENEFIT: Earns passive income every iteration through interest. Your money grows while you sleep. Deposited funds are safe and accessible anytime via WITHDRAW.',
     params: '{ "amount": number }',
   },
   WITHDRAW: {
-    description: 'Pull your money out of the bank and back into your pocket (WITHDRAW).',
+    description: 'Withdraw fiat from your bank deposit to spend on immediate needs (WITHDRAW). NOTE: Reduces your passive income stream -- only withdraw what you need.',
     params: '{ "amount": number }',
   },
   TAKE_LOAN: {
-    description: 'Borrow money from the bank -- you will owe interest and need collateral (TAKE_LOAN).',
+    description: 'Borrow fiat from the bank to invest in your enterprise or personal needs (TAKE_LOAN). BENEFIT: A loan lets you buy tools that multiply your production output, or stock inventory to sell at higher prices. Repay over time with interest.',
     params: '{ "principal": number }',
   },
   REPAY_LOAN: {
-    description: 'Make a payment on your loan -- chip away at what you owe (REPAY_LOAN).',
+    description: 'Repay your outstanding loan (REPAY_LOAN). BENEFIT: Reduces your debt and interest burden, improves your creditworthiness and frees up future borrowing capacity.',
     params: '{ "loan_id": string, "amount": number }',
   },
   ISSUE_LOAN: {

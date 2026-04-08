@@ -2,12 +2,23 @@ import type { LLMMessage } from '../types.js';
 import type { Agent, ChatMessage, Session } from '@policylab/shared';
 import type { PostMortemInput } from './shared.js';
 
+// ── Stat Trajectory Type ────────────────────────────────────────────────────
+
+export interface StatTrajectoryEntry {
+  iteration: number;
+  wealth: number;
+  health: number;
+  happiness: number;
+  actions: string[];
+}
+
 // ── Phase 4 prompts ─────────────────────────────────────────────────────────
 
 export function buildAgentReflectionPrompt(
   agent: Agent,
   session: Pick<Session, 'idea' | 'societyOverview' | 'timeScale'>,
-  iterationSummaries: Array<{ number: number; summary: string }>
+  iterationSummaries: Array<{ number: number; summary: string }>,
+  statTrajectory?: StatTrajectoryEntry[],
 ): LLMMessage[] {
   const summaryText = iterationSummaries
     .map(s => `Iteration ${s.number}: ${s.summary}`)
@@ -15,6 +26,15 @@ export function buildAgentReflectionPrompt(
 
   const cortisolStat = (agent.currentStats as unknown as Record<string, unknown>).cortisol;
   const cortisolLine = cortisolStat != null ? `- Cortisol (stress): ${cortisolStat}/100` : '';
+
+  // Build stat trajectory section (D-21)
+  const trajectorySection = statTrajectory && statTrajectory.length > 0
+    ? `\nYOUR PERSONAL JOURNEY (reflect on YOUR actual experience, not the collective narrative):\n` +
+      statTrajectory.map(s =>
+        `  Iteration ${s.iteration}: Wealth ${s.wealth.toFixed(0)}, Health ${s.health.toFixed(0)}, Happiness ${s.happiness.toFixed(0)} | Actions: ${s.actions.join(', ')}`
+      ).join('\n') +
+      `\n\nReflect specifically on how YOUR wealth, health, and happiness changed over time. What caused the changes? What would you do differently?`
+    : '';
 
   const systemPrompt = `You are ${agent.name}, a ${agent.role}. This is your life, your world: "${session.idea}"
 
@@ -25,6 +45,7 @@ Your final material reality:
 - Health: ${agent.currentStats.health}/100
 - Happiness: ${agent.currentStats.happiness}/100${cortisolLine ? `\n${cortisolLine}` : ''}
 - Status: ${agent.isAlive ? 'Alive' : 'Deceased'}
+${trajectorySection}
 
 It is over now. Reflect on your MATERIAL EXPERIENCE — your economic reality, not abstract philosophy.
 
