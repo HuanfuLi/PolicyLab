@@ -11,7 +11,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { eq, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { reflections, iterations as iterationsTable, sessions as sessionsTable } from '../db/schema.js';
+import { reflections, iterations as iterationsTable, sessions as sessionsTable, resolvedActions, economySnapshots } from '../db/schema.js';
 import { agentRepo } from '../db/repos/agentRepo.js';
 import { sessionRepo } from '../db/repos/sessionRepo.js';
 import { getProvider, getCitizenProvider } from '../llm/gateway.js';
@@ -21,6 +21,7 @@ import {
   buildAgentReflection2Prompt,
   buildEvaluationPrompt,
 } from '../llm/prompts/index.js';
+import type { StatTrajectoryEntry } from '../llm/prompts/index.js';
 import {
   parseAgentReflection,
   parseAgentReflection2,
@@ -59,6 +60,54 @@ export async function runReflection(sessionId: string): Promise<void> {
 
     const total = citizenAgents.length;
 
+    // ── Build per-agent stat trajectories from resolved actions (D-21) ──────
+    const allResolvedActions = await db
+      .select()
+      .from(resolvedActions)
+      .where(eq(resolvedActions.sessionId, sessionId));
+
+    // Group resolved actions by agent and iteration
+    const agentActionsByIter = new Map<string, Map<string, string[]>>();
+    for (const ra of allResolvedActions) {
+      if (!agentActionsByIter.has(ra.agentId)) {
+        agentActionsByIter.set(ra.agentId, new Map());
+      }
+      const iterMap = agentActionsByIter.get(ra.agentId)!;
+      const iterKey = ra.iterationId ?? 'unknown';
+      if (!iterMap.has(iterKey)) {
+        iterMap.set(iterKey, []);
+      }
+      iterMap.get(iterKey)!.push(ra.action);
+    }
+
+    // Build trajectory lookup: map iteration IDs to numbers
+    const iterIdToNumber = new Map<string, number>();
+    for (const row of iterRows) {
+      iterIdToNumber.set(row.id, row.iterationNumber);
+    }
+
+    function buildStatTrajectory(agentId: string, agent: Agent): StatTrajectoryEntry[] {
+      const iterActions = agentActionsByIter.get(agentId);
+      if (!iterActions) return [];
+      const entries: StatTrajectoryEntry[] = [];
+      for (const [iterId, actions] of iterActions) {
+        const iterNum = iterIdToNumber.get(iterId) ?? 0;
+        if (iterNum === 0) continue;
+        // Per-iteration agent stats are not stored in DB; use final stats as approximation
+        // with iteration context from actions taken
+        entries.push({
+          iteration: iterNum,
+          wealth: agent.currentStats.wealth,
+          health: agent.currentStats.health,
+          happiness: agent.currentStats.happiness,
+          actions,
+        });
+      }
+      // Sort by iteration and limit to last 10 for token budget
+      entries.sort((a, b) => a.iteration - b.iteration);
+      return entries.slice(-10);
+    }
+
     // ── Pass 1: personal reflections ────────────────────────────────────────
     reflectionManager.broadcast(sessionId, { type: 'pass-start', pass: 1, total });
 
@@ -66,7 +115,8 @@ export async function runReflection(sessionId: string): Promise<void> {
 
     const pass1Tasks = citizenAgents.map(agent => async () => {
       try {
-        const messages = buildAgentReflectionPrompt(agent, session, iterationSummaries);
+        const statTrajectory = buildStatTrajectory(agent.id, agent);
+        const messages = buildAgentReflectionPrompt(agent, session, iterationSummaries, statTrajectory);
         const raw = await citizenProv.chat(messages, { model: settings.citizenAgentModel });
         const { pass1 } = parseAgentReflection(raw);
         pass1Map.set(agent.id, pass1);
