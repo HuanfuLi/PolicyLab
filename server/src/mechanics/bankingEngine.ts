@@ -12,7 +12,7 @@
  *  - Interest: borrower.depositBalance -= interest; bank.reserves += interest (M0 transfers).
  */
 import { v4 as uuidv4 } from 'uuid';
-import type { Agent, EconomyConfig, LoanContract, DepositAccount, BankBalanceSheet } from '@policylab/shared';
+import type { Agent, EconomyConfig, LoanContract, LoanProductType, DepositAccount, BankBalanceSheet } from '@policylab/shared';
 
 // ── Return types ─────────────────────────────────────────────────────────────
 
@@ -74,8 +74,9 @@ export function processLoanRequest(params: {
   economyConfig: EconomyConfig;
   currentDeposits: DepositAccount[];
   iterationNumber: number;
+  loanProductType?: LoanProductType;
 }): LoanRequestResult {
-  const { bank, borrower, principal, economyConfig, currentDeposits, iterationNumber } = params;
+  const { bank, borrower, principal, economyConfig, currentDeposits, iterationNumber, loanProductType } = params;
 
   // Calculate total deposits at this bank
   const bankDeposits = currentDeposits.filter(d => d.bankAgentId === bank.id);
@@ -93,6 +94,14 @@ export function processLoanRequest(params: {
   // Collateral: min(borrower.wealth * 0.5, principal)
   const collateralAmount = Math.min(borrower.currentStats.wealth * 0.5, principal);
 
+  // Differentiated loan products: business loans get lower rates and longer terms
+  let effectiveRate = economyConfig.baseLoanInterestRate;
+  let effectiveTerm = economyConfig.defaultLoanTermIterations;
+  if (loanProductType === 'business') {
+    effectiveRate = economyConfig.baseLoanInterestRate * (1 - (economyConfig.businessLoanRateDiscount ?? 0.3));
+    effectiveTerm = Math.round(economyConfig.defaultLoanTermIterations * (economyConfig.businessLoanTermMultiplier ?? 1.5));
+  }
+
   // Create loan contract
   const loan: LoanContract = {
     id: uuidv4(),
@@ -100,14 +109,15 @@ export function processLoanRequest(params: {
     borrowerAgentId: borrower.id,
     lenderAgentId: bank.id,
     principal,
-    interestRate: economyConfig.baseLoanInterestRate,
-    termIterations: economyConfig.defaultLoanTermIterations,
+    interestRate: effectiveRate,
+    termIterations: effectiveTerm,
     remainingBalance: principal,
     collateralAmount,
     consecutiveMissed: 0,
     issuedAtIteration: iterationNumber,
-    dueAtIteration: iterationNumber + economyConfig.defaultLoanTermIterations,
+    dueAtIteration: iterationNumber + effectiveTerm,
     status: 'active',
+    loanProductType,
     createdAt: new Date().toISOString(),
   };
 
@@ -459,4 +469,40 @@ export function processIteration(params: {
   }
 
   return delta;
+}
+
+// ── processLiquidityInjection ────────────────────────────────────────────────
+
+/**
+ * Central bank lender-of-last-resort: inject fiat into bank reserves when
+ * the actual reserve ratio drops below the configured threshold.
+ *
+ * NOTE: The injection is an M0 increase — the simulationRunner MUST adjust
+ * the SFC audit baseline by adding injectionAmount to initialFiat.
+ */
+export function processLiquidityInjection(params: {
+  bankReserves: number;
+  totalDeposits: number;
+  config: Partial<EconomyConfig>;
+}): { injectionAmount: number; trace: string[] } {
+  const { bankReserves, totalDeposits, config } = params;
+  const threshold = config.liquidityInjectionThreshold ?? 0.05;
+  const cap = config.liquidityInjectionCap ?? 0.05;
+
+  const actualRatio = bankReserves / Math.max(totalDeposits, 1);
+
+  if (actualRatio >= threshold) {
+    return { injectionAmount: 0, trace: [] };
+  }
+
+  // Inject enough to bring ratio up to threshold, but cap at liquidityInjectionCap * totalDeposits
+  const neededToReachThreshold = totalDeposits * (threshold - actualRatio);
+  const maxInjection = totalDeposits * cap;
+  const injectionAmount = Math.min(maxInjection, neededToReachThreshold);
+
+  const trace = [
+    `[CB] Liquidity injection: ${injectionAmount.toFixed(2)} fiat (reserves at ${(actualRatio * 100).toFixed(1)}%, threshold ${(threshold * 100).toFixed(1)}%)`,
+  ];
+
+  return { injectionAmount, trace };
 }
