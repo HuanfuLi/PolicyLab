@@ -133,7 +133,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. Economic Dashboard | 2/2 | Complete | 2026-04-02 |
 | 6. Scenario Entry | 4/4 | Complete | 2026-04-02 |
 | 7. Real-World Scenario Bootstrap | 5/5 | Complete | 2026-04-03 |
-| 8. Live Scenario Comparison | 4/8 | In Progress|  |
+| 8. Live Scenario Comparison | 4/8 | Skipped | — |
 
 ### Phase 7: Real-World Scenario Bootstrap — location-based data-driven society design for policymakers
 
@@ -174,17 +174,17 @@ Plans:
   9. Users can add new scenarios to existing groups from Design Review; only new scenarios run
   10. After all scenarios finish, "View Full Comparison" button links to Phase 6's 8-dimension comparison page
   11. TelemetryPanel modal Economic tab removed (data now inline); Classic tab preserved
-**Plans:** 4/8 plans executed
+**Status:** SKIPPED — Deprioritized in favor of simulation realism (Phase 10). Partial work exists on branch but is incomplete. May be revisited in a future milestone.
 
-Plans:
+Plans (partial — not completed):
 - [x] 08-01-PLAN.md — DB schema (groupId/scenarioLabel), shared types, fork endpoint upgrade
 - [x] 08-02-PLAN.md — Multi-provider LLM load balancer with token bucket rate limiting
 - [x] 08-03-PLAN.md — multiScenarioStore (N SSE connections), scenarioStore parallel execution
 - [x] 08-04-PLAN.md — ScenarioChart, CollapsiblePanel, ConfigDiffHeader, ProgressBar, TelemetryPanel cleanup
 - [x] 08-05-PLAN.md — Simulation page rewrite with multi-scenario charts, collapsible panels, top bar
-- [ ] 08-06-PLAN.md — Home page grouping, Reflection multi-scenario layout
+- [ ] ~~08-06-PLAN.md — Home page grouping, Reflection multi-scenario layout~~ (skipped)
 - [x] 08-08-PLAN.md — AgentReview cross-scenario context, Artifacts combined policy brief
-- [ ] 08-07-PLAN.md — Load balancer wiring, integration fixes, end-to-end human verification
+- [ ] ~~08-07-PLAN.md — Load balancer wiring, integration fixes~~ (skipped)
 
 ### Phase 9: Redesign Prompts for All
 
@@ -203,16 +203,17 @@ Plans:
 ### Phase 10: Fix simulation realism — agent economic behavior, inflation response, narrative grounding
 
 **Goal:** Make the simulation engine produce economically coherent outcomes by auto-creating enterprises from bootstrap data, wiring enterprise wage/production cycles through the banking system, implementing Taylor Rule central bank feedback with rate ceilings, grounding narratives in pre-interpreted telemetry digests with hard validation, and enriching agent reflections with personal stat trajectories
-**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-17, D-18, D-19, D-20, D-21, D-22, D-23, D-24, D-25, D-26, D-27, D-28, D-29
+**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-17, D-18, D-19, D-20, D-21, D-22, D-23, D-24, D-25, D-26, D-27, D-28, D-29, D-30, D-31, D-32
 **Depends on:** Phase 9
-**Plans:** 8 plans
+**Plans:** 1/9 plans executed
 
 Plans:
-- [ ] 10-01-PLAN.md — Wave 0: Types, DB schema, EconomyConfig extensions, test scaffolds
+- [x] 10-01-PLAN.md — Wave 0: Types, DB schema, EconomyConfig extensions (incl. D-30/D-31/D-32), test scaffolds
 - [ ] 10-02-PLAN.md — Enterprise engine: wages, insolvency, idle fallback, commodity mapping, cost pass-through
 - [ ] 10-03-PLAN.md — Enterprise bootstrap: location-mode auto-creation, creative-mode generation, bootstrap failure handling
 - [ ] 10-04-PLAN.md — Enterprise banking: deposit-mediated payroll, differentiated loans, liquidity injection, simulationRunner wiring
-- [ ] 10-05-PLAN.md — Inflation response: Taylor Rule, smoothing window, rate ceiling, agent context
+- [ ] 10-05-PLAN.md — Inflation response: Taylor Rule, smoothing window, rate ceiling, CPI base price auto-init (D-30), agent context
+- [ ] 10-05b-PLAN.md — Fiscal realism: income/production tax (D-32), public goods spending-to-GDP scaling (D-31), decay rebalancing
 - [ ] 10-06-PLAN.md — Narrative grounding: telemetry digest, data-driven directive, validation + re-generation
 - [ ] 10-07-PLAN.md — Agent context: banking ROI prompts, reflection stat trajectory, runtime assertions
 - [ ] 10-08-PLAN.md — Integration verification + human approval of simulation realism
