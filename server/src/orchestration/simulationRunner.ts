@@ -72,6 +72,8 @@ import * as fiscalRepo from '../db/repos/fiscalRepo.js';
 import { DEFAULT_BUDGET_ALLOCATION, DEFAULT_PUBLIC_GOODS_INITIAL } from '@policylab/shared';
 import { computeInflation, computeTaylorRule } from '../mechanics/inflationEngine.js';
 import * as macroSnapshotRepo from '../db/repos/macroSnapshotRepo.js';
+// Narrative grounding (Phase 10-06: D-17/D-18/D-20)
+import { validateNarrative, buildTelemetryDigest } from '../llm/narrativeValidation.js';
 // Phase 1 Economy imports
 import { getOrderBook, clearOrderBook, restoreOrderBook, isOrderBookWarm } from '../mechanics/orderBook.js';
 import { economyRepo, type AgentEconomyState } from '../db/repos/economyRepo.js';
@@ -1887,10 +1889,41 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
       // ── Central Agent resolves (standard or map-reduce) ──────────────────
       let resolution: import('../parsers/simulation.js').ParsedResolution;
+      let mapReduceGroupSummaries: string[] | null = null; // for narrative retry in MR path
 
       const prevIterMetrics = sessionIterationMetrics.get(sessionId) ?? null;
       // D4: Physics log from last iteration — grounding data for the narrator
       const prevPhysicsLog = sessionLastPhysicsTraces.get(sessionId) ?? null;
+
+      // D-18: Build pre-interpreted telemetry digest for narrative grounding
+      const telemetryLogs = sessionTelemetryLogs.get(sessionId) ?? [];
+      const previousTelemetry = telemetryLogs.length > 0 ? telemetryLogs[telemetryLogs.length - 1] : null;
+      const citizenAgentsForDigest = aliveAgents.filter(a => (a as any).type !== 'bank');
+      const agentStatsForDigest = citizenAgentsForDigest.map(a => ({
+        health: a.currentStats.health,
+        happiness: a.currentStats.happiness,
+        cortisol: (a.currentStats as any).cortisol ?? 50,
+        wealth: a.currentStats.wealth,
+      }));
+      // We build a partial telemetry from what we know now (pre-physics); digest uses previous for trends
+      const partialCurrentTelemetry: TelemetryLog = {
+        iterationNumber: iterNum,
+        totalFiatSupply: citizenAgentsForDigest.reduce((s, a) => s + a.currentStats.wealth, 0),
+        ammFoodReserve_Y: 0, ammFiatReserve_X: 0,
+        ammSpotPrice_Food: previousTelemetry?.ammSpotPrice_Food ?? 0,
+        totalCaloriesBurned: 0, totalCaloriesProduced: 0, actionFailureRate: 0,
+        giniCoefficient: previousTelemetry?.giniCoefficient ?? 0,
+        cpi: previousTelemetry?.cpi ?? 100,
+        inflationRate: previousTelemetry?.inflationRate ?? 0,
+      };
+      const deathCountThisIter = 0; // Will be updated after resolution for validation
+      const narrativeDigest = buildTelemetryDigest(
+        previousTelemetry ?? partialCurrentTelemetry,
+        telemetryLogs.length >= 2 ? telemetryLogs[telemetryLogs.length - 2] : null,
+        agentStatsForDigest,
+        citizenAgentsForDigest.length,
+        deathCountThisIter,
+      );
 
       if (aliveAgents.length > MAPREDUCE_THRESHOLD) {
         // ── Map-Reduce path for large sessions (role-based clustering) ──
@@ -1962,7 +1995,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
         // Merge step: synthesise group summaries into a society-wide narrative
         const groupSummaries = groupResults.map(r => r.groupSummary);
-        const mergeMessages = buildMergeResolutionMessages(session, groupSummaries, iterNum, previousSummary, prevIterMetrics, lockedVariables);
+        mapReduceGroupSummaries = groupSummaries;
+        const mergeMessages = buildMergeResolutionMessages(session, groupSummaries, iterNum, previousSummary, prevIterMetrics, lockedVariables, narrativeDigest);
         const mergeResult = await retryWithHealing({
           provider,
           messages: mergeMessages,
@@ -1987,7 +2021,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       } else {
         // ── Standard path ────────────────────────────────────────────────
         // Bug #1 fix: pass aliveAgents only — dead agents must never appear in resolution
-        const resolutionMessages = buildResolutionPrompt(session, aliveAgents, intents, iterNum, previousSummary, prevIterMetrics, lockedVariables, prevPhysicsLog);
+        const resolutionMessages = buildResolutionPrompt(session, aliveAgents, intents, iterNum, previousSummary, prevIterMetrics, lockedVariables, prevPhysicsLog, narrativeDigest);
         resolution = await retryWithHealing({
           provider,
           messages: resolutionMessages,
@@ -1999,6 +2033,63 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             simulationManager.isPauseRequested(sessionId) ||
             simulationManager.isAbortRequested(sessionId),
         });
+      }
+
+      // D-20: Narrative validation — check narrative against telemetry, re-generate once if contradictory
+      if (previousTelemetry) {
+        const deathsInResolution = (resolution.lifecycleEvents ?? []).filter(
+          (e: { type: string }) => e.type === 'death'
+        ).length;
+        const narrativeCheck = validateNarrative(
+          resolution.narrativeSummary,
+          previousTelemetry,
+          telemetryLogs.length >= 2 ? telemetryLogs[telemetryLogs.length - 2] : null,
+          citizenAgentsForDigest.length,
+          deathsInResolution,
+        );
+        if (!narrativeCheck.passed) {
+          appendTrace(sessionId, `[NARRATIVE] Validation failed: ${narrativeCheck.failures.join('; ')}. Regenerating...`);
+          // One retry with stricter prompt
+          const stricterSuffix = `\n\nPREVIOUS NARRATIVE REJECTED — FACTUAL ERRORS DETECTED:\n${narrativeCheck.failures.join('\n')}\n\nRewrite the narrative fixing these specific contradictions. All other content was acceptable.`;
+          if (aliveAgents.length > MAPREDUCE_THRESHOLD && mapReduceGroupSummaries) {
+            const retryMergeMessages = buildMergeResolutionMessages(session, mapReduceGroupSummaries, iterNum, previousSummary, prevIterMetrics, lockedVariables, narrativeDigest);
+            retryMergeMessages[retryMergeMessages.length - 1].content += stricterSuffix;
+            const retryMerge = await retryWithHealing({
+              provider,
+              messages: retryMergeMessages,
+              options: { model: settings.centralAgentModel },
+              parse: parseMergeResolutionStrict,
+              fallback: { narrativeSummary: resolution.narrativeSummary, lifecycleEvents: resolution.lifecycleEvents },
+              label: 'mergeResolution:retry',
+              shouldAbort: () => simulationManager.isPauseRequested(sessionId) || simulationManager.isAbortRequested(sessionId),
+            });
+            resolution = { ...resolution, narrativeSummary: retryMerge.narrativeSummary };
+          } else {
+            const retryMessages = buildResolutionPrompt(session, aliveAgents, intents, iterNum, previousSummary, prevIterMetrics, lockedVariables, prevPhysicsLog, narrativeDigest);
+            retryMessages[retryMessages.length - 1].content += stricterSuffix;
+            const retryResult = await retryWithHealing({
+              provider,
+              messages: retryMessages,
+              options: { model: settings.centralAgentModel },
+              parse: parseResolutionStrict,
+              fallback: { narrativeSummary: resolution.narrativeSummary, agentOutcomes: resolution.agentOutcomes, lifecycleEvents: resolution.lifecycleEvents },
+              label: 'resolution:retry',
+              shouldAbort: () => simulationManager.isPauseRequested(sessionId) || simulationManager.isAbortRequested(sessionId),
+            });
+            resolution = retryResult;
+          }
+          // Check retry result but don't retry again (max 1 retry)
+          const retryCheck = validateNarrative(
+            resolution.narrativeSummary,
+            previousTelemetry,
+            telemetryLogs.length >= 2 ? telemetryLogs[telemetryLogs.length - 2] : null,
+            citizenAgentsForDigest.length,
+            deathsInResolution,
+          );
+          if (!retryCheck.passed) {
+            appendTrace(sessionId, `[NARRATIVE] Retry still failed validation: ${retryCheck.failures.join('; ')}. Using anyway.`);
+          }
+        }
       }
 
       // Controlled Variable Method: suppress role_change lifecycle events when role is locked
