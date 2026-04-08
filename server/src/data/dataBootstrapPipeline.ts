@@ -340,6 +340,7 @@ function sectorToCommodity(sector: EnterpriseSector): EnterpriseCommodity {
     case 'industry': return 'tools';
     case 'services': return 'luxury_goods';
     case 'government': return 'none';
+    default: return 'none';
   }
 }
 
@@ -350,6 +351,7 @@ function sectorToIndustry(sector: EnterpriseSector, index: number): string {
     case 'industry': return index % 2 === 0 ? 'manufacturing' : 'mining';
     case 'services': return index % 2 === 0 ? 'trading' : 'crafting';
     case 'government': return index % 2 === 0 ? 'education' : 'healthcare';
+    default: return 'services';
   }
 }
 
@@ -360,6 +362,7 @@ function sectorToNamePrefix(sector: EnterpriseSector): string {
     case 'industry': return 'Factory Enterprise';
     case 'services': return 'Trade Enterprise';
     case 'government': return 'Public Service';
+    default: return 'Enterprise';
   }
 }
 

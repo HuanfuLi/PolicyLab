@@ -17,8 +17,10 @@ import { fetchLocationData } from '../data/locationDataService.js';
 import {
   profileToEconomyConfig,
   generateAgentRoster,
+  generateEnterprises,
   generateLawPromptContext,
 } from '../data/dataBootstrapPipeline.js';
+import { insertEnterprise } from '../db/repos/enterpriseRepo.js';
 import { searchLocations } from '../data/photonGeocoder.js';
 import { getProvider } from '../llm/gateway.js';
 import { withRetry } from '../llm/retry.js';
@@ -390,6 +392,17 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
     // C1 fix: Seed fiscal_budgets table (simulationRunner reads from DB, not session.config)
     if (finalConfig.fiscalEnabled) {
       fiscalRepo.createBudget(id, budget);
+    }
+
+    // Generate and persist enterprise blueprints (Phase 10)
+    const enterpriseBlueprints = generateEnterprises(
+      blueprints,
+      profile,
+      baseFiat,
+      finalConfig.minimumWage ?? 5,
+    );
+    for (const bp of enterpriseBlueprints) {
+      insertEnterprise(id, bp);
     }
 
     // Update session: config (partial merge), law, overview, stage

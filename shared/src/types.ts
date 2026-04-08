@@ -625,6 +625,25 @@ export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   publicGoodsSpendingToGdpScaling: true,
 };
 
+// ── Phase 10: Enterprise types ──────────────────────────────────────────────
+
+export type EnterpriseSector = 'agriculture' | 'industry' | 'services' | 'government';
+export type EnterpriseCommodity = 'food' | 'tools' | 'raw_materials' | 'luxury_goods' | 'none';
+
+export interface EnterpriseBlueprint {
+  id: string;
+  name: string;
+  ownerId: string;
+  sector: EnterpriseSector;
+  industry: string;
+  commodityOutput: EnterpriseCommodity;
+  initialCapital: number;
+  initialInventory: Record<string, number>;
+  employees: string[];
+  wage: number;
+  isServiceEnterprise: boolean;
+}
+
 export type LoanProductType = 'personal' | 'business';
 
 export interface LoanContract {

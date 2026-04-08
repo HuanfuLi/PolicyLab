@@ -3737,7 +3737,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         // Taylor Rule central bank response (D-14, D-15)
         if (persistedEconomyConfig.centralBankEnabled) {
           const employedCount = citizenAgents.filter(a => employmentRegistry.has(a.id)).length;
-          const totalAlive = aliveAgents.filter(a => (a.currentStats as Record<string, number>).health > 0).length;
+          const totalAlive = aliveAgents.filter(a => (a.currentStats as unknown as Record<string, number>).health > 0).length;
           const outputGap = totalAlive > 0 ? (employedCount / totalAlive - 0.95) / 0.95 : 0;
 
           const taylorResult = computeTaylorRule({
