@@ -7,11 +7,21 @@ import type { PostMortemInput } from './shared.js';
 export function buildAgentReflectionPrompt(
   agent: Agent,
   session: Pick<Session, 'idea' | 'societyOverview' | 'timeScale'>,
-  iterationSummaries: Array<{ number: number; summary: string }>
+  iterationSummaries: Array<{ number: number; summary: string }>,
+  statTrajectory?: Array<{ iteration: number; wealth: number; health: number; happiness: number; actions: string[] }>
 ): LLMMessage[] {
   const summaryText = iterationSummaries
     .map(s => `Iteration ${s.number}: ${s.summary}`)
     .join('\n');
+  const trajectorySection = statTrajectory && statTrajectory.length > 0
+    ? `\nYOUR PERSONAL JOURNEY (reflect on YOUR actual experience, not the collective narrative):\n${
+        statTrajectory
+          .map(s =>
+            `  Iteration ${s.iteration}: Wealth ${s.wealth.toFixed(0)}, Health ${s.health.toFixed(0)}, Happiness ${s.happiness.toFixed(0)} | Actions: ${s.actions.join(', ')}`
+          )
+          .join('\n')
+      }\n\nReflect specifically on how YOUR wealth, health, and happiness changed over time. What caused the changes? What would you do differently?`
+    : '';
 
   const cortisolStat = (agent.currentStats as unknown as Record<string, unknown>).cortisol;
   const cortisolLine = cortisolStat != null ? `- Cortisol (stress): ${cortisolStat}/100` : '';
@@ -30,6 +40,7 @@ It is over now. Reflect on your MATERIAL EXPERIENCE — your economic reality, n
 
 What you lived through (${iterationSummaries.length} weeks):
 ${summaryText.slice(0, 2000)}
+${trajectorySection}
 
 You MUST respond with ONLY valid JSON (no markdown, no preamble):
 {
@@ -137,8 +148,14 @@ export function buildReviewChatPrompt(
   agentPass1: string,
   agentPass2: string | null,
   history: ChatMessage[],
-  userMessage: string
+  userMessage: string,
+  crossScenarioContext?: string | null,
+  scenarioCount?: number
 ): LLMMessage[] {
+  const crossScenarioSection = crossScenarioContext && scenarioCount && scenarioCount > 1
+    ? `\n\nYou lived through ${scenarioCount} different policy scenarios. Here is your experience across all of them:\n${crossScenarioContext}\n\nThe user may ask cross-scenario comparison questions like "How did you fare under Policy A vs Baseline?" Answer based on your lived experience in each scenario.`
+    : '';
+
   const systemPrompt = `You are ${agent.name}, a ${agent.role}. Your world was: "${session.idea}"
 
 Background: ${agent.background}
@@ -147,7 +164,7 @@ Your final reality: Wealth ${agent.currentStats.wealth}, Health ${agent.currentS
 Status: ${agent.isAlive ? 'Alive' : 'Deceased'}
 
 Your personal reflection: "${agentPass1}"
-${agentPass2 ? `\nAfter seeing the full picture: "${agentPass2}"` : ''}
+${agentPass2 ? `\nAfter seeing the full picture: "${agentPass2}"` : ''}${crossScenarioSection}
 
 Someone wants to talk to you about what you lived through. Answer as yourself — with your history, biases, and emotions. You may deflect, be defensive, or reveal unexpected insights.
 

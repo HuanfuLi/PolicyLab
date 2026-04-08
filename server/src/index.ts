@@ -11,6 +11,7 @@ import reflectRouter from './routes/reflect.js';
 import reviewRouter from './routes/review.js';
 import artifactsRouter from './routes/artifacts.js';
 import compareRouter from './routes/compare.js';
+import policyBriefRouter from './routes/policyBrief.js';
 import importExportRouter from './routes/importexport.js';
 import bootstrapRouter from './routes/bootstrap.js';
 
@@ -46,6 +47,7 @@ app.use('/api/sessions', importExportRouter);
 app.use('/api/sessions', sessionsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/compare', compareRouter);
+app.use('/api/reflect', policyBriefRouter);
 
 // Run DB migrations before starting
 runMigrations();
