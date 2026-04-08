@@ -54,7 +54,7 @@ Requirements for the Real Economy Engine milestone. Each maps to roadmap phases.
 - [ ] **LSC-03**: True parallel simulation execution with separate SSE streams per scenario; multi-progress bars; global pause/resume/abort
 - [ ] **LSC-04**: Multi-provider LLM load balancer with round-robin distribution and per-provider rate limits configured in ~/.policylab/config.json
 - [x] **LSC-05**: Sessions table groupId + scenarioLabel columns; Home page shows grouped sessions as single card with badge
-- [ ] **LSC-06**: Reflection page side-by-side society evaluations with cross-scenario data table + LLM narrative; per-agent comparison cards
+- [x] **LSC-06**: Reflection page side-by-side society evaluations with cross-scenario data table + LLM narrative; per-agent comparison cards
 - [x] **LSC-07**: Review page agent chat with cross-scenario context for multi-scenario questions
 - [x] **LSC-08**: Artifacts page per-scenario exports + combined markdown policy brief
 - [ ] **LSC-09**: Add new scenarios to existing groups from Design Review; only new scenarios run

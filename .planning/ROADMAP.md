@@ -181,9 +181,9 @@ Plans:
 - [x] 08-02-PLAN.md — Multi-provider LLM load balancer with token bucket rate limiting
 - [x] 08-03-PLAN.md — multiScenarioStore (N SSE connections), scenarioStore parallel execution
 - [x] 08-04-PLAN.md — ScenarioChart, CollapsiblePanel, ConfigDiffHeader, ProgressBar, TelemetryPanel cleanup
-- [ ] 08-05-PLAN.md — Simulation page rewrite with multi-scenario charts, collapsible panels, top bar
+- [x] 08-05-PLAN.md — Simulation page rewrite with multi-scenario charts, collapsible panels, top bar
 - [ ] 08-06-PLAN.md — Home page grouping, Reflection multi-scenario layout
-- [ ] 08-08-PLAN.md — AgentReview cross-scenario context, Artifacts combined policy brief
+- [x] 08-08-PLAN.md — AgentReview cross-scenario context, Artifacts combined policy brief
 - [ ] 08-07-PLAN.md — Load balancer wiring, integration fixes, end-to-end human verification
 
 ### Phase 9: Redesign Prompts for All
