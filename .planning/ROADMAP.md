@@ -134,6 +134,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. Economic Dashboard | 2/2 | Complete | 2026-04-02 |
 | 6. Scenario Entry | 4/4 | Complete | 2026-04-02 |
 | 7. Real-World Scenario Bootstrap | 5/5 | Complete | 2026-04-03 |
+| 8. Live Scenario Comparison | 0/7 | Planned | - |
 
 ### Phase 7: Real-World Scenario Bootstrap — location-based data-driven society design for policymakers
 
@@ -159,13 +160,31 @@ Plans:
 
 ### Phase 8: Live Scenario Comparison — real-time overlaid economic charts during parallel simulation runs
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Policymakers see CPI, money supply, fiscal, and bond yield curves from up to 4 scenarios updating simultaneously on a redesigned Simulation page with collapsible panels, multi-provider LLM load balancing for parallel execution, session grouping for scenario management, and multi-scenario adaptations to Reflection, Review, and Artifacts stages producing a combined policy brief
+**Requirements**: LSC-01, LSC-02, LSC-03, LSC-04, LSC-05, LSC-06, LSC-07, LSC-08, LSC-09, LSC-10, LSC-11
 **Depends on:** Phase 7
-**Plans:** 0 plans
+**Success Criteria** (what must be TRUE):
+  1. Simulation page Statistics panel shows all economic + agent stat charts as recharts LineCharts with multi-scenario overlaid lines (color + dash patterns), shared crosshair tooltips, and live stat badges — identical layout for N=1 and N>1
+  2. Live Feed and Agent Status panels have collapse buttons; when collapsed, Statistics auto-expands to 2-column grid with responsive chart flow
+  3. "Run All Scenarios" launches true parallel simulations with separate SSE streams per scenario; multi-progress bars in top bar; pause/resume/abort applies to all scenarios simultaneously
+  4. Multi-provider LLM load balancer distributes requests round-robin across configured providers in ~/.policylab/config.json with per-provider rate limits; local providers can have no cap
+  5. Sessions table has groupId and scenarioLabel columns; forked scenarios share a groupId; Home page shows grouped sessions as single card with scenario count badge
+  6. Reflection page shows side-by-side society evaluations with cross-scenario data table + LLM narrative; per-agent comparison cards across all scenarios
+  7. Review page agent chat includes context from all scenarios for cross-scenario questions
+  8. Artifacts page produces per-scenario exports plus a combined markdown policy brief
+  9. Users can add new scenarios to existing groups from Design Review; only new scenarios run
+  10. After all scenarios finish, "View Full Comparison" button links to Phase 6's 8-dimension comparison page
+  11. TelemetryPanel modal Economic tab removed (data now inline); Classic tab preserved
+**Plans:** 7 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 8 to break down)
+- [ ] 08-01-PLAN.md — DB schema (groupId/scenarioLabel), shared types, fork endpoint upgrade
+- [ ] 08-02-PLAN.md — Multi-provider LLM load balancer with token bucket rate limiting
+- [ ] 08-03-PLAN.md — multiScenarioStore (N SSE connections), scenarioStore parallel execution
+- [ ] 08-04-PLAN.md — ScenarioChart, CollapsiblePanel, ConfigDiffHeader, ProgressBar, TelemetryPanel cleanup
+- [ ] 08-05-PLAN.md — Simulation page rewrite with multi-scenario charts, collapsible panels, top bar
+- [ ] 08-06-PLAN.md — Home page grouping, Reflection/Review/Artifacts multi-scenario adaptations
+- [ ] 08-07-PLAN.md — Load balancer wiring, integration fixes, end-to-end human verification
 
 ### Phase 9: Redesign Prompts for All
 
@@ -179,3 +198,14 @@ Plans:
 - [x] 09-02-PLAN.md — Rewrite citizen intent prompt: economic survival signals, immersion, action dictionary
 - [x] 09-03-PLAN.md — Enrich agent roster backgrounds (5-8 sentence life stories) and align reflection prompts
 - [x] 09-04-PLAN.md — Wire AMM market data in simulationRunner + prompt content verification tests
+- [x] 09-05-PLAN.md — Add conditional food profitability signal when prices are high or reserves are low
+
+### Phase 10: Fix simulation realism — agent economic behavior, inflation response, narrative grounding
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 9
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 10 to break down)
