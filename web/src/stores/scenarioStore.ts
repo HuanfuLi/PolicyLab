@@ -249,7 +249,8 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
         runningScenarios: false,
       });
 
-      navigate?.(`/sessions/${baseSessionId}/simulate?scenarios=${allSessionIds.join(',')}`);
+      navigate?.(`/session/${baseSessionId}/simulation?scenarios=${allSessionIds.join(',')}`);
+
       return allSessionIds;
     } catch (err) {
       set({ runningScenarios: false });

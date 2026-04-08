@@ -50,15 +50,15 @@ Requirements for the Real Economy Engine milestone. Each maps to roadmap phases.
 ### Live Scenario Comparison
 
 - [x] **LSC-01**: Simulation page Statistics panel shows all charts as recharts LineCharts with multi-scenario overlaid lines (color + dash patterns), shared crosshair tooltips, live stat badges
-- [ ] **LSC-02**: Live Feed and Agent Status panels have collapse buttons; Statistics auto-expands to 2-column grid when neighbors collapse
+- [x] **LSC-02**: Live Feed and Agent Status panels have collapse buttons; Statistics auto-expands to 2-column grid when neighbors collapse
 - [ ] **LSC-03**: True parallel simulation execution with separate SSE streams per scenario; multi-progress bars; global pause/resume/abort
 - [ ] **LSC-04**: Multi-provider LLM load balancer with round-robin distribution and per-provider rate limits configured in ~/.policylab/config.json
 - [x] **LSC-05**: Sessions table groupId + scenarioLabel columns; Home page shows grouped sessions as single card with badge
 - [ ] **LSC-06**: Reflection page side-by-side society evaluations with cross-scenario data table + LLM narrative; per-agent comparison cards
-- [ ] **LSC-07**: Review page agent chat with cross-scenario context for multi-scenario questions
-- [ ] **LSC-08**: Artifacts page per-scenario exports + combined markdown policy brief
+- [x] **LSC-07**: Review page agent chat with cross-scenario context for multi-scenario questions
+- [x] **LSC-08**: Artifacts page per-scenario exports + combined markdown policy brief
 - [ ] **LSC-09**: Add new scenarios to existing groups from Design Review; only new scenarios run
-- [ ] **LSC-10**: "View Full Comparison" button after all scenarios complete, linking to Phase 6 comparison
+- [x] **LSC-10**: "View Full Comparison" button after all scenarios complete, linking to Phase 6 comparison
 - [x] **LSC-11**: TelemetryPanel Economic tab removed (inline in Statistics); Classic tab modal preserved
 
 ## v2 Requirements

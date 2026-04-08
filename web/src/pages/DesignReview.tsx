@@ -175,11 +175,9 @@ const DesignReview = () => {
   const handleRunAllScenarios = async () => {
     if (!id) return;
     try {
-      const forkIds = await scenarioStore.runAllScenarios(id, iterations);
-      // Navigate to comparison page after all scenarios complete
-      if (forkIds.length > 0) {
-        navigate('/compare');
-      }
+      // Pass navigate so runAllScenarios can redirect to
+      // /session/:id/simulation?scenarios=id1,id2,id3 after forking and launching
+      await scenarioStore.runAllScenarios(id, iterations, navigate);
     } catch (err) {
       console.error('Run all scenarios failed:', err);
     }

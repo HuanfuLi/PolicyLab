@@ -45,6 +45,12 @@
   --panel-dark-10: rgba(0, 0, 0, 0.1);
   --panel-dark-20: rgba(0, 0, 0, 0.2);
 
+  /* Chart structural tokens */
+  --chart-axis: rgba(255, 255, 255, 0.4);
+  --chart-grid: rgba(255, 255, 255, 0.08);
+  --chart-tick: rgba(255, 255, 255, 0.4);
+  --chart-label: rgba(255, 255, 255, 0.55);
+
   /* Chart series color tokens */
   --chart-blue: #60a5fa;
   --chart-orange: #f97316;
@@ -117,6 +123,11 @@
   --color-bright: #0f172a;
   --color-info: #1d4ed8;
   --color-trace-arrow: #0891b2;
+  /* Chart structural tokens (light-calibrated) */
+  --chart-axis: rgba(15, 23, 42, 0.3);
+  --chart-grid: rgba(15, 23, 42, 0.08);
+  --chart-tick: rgba(15, 23, 42, 0.3);
+  --chart-label: rgba(15, 23, 42, 0.55);
   /* Invert white text to dark text */
   --panel-alpha-02: rgba(15, 23, 42, 0.02);
   --panel-alpha-05: rgba(15, 23, 42, 0.04);

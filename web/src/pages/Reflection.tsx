@@ -325,7 +325,8 @@ const Reflection = () => {
                           { label: 'Happiness', color: 'var(--chart-indigo)', data: displayStats.map(s => s.avgHappiness) },
                         ]}
                         xLabels={displayStats.map(s => String(s.iterationNumber))}
-                        height={200}
+                        height={300}
+                        split
                       />
                     </div>
                   </>
@@ -401,7 +402,7 @@ const Reflection = () => {
                   <div style={{
                     overflow: 'hidden',
                     transition: 'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out',
-                    maxHeight: isExpanded ? '220px' : '0',
+                    maxHeight: isExpanded ? '400px' : '0',
                     opacity: isExpanded ? 1 : 0,
                   }}>
                     {isExpanded && agentHistory && agentHistory.length > 1 ? (
@@ -413,7 +414,8 @@ const Reflection = () => {
                             { label: 'Happiness', color: 'var(--chart-indigo)', data: agentHistory.map(h => h.happiness) },
                           ]}
                           xLabels={agentHistory.map(h => String(h.iter))}
-                          height={160}
+                          height={330}
+                          split
                         />
                       </div>
                     ) : isExpanded ? (

@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-04-08T02:40:53.949Z"
+stopped_at: Completed 08-05-PLAN.md
+last_updated: "2026-04-08T03:36:42.725Z"
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 46
-  completed_plans: 30
+  completed_plans: 32
 ---
 
 # Project State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** The deterministic economic engine must be realistic enough that simulation outcomes are meaningful for understanding real-world policy trade-offs.
-**Current focus:** Phase 08 — live-scenario-comparison-real-time-overlaid-economic-charts-during-parallel-simulation-runs
+**Current focus:** Phase 08 — live-scenario-comparison
 
 ## Current Position
 
-Phase: 08 (live-scenario-comparison-real-time-overlaid-economic-charts-during-parallel-simulation-runs) — EXECUTING
+Phase: 08 (live-scenario-comparison) — EXECUTING
 Plan: 3 of 8
 
 ## Performance Metrics
@@ -74,6 +74,8 @@ Plan: 3 of 8
 | Phase 09 P02 | 477 | 4 tasks | 4 files |
 | Phase 08 P04 | 4 min | 2 tasks | 9 files |
 | Phase 08 P01 | 12 min | 2 tasks | 5 files |
+| Phase 08 P08 | 10 | 2 tasks | 10 files |
+| Phase 08 P05 | 12 | 2 tasks | 3 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -163,6 +165,9 @@ Recent decisions affecting current work:
 - [Phase 08]: ConfigDiffHeader only renders scalar EconomyConfig diffs and hides for single-scenario mode. — This keeps the header concise for Plan 05 and avoids misleading output for nested objects until a dedicated formatter exists.
 - [Phase 08]: Session grouping stays nullable on the sessions table so existing sessions remain backward compatible.
 - [Phase 08]: GET /api/sessions/grouped computes scenarioCount with a correlated SQL count while preserving the flat session list endpoint.
+- [Phase 08]: Cross-scenario context keyed by agent name (lowercase) since agents across forks share names but different IDs
+- [Phase 08]: Policy brief endpoint at /api/reflect (not session-scoped) since it takes multiple session IDs
+- [Phase 08]: URL route /session/:id/simulation?scenarios= matching App.tsx, not /sessions/:id/simulate
 
 ### Roadmap Evolution
 
@@ -185,6 +190,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-08T02:40:53.943Z
-Stopped at: Completed 08-01-PLAN.md
+Last session: 2026-04-08T03:36:42.719Z
+Stopped at: Completed 08-05-PLAN.md
 Resume file: None

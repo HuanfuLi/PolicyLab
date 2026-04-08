@@ -133,7 +133,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. Economic Dashboard | 2/2 | Complete | 2026-04-02 |
 | 6. Scenario Entry | 4/4 | Complete | 2026-04-02 |
 | 7. Real-World Scenario Bootstrap | 5/5 | Complete | 2026-04-03 |
-| 8. Live Scenario Comparison | 0/7 | Planned | - |
+| 8. Live Scenario Comparison | 4/8 | In Progress|  |
 
 ### Phase 7: Real-World Scenario Bootstrap — location-based data-driven society design for policymakers
 
@@ -174,12 +174,12 @@ Plans:
   9. Users can add new scenarios to existing groups from Design Review; only new scenarios run
   10. After all scenarios finish, "View Full Comparison" button links to Phase 6's 8-dimension comparison page
   11. TelemetryPanel modal Economic tab removed (data now inline); Classic tab preserved
-**Plans:** 8 plans
+**Plans:** 4/8 plans executed
 
 Plans:
 - [x] 08-01-PLAN.md — DB schema (groupId/scenarioLabel), shared types, fork endpoint upgrade
-- [ ] 08-02-PLAN.md — Multi-provider LLM load balancer with token bucket rate limiting
-- [ ] 08-03-PLAN.md — multiScenarioStore (N SSE connections), scenarioStore parallel execution
+- [x] 08-02-PLAN.md — Multi-provider LLM load balancer with token bucket rate limiting
+- [x] 08-03-PLAN.md — multiScenarioStore (N SSE connections), scenarioStore parallel execution
 - [x] 08-04-PLAN.md — ScenarioChart, CollapsiblePanel, ConfigDiffHeader, ProgressBar, TelemetryPanel cleanup
 - [ ] 08-05-PLAN.md — Simulation page rewrite with multi-scenario charts, collapsible panels, top bar
 - [ ] 08-06-PLAN.md — Home page grouping, Reflection multi-scenario layout
