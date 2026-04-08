@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import type { TelemetryLog } from '@policylab/shared';
-import EconomicDashboard from './EconomicDashboard';
 
 // ── Chart color tokens (kept in sync with --chart-* CSS variables in index.css)
 const CHART_BLUE    = 'var(--chart-blue)';
@@ -227,7 +226,6 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [activeTab, setActiveTab] = useState<'classic' | 'economic'>('classic');
 
   const refresh = () => setRefreshKey(k => k + 1);
 
@@ -390,20 +388,18 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
         <div style={headerStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <h2 style={titleStyle}>📊 Economy Telemetry Terminal</h2>
-            {/* Tab bar */}
-            <div style={{ display: 'flex', gap: 4, background: 'var(--glass-bg)', borderRadius: 6, padding: 3 }}>
-              {(['classic', 'economic'] as const).map(tab => (
-                <button key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  style={{
-                    background: activeTab === tab ? 'var(--primary-glow)' : 'transparent',
-                    border: 'none', borderRadius: 4, color: 'var(--text-main)',
-                    cursor: 'pointer', padding: '4px 14px', fontSize: '0.8rem', fontWeight: 600,
-                    textTransform: 'capitalize',
-                  }}>
-                  {tab === 'classic' ? 'Classic' : 'Economic'}
-                </button>
-              ))}
+            <div
+              style={{
+                padding: '4px 12px',
+                borderRadius: 999,
+                background: 'var(--glass-bg)',
+                border: '1px solid var(--glass-border)',
+                color: 'var(--text-dim)',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+              }}
+            >
+              Classic
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -419,11 +415,7 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
         </div>
 
         {/* Body */}
-        {activeTab === 'economic' ? (
-          <div style={{ padding: '16px 24px' }}>
-            <EconomicDashboard data={macroHistory ?? []} />
-          </div>
-        ) : loading ? (
+        {loading ? (
           <div style={{ padding: '48px 28px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
             ⏳ Loading telemetry data...
           </div>
