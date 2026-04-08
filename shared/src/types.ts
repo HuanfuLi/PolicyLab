@@ -498,6 +498,16 @@ export interface EconomyConfig {
    * Lower values (e.g. 0.7) create sqrt-ish returns. Default: 0.7.
    */
   publicGoodsGainDiminishing?: number;
+  /**
+   * Income tax rate applied to agent WORK income and enterprise revenue each iteration.
+   * Revenue flows back to treasury for sustainable government funding. Default: 0.15 (15%).
+   */
+  incomeTaxRate?: number;
+  /**
+   * When true, public goods quality gain is scaled by spending-to-GDP ratio.
+   * Prevents trivial spending from producing 100% quality. Default: true for new sessions.
+   */
+  publicGoodsSpendingToGdpScaling?: boolean;
 }
 
 export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
@@ -528,6 +538,8 @@ export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   welfareMultiplier: 0.002,
   publicGoodsDecayRate: 0.5,
   publicGoodsGainDiminishing: 0.7,
+  incomeTaxRate: 0.15,
+  publicGoodsSpendingToGdpScaling: true,
 };
 
 export interface LoanContract {
