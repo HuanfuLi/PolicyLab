@@ -385,15 +385,18 @@ export const useMultiScenarioStore = create<MultiScenarioStore>((set, get) => ({
     await Promise.all(
       scenarioOrder.map(async (sessionId) => {
         try {
-          const [telemetryRes, statsRes] = await Promise.all([
+          const [telemetryRes, itersRes] = await Promise.all([
             fetch(`/api/sessions/${sessionId}/simulate/telemetry`),
-            fetch(`/api/sessions/${sessionId}/simulate/stats`),
+            fetch(`/api/sessions/${sessionId}/iterations?full=true`),
           ]);
-          if (!telemetryRes.ok || !statsRes.ok) return;
-          const [macroHistory, statsHistory] = await Promise.all([
+          if (!telemetryRes.ok || !itersRes.ok) return;
+          const [macroHistory, iters] = await Promise.all([
             telemetryRes.json() as Promise<TelemetryLog[]>,
-            statsRes.json() as Promise<IterationStats[]>,
+            itersRes.json() as Promise<Array<{ statistics?: IterationStats }>>,
           ]);
+          const statsHistory = iters
+            .filter((it) => it.statistics)
+            .map((it) => it.statistics!) as IterationStats[];
 
           set((state) => {
             const scenario = state.scenarios[sessionId];
