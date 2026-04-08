@@ -367,5 +367,13 @@ export function runMigrations() {
       ON public_goods_state(session_id, iteration_number);
   `);
 
+  // Phase 8: Session grouping for multi-scenario comparison
+  try {
+    sqlite.exec(`ALTER TABLE sessions ADD COLUMN group_id TEXT;`);
+  } catch { /* column already exists */ }
+  try {
+    sqlite.exec(`ALTER TABLE sessions ADD COLUMN scenario_label TEXT;`);
+  } catch { /* column already exists */ }
+
   console.log('Database migrations applied.');
 }
