@@ -1302,12 +1302,15 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             minSkill: 0,
           });
           // Create enterprise deposit account with initial capital (D-24)
-          if (bankAgent) {
+          // ownerAgentId must reference a valid agents(id) — use the enterprise owner's agent ID.
+          // If owner not found (e.g. ownerId is a name not UUID), skip deposit creation.
+          const ownerAgent = agents.find(a => a.id === bp.ownerId || a.name === bp.ownerId);
+          if (bankAgent && ownerAgent) {
             const entDepositId = `ent_${bp.id}`;
             bankingRepo.upsertDeposit({
               id: entDepositId,
               sessionId,
-              ownerAgentId: entDepositId,
+              ownerAgentId: ownerAgent.id,
               bankAgentId: bankAgent.id,
               accountType: 'demand',
               balance: bp.initialCapital,
