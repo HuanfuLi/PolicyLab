@@ -2,23 +2,27 @@ import { describe, expect, it, vi } from 'vitest';
 import type { LLMMessage, LLMOptions, LLMProvider, TestConnectionResult } from '../types.js';
 import { LoadBalancer, TokenBucket } from '../loadBalancer.js';
 
-function createMockProvider(label: string, suffix = label): LLMProvider & {
-  chat: ReturnType<typeof vi.fn>;
-  chatStream: ReturnType<typeof vi.fn>;
-  testConnection: ReturnType<typeof vi.fn>;
-} {
-  return {
-    chat: vi.fn(async (_messages: LLMMessage[], _options?: LLMOptions) => `${suffix}-chat`),
-    chatStream: vi.fn(async function* () {
+type MockProvider = LLMProvider & {
+  chat: ReturnType<typeof vi.fn<[LLMMessage[], LLMOptions?], Promise<string>>>;
+  chatStream: ReturnType<typeof vi.fn<[LLMMessage[], LLMOptions?], AsyncIterable<string>>>;
+  testConnection: ReturnType<typeof vi.fn<[], Promise<TestConnectionResult>>>;
+};
+
+function createMockProvider(label: string, suffix = label): MockProvider {
+  const provider: MockProvider = {
+    chat: vi.fn<[LLMMessage[], LLMOptions?], Promise<string>>(async (_messages: LLMMessage[], _options?: LLMOptions) => `${suffix}-chat`),
+    chatStream: vi.fn<[LLMMessage[], LLMOptions?], AsyncIterable<string>>(async function* () {
       yield `${suffix}-stream-1`;
       yield `${suffix}-stream-2`;
     }),
-    testConnection: vi.fn(async (): Promise<TestConnectionResult> => ({
+    testConnection: vi.fn<[], Promise<TestConnectionResult>>(async (): Promise<TestConnectionResult> => ({
       ok: true,
       model: `${label}-model`,
       latencyMs: 5,
     })),
   };
+
+  return provider;
 }
 
 describe('TokenBucket', () => {
