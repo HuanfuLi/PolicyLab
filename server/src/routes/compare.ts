@@ -173,7 +173,6 @@ router.post('/', async (req, res) => {
     const llmMessages = buildComparisonMessages(summary1, summary2);
     const raw = await provider.chat(llmMessages, {
       model: settings.centralAgentModel,
-      maxTokens: 65536,
       jsonSchema: {
         name: 'session_comparison',
         schema: {
@@ -312,7 +311,7 @@ router.post('/chat', async (req, res) => {
       history,
       message.trim()
     );
-    const reply = await provider.chat(llmMessages, { model: settings.centralAgentModel, maxTokens: 65536 });
+    const reply = await provider.chat(llmMessages, { model: settings.centralAgentModel });
 
     await db.insert(chatMessages).values({
       id: uuidv4(),

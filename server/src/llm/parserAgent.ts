@@ -242,7 +242,6 @@ export async function runParserAgent(
         const messages = buildParserPrompt(naturalLanguageIntent, agentName, agentRole, aliveAgentNames);
         const raw = await provider.chat(messages, {
             ...options,
-            maxTokens: 65536,
             temperature: 0, // Deterministic
             jsonSchema: {
                 name: 'action_parse',

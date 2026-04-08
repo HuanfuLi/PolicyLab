@@ -78,7 +78,6 @@ async function selectPoliticians(
     const messages = buildFranchiseSizePrompt(agents.length, societyContext);
     const raw = await provider.chat(messages, {
       model,
-      maxTokens: 65536,
       jsonSchema: {
         name: 'franchise_size',
         schema: {
@@ -168,7 +167,6 @@ export async function runGovernanceCycle(params: {
       const messages = buildProposalPrompt(agent, currentPolicy, societyContext, iterNum);
       const raw = await citizenProv.chat(messages, {
         model: citizenModel,
-        maxTokens: 65536,
         jsonSchema: {
           name: 'policy_proposal',
           schema: {
@@ -217,7 +215,6 @@ export async function runGovernanceCycle(params: {
     const messages = buildBallotPrompt(rawProposals, currentPolicy, societyContext);
     const raw = await provider.chat(messages, {
       model,
-      maxTokens: 65536,
       jsonSchema: {
         name: 'governance_ballot',
         schema: {
@@ -282,7 +279,6 @@ export async function runGovernanceCycle(params: {
         const messages = buildVotePrompt(agent, item, currentPolicy);
         const raw = await citizenProv.chat(messages, {
           model: citizenModel,
-          maxTokens: 65536,
           jsonSchema: {
             name: 'vote_decision',
             schema: {

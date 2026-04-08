@@ -45,7 +45,6 @@ export async function brainstorm(
   const provider = getProvider();
   const messages = buildBrainstormMessages(idea, history, userMessage, currentChecklist);
   const raw = await withRetry(() => provider.chat(messages, {
-    maxTokens: 65536,
     jsonSchema: {
       name: 'brainstorm_response',
       schema: {
@@ -164,7 +163,6 @@ export async function generateDesign(
 
   const overviewData = await withRetry(async () => {
     const raw = await provider.chat(buildOverviewMessages(session.idea, brainstormSummary), {
-      maxTokens: 65536,
       jsonSchema: {
         name: 'society_overview',
         schema: {
@@ -219,7 +217,6 @@ export async function generateDesign(
         overviewData.economicModel
       ),
       {
-        maxTokens: 65536,
         jsonSchema: {
           name: 'law_document',
           schema: {
@@ -256,7 +253,6 @@ export async function generateDesign(
         overviewData.economicModel
       ),
       {
-        maxTokens: 65536,
         jsonSchema: {
           name: 'agent_roster',
           schema: {
@@ -468,7 +464,7 @@ export async function refine(
     userMessage
   );
 
-  const raw = await withRetry(() => provider.chat(messages, { maxTokens: 65536 }));
+  const raw = await withRetry(() => provider.chat(messages, {}));
   const parsed = parseJSON<{
     reply: string;
     artifactsUpdated: Array<'overview' | 'law' | 'agents'>;

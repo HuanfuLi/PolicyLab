@@ -227,7 +227,6 @@ export async function runPlanning(
         );
         const raw = await provider.chat(messages, {
             ...options,
-            maxTokens: 65536,
             temperature: 0.6,
             jsonSchema: {
                 name: 'agent_plan',

@@ -170,7 +170,6 @@ router.post('/:id/bootstrap', async (req, res) => {
           { role: 'system', content: 'You are a political analyst. Describe the government type, key economic regulations, and property rights system.' },
           { role: 'user', content: `Briefly describe the government type, key economic regulations, and property rights system for ${location} (${countryCode}). Be factual and concise.` },
         ], {
-          maxTokens: 65536,
           jsonSchema: {
             name: 'governance_analysis',
             schema: {
@@ -207,7 +206,6 @@ router.post('/:id/bootstrap', async (req, res) => {
           { role: 'system', content: 'You are an infrastructure analyst. Describe the infrastructure state.' },
           { role: 'user', content: `Briefly describe the infrastructure state for ${location} (${countryCode}): transportation, energy, communications. Be factual and concise.` },
         ], {
-          maxTokens: 65536,
           jsonSchema: {
             name: 'infrastructure_analysis',
             schema: {
@@ -247,7 +245,6 @@ router.post('/:id/bootstrap', async (req, res) => {
           provider.chat(
             buildScenarioInterpretationMessages(scenario, economyConfig, profile),
             {
-              maxTokens: 65536,
               jsonSchema: {
                 name: 'scenario_overrides',
                 schema: {
@@ -288,7 +285,6 @@ router.post('/:id/bootstrap', async (req, res) => {
         provider.chat(
           buildLocationAgentRosterMessages(profile, blueprints, scenario),
           {
-            maxTokens: 65536,
             jsonSchema: {
               name: 'agent_roster',
               schema: {
@@ -346,7 +342,6 @@ router.post('/:id/bootstrap', async (req, res) => {
         provider.chat(
           buildLocationLawMessages(profile, lawContext, scenario),
           {
-            maxTokens: 65536,
             jsonSchema: {
               name: 'law_document',
               schema: {
@@ -388,7 +383,6 @@ ${scenario ? `\nPolicy scenario to explore: ${scenario}` : ''}
 
 The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "Detroit Economic Recovery Model"). The overview should describe the economic context, key challenges, and what this simulation will explore. Use real numbers from the data above.` },
         ], {
-          maxTokens: 65536,
           jsonSchema: {
             name: 'society_overview',
             schema: {

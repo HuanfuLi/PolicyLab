@@ -164,7 +164,6 @@ export async function runReflection(
         const messages = buildReflectionPrompt(agentName, agentRole, recentMemories, currentStats);
         const raw = await provider.chat(messages, {
             ...options,
-            maxTokens: 65536,
             temperature: 0.7, // Some creativity for reflections
             jsonSchema: {
                 name: 'agent_reflection',

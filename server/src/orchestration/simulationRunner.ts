@@ -1860,7 +1860,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           const legalityMessages = buildLegalityCheckPrompt(legalityInput, session.law, session.societyOverview ?? null);
           const rawLegality = await provider.chat(legalityMessages, {
             model: settings.centralAgentModel,
-            maxTokens: 65536,
             jsonSchema: {
               name: 'legality_check',
               schema: {
@@ -1989,7 +1988,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
                     const legalityMsgs = buildLegalityCheckPrompt(legalityInput, session.law!, session.societyOverview ?? null);
                     const rawLegality = await citizenProv.chat(legalityMsgs, {
                       model: settings.citizenAgentModel,
-                      maxTokens: 65536,
                       jsonSchema: {
                         name: 'legality_check',
                         schema: {
@@ -4306,7 +4304,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     });
     let finalReport = '';
     try {
-      const finalRaw = await provider.chat(finalMessages, { model: settings.centralAgentModel, maxTokens: 65536 });
+      const finalRaw = await provider.chat(finalMessages, { model: settings.centralAgentModel });
       finalReport = parseFinalReport(finalRaw);
     } catch {
       finalReport = `The simulation of "${session.idea}" concluded after ${endIter} iterations with ${finalStats.aliveCount} survivors.`;
@@ -4348,7 +4346,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           const messages = buildPostMortemPrompt(input);
           const raw = await citizenProv.chat(messages, {
             model: settings.citizenAgentModel,
-            maxTokens: 65536,
             jsonSchema: {
               name: 'post_mortem',
               schema: {

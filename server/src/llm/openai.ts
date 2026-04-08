@@ -127,9 +127,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
       try {
         const params: Record<string, unknown> = {
           model: options.model ?? this.defaultModel,
-          max_tokens: options.maxTokens ?? 65536,
           messages: mapped,
         };
+
+        // Only set max_tokens if explicitly provided — local models have variable
+        // context limits and setting a value too high causes API errors.
+        if (options.maxTokens) {
+          params.max_tokens = options.maxTokens;
+        }
 
         // Structured output: many OpenAI-compatible servers (LM Studio, vLLM) support json_schema
         if (options.jsonSchema) {
@@ -172,15 +177,18 @@ export class OpenAICompatibleProvider implements LLMProvider {
   }
 
   async *chatStream(messages: LLMMessage[], options: LLMOptions = {}): AsyncIterable<string> {
-    const stream = await this.client.chat.completions.create({
+    const params: Record<string, unknown> = {
       model: options.model ?? this.defaultModel,
-      max_tokens: options.maxTokens ?? 65536,
       messages: messages.map(m => ({
         role: m.role as any,
         content: typeof m.content === 'string' ? m.content : m.content.map(b => b.text).join('\n'),
       })),
       stream: true,
-    });
+    };
+    if (options.maxTokens) {
+      params.max_tokens = options.maxTokens;
+    }
+    const stream = await this.client.chat.completions.create(params as any) as unknown as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
 
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta?.content;
