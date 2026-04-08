@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Play, Users, Clock, Download, Upload } from 'lucide-react';
+import { Plus, Trash2, Play, Users, Clock, Download, Upload, Layers } from 'lucide-react';
 import { useSessionsStore } from '../stores/sessionsStore';
 import type { SessionMetadata, SessionStage } from '@policylab/shared';
 
@@ -79,6 +79,44 @@ const HomePage = () => {
     }
   };
 
+  // Group sessions by groupId; standalone sessions have null groupId
+  type DisplayItem =
+    | { type: 'group'; groupId: string; sessions: SessionMetadata[] }
+    | { type: 'standalone'; session: SessionMetadata };
+
+  const displayItems = useMemo<DisplayItem[]>(() => {
+    const visible = sessions.filter(s => s.stage !== 'idea-input');
+    const grouped = new Map<string, SessionMetadata[]>();
+    const standalone: SessionMetadata[] = [];
+    for (const s of visible) {
+      if (s.groupId) {
+        const g = grouped.get(s.groupId) ?? [];
+        g.push(s);
+        grouped.set(s.groupId, g);
+      } else {
+        standalone.push(s);
+      }
+    }
+    // Sort each group by createdAt so base session is first
+    for (const g of grouped.values()) {
+      g.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    }
+    const items: DisplayItem[] = [];
+    for (const [groupId, groupSessions] of grouped) {
+      items.push({ type: 'group', groupId, sessions: groupSessions });
+    }
+    for (const s of standalone) {
+      items.push({ type: 'standalone', session: s });
+    }
+    // Sort all items by most recent first (using base session date for groups)
+    items.sort((a, b) => {
+      const dateA = a.type === 'group' ? a.sessions[0].createdAt : a.session.createdAt;
+      const dateB = b.type === 'group' ? b.sessions[0].createdAt : b.session.createdAt;
+      return new Date(dateB).getTime() - new Date(dateA).getTime();
+    });
+    return items;
+  }, [sessions]);
+
   return (
     <div className="animate-fade-in">
       <input
@@ -128,7 +166,85 @@ const HomePage = () => {
 
       {sessions.length > 0 && (
         <div className="dashboard-grid">
-          {sessions.filter(s => s.stage !== 'idea-input').map(session => {
+          {displayItems.map(item => {
+            if (item.type === 'group') {
+              const base = item.sessions[0];
+              const badge = stageBadge[base.stage] ?? { label: base.stage, cls: 'badge-info' };
+              const resumeRoute = getResumeRoute(base);
+              const labels = item.sessions
+                .map(s => s.scenarioLabel)
+                .filter(Boolean)
+                .join(', ');
+              return (
+                <div key={`group-${item.groupId}`} className="glass-card" style={{ cursor: 'pointer' }} onClick={() => navigate(resumeRoute)}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                    <h3 style={{ fontSize: '1.1rem', color: 'var(--color-bright)', flex: 1, marginRight: '1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {base.title}
+                    </h3>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        padding: '2px 8px', borderRadius: 12,
+                        background: 'var(--primary-alpha, rgba(79,70,229,0.1))',
+                        color: 'var(--primary)', fontSize: 12, fontWeight: 700,
+                      }}>
+                        <Layers size={12} /> {item.sessions.length} scenarios
+                      </span>
+                      <span className={`badge ${badge.cls}`}>{badge.label}</span>
+                    </div>
+                  </div>
+                  {labels && (
+                    <p style={{ color: 'var(--text-dim)', fontSize: '12px', marginBottom: '1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {labels}
+                    </p>
+                  )}
+                  <p className="text-muted" style={{ marginBottom: '1.5rem', minHeight: '48px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                    "{base.idea}"
+                  </p>
+                  <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1.5rem', fontSize: '0.9rem', color: 'var(--text-dim)' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Users size={16} /> {base.agentCount} agents
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Clock size={16} /> {base.completedIterations} iter
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+                      {formatDate(base.createdAt)}
+                    </span>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        className="btn-secondary"
+                        style={{ padding: '0.5rem' }}
+                        onClick={(e) => { e.stopPropagation(); navigate(resumeRoute); }}
+                        title="Resume"
+                      >
+                        <Play size={16} />
+                      </button>
+                      <button
+                        className="btn-secondary"
+                        style={{ padding: '0.5rem' }}
+                        title="Export base session"
+                        onClick={(e) => { e.stopPropagation(); handleExport(e, base.id); }}
+                      >
+                        <Download size={16} />
+                      </button>
+                      <button
+                        className="btn-secondary"
+                        style={{ padding: '0.5rem', color: 'var(--danger)' }}
+                        title="Delete base session"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(e, base.id); }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            // Standalone session
+            const session = item.session;
             const badge = stageBadge[session.stage] ?? { label: session.stage, cls: 'badge-info' };
             const resumeRoute = getResumeRoute(session);
             return (
