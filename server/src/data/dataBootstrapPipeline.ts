@@ -15,8 +15,12 @@ import type {
   BudgetAllocation,
   ConfidenceLevel,
   DataSource,
+  EnterpriseBlueprint,
+  EnterpriseSector,
+  EnterpriseCommodity,
 } from '@policylab/shared';
 import { distributeWealth } from './giniDistribution.js';
+import { getRoleTier } from '../mechanics/actionCodes.js';
 
 /** Iterations per year — all annual rates are divided by this. */
 const ITERATIONS_PER_YEAR = 12;
@@ -314,6 +318,161 @@ export function generateAgentRoster(
   }
 
   return agents;
+}
+
+// ── Enterprise Bootstrap (Phase 10 — D-01 through D-04) ─────────────────────
+
+/** Map agent role to enterprise sector. */
+function roleToSector(role: string): EnterpriseSector {
+  const lower = role.toLowerCase();
+  if (/farmer|ranch|agri|fish/.test(lower)) return 'agriculture';
+  if (/factory|engineer|foreman|manufactur|min/.test(lower)) return 'industry';
+  if (/teacher|doctor|healthcare|official|military|police|nurse/.test(lower)) return 'government';
+  if (/merchant|artisan|trader|clerk/.test(lower)) return 'services';
+  // Default: services for unclassified roles
+  return 'services';
+}
+
+/** Map sector to commodity output. */
+function sectorToCommodity(sector: EnterpriseSector): EnterpriseCommodity {
+  switch (sector) {
+    case 'agriculture': return 'food';
+    case 'industry': return 'tools';
+    case 'services': return 'luxury_goods';
+    case 'government': return 'none';
+  }
+}
+
+/** Map sector to industry name. */
+function sectorToIndustry(sector: EnterpriseSector, index: number): string {
+  switch (sector) {
+    case 'agriculture': return index % 2 === 0 ? 'farming' : 'ranching';
+    case 'industry': return index % 2 === 0 ? 'manufacturing' : 'mining';
+    case 'services': return index % 2 === 0 ? 'trading' : 'crafting';
+    case 'government': return index % 2 === 0 ? 'education' : 'healthcare';
+  }
+}
+
+/** Map sector to human-readable enterprise name prefix. */
+function sectorToNamePrefix(sector: EnterpriseSector): string {
+  switch (sector) {
+    case 'agriculture': return 'Farm Enterprise';
+    case 'industry': return 'Factory Enterprise';
+    case 'services': return 'Trade Enterprise';
+    case 'government': return 'Public Service';
+  }
+}
+
+/**
+ * Generate enterprise blueprints from agent roster and optional WB data.
+ *
+ * Creates 1-3 enterprises per sector based on WB enterprise density data
+ * or a fallback heuristic (ceil(sectorAgents / 5)). Elite/specialist agents
+ * are assigned as owners; laborers become employees.
+ *
+ * @param agents - Agent roster (output of generateAgentRoster)
+ * @param profile - LocationProfile (null for creative-mode or fallback)
+ * @param baseFiat - Base fiat currency amount
+ * @param minimumWage - Minimum wage floor
+ */
+export function generateEnterprises(
+  agents: AgentBlueprint[],
+  profile: LocationProfile | null,
+  baseFiat: number,
+  minimumWage: number,
+): EnterpriseBlueprint[] {
+  // Group agents by sector
+  const sectorGroups = new Map<EnterpriseSector, AgentBlueprint[]>();
+  for (const agent of agents) {
+    const sector = agent.sector ?? roleToSector(agent.role);
+    const list = sectorGroups.get(sector) ?? [];
+    list.push(agent);
+    sectorGroups.set(sector, list);
+  }
+
+  const gdpPerCapita = profile?.economics?.gdpPerCapita?.value ?? 10000;
+  const initialCapital = Math.round(gdpPerCapita * 0.3);
+  const wage = Math.max(minimumWage, baseFiat * 0.05);
+  const enterprises: EnterpriseBlueprint[] = [];
+
+  for (const [sector, sectorAgents] of sectorGroups) {
+    // Determine enterprise count for this sector
+    let entCount: number;
+    if (profile?.economics?.enterpriseDensity?.value != null) {
+      const density = profile.economics.enterpriseDensity.value;
+      entCount = Math.max(1, Math.min(3, Math.round(density * sectorAgents.length / 1000)));
+      // Density-based calc may round to 0 for small populations, enforce minimum 1
+      if (entCount < 1) entCount = 1;
+    } else {
+      entCount = Math.max(1, Math.min(3, Math.ceil(sectorAgents.length / 5)));
+    }
+
+    // Select owners: elite/specialist first, fallback to highest-wealth agent
+    const eligible = sectorAgents.filter(a => getRoleTier(a.role) !== 'laborer');
+    const owners: AgentBlueprint[] = eligible.length > 0
+      ? eligible.slice(0, entCount)
+      : sectorAgents.sort((a, b) => b.initialWealth - a.initialWealth).slice(0, entCount);
+
+    // Pad owners if we have fewer eligible than entCount
+    while (owners.length < entCount && owners.length < sectorAgents.length) {
+      const remaining = sectorAgents.filter(a => !owners.includes(a));
+      if (remaining.length === 0) break;
+      owners.push(remaining[0]);
+    }
+
+    // Employees: all sector agents who are not owners
+    const employees = sectorAgents.filter(a => !owners.includes(a));
+
+    // Create enterprises
+    for (let i = 0; i < owners.length; i++) {
+      const isGov = sector === 'government';
+      const commodity = sectorToCommodity(sector);
+
+      // Seed initial inventory by sector
+      let initialInventory: Record<string, number> = {};
+      switch (sector) {
+        case 'agriculture':
+          initialInventory = { food: Math.round(initialCapital * 0.3) };
+          break;
+        case 'industry':
+          initialInventory = {
+            tools: Math.round(initialCapital * 0.2),
+            raw_materials: Math.round(initialCapital * 0.1),
+          };
+          break;
+        case 'services':
+          initialInventory = { luxury_goods: Math.round(initialCapital * 0.15) };
+          break;
+        case 'government':
+          initialInventory = {};
+          break;
+      }
+
+      // Distribute employees round-robin across enterprises in this sector
+      const entEmployees: string[] = [];
+      for (let j = 0; j < employees.length; j++) {
+        if (j % owners.length === i) {
+          entEmployees.push(employees[j].name);
+        }
+      }
+
+      enterprises.push({
+        id: `ent_${sector.slice(0, 4)}_${i + 1}`,
+        name: `${sectorToNamePrefix(sector)} ${i + 1}`,
+        ownerId: owners[i].name,
+        sector,
+        industry: sectorToIndustry(sector, i),
+        commodityOutput: commodity,
+        initialCapital,
+        initialInventory,
+        employees: entEmployees,
+        wage,
+        isServiceEnterprise: isGov,
+      });
+    }
+  }
+
+  return enterprises;
 }
 
 /**

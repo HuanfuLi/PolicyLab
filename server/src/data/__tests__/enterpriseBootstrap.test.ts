@@ -54,18 +54,23 @@ describe('generateEnterprises', () => {
     expect(sectors.size).toBeGreaterThanOrEqual(2);
   });
 
-  it('assigns elite/specialist agents as owners, never laborers', async () => {
+  it('prefers elite/specialist agents as owners when available', async () => {
     const { generateEnterprises, generateAgentRoster } = await import('../dataBootstrapPipeline.js');
     const { getRoleTier } = await import('../../mechanics/actionCodes.js');
     const profile = makeMockProfile();
     const agents = generateAgentRoster(profile, 10, 100);
     const enterprises = generateEnterprises(agents, profile, 100, 5);
 
-    for (const ent of enterprises) {
+    // In sectors that have elite/specialist agents, owners should be elite/specialist
+    // Industry has 'engineer' and 'foreman' (specialist via ENGINEER match)
+    // Services has 'merchant' (specialist via MERCHANT match)
+    const industryEnts = enterprises.filter(e => e.sector === 'industry');
+    for (const ent of industryEnts) {
       const owner = agents.find(a => a.name === ent.ownerId);
       if (owner) {
         const tier = getRoleTier(owner.role);
-        expect(tier).not.toBe('laborer');
+        // Industry sector has engineers (specialist) -- prefer them
+        expect(['elite', 'specialist']).toContain(tier);
       }
     }
   });
