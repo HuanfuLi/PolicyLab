@@ -416,6 +416,11 @@ function clampStat(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
+// Minimum physiological cortisol level — even in good economic conditions, background
+// stress from work, uncertainty, and aging is always present. Prevents cortisol from
+// becoming a meaningless metric in well-functioning economies.
+const CORTISOL_FLOOR = 3;
+
 // Wealth has no upper bound — only floored at 0. No rounding: rounding destroys fractional fiat.
 function clampWealth(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -2800,7 +2805,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
         for (const agent of aliveAgents) {
           const weekState = weekStateMap.get(agent.id)!;
-          const currentCortisol = clampStat((agent.currentStats.cortisol ?? 20) + weekState.cortisolDelta);
+          const currentCortisol = Math.max(CORTISOL_FLOOR, clampStat((agent.currentStats.cortisol ?? 20) + weekState.cortisolDelta));
           const currentDopamine = clampStat((agent.currentStats.dopamine ?? 50) + weekState.dopamineDelta);
           const priorState = sessionAlloStates.get(agent.id) ?? { allostaticStrain: 0, allostaticLoad: 0 };
           const engine = new AllostaticEngine(priorState);
@@ -2909,7 +2914,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         let newWealth = clampWealth(agent.currentStats.wealth + r4(weekState.wealthDelta));
         let newHealth = clampStat(agent.currentStats.health + weekState.healthDelta);
         let newHappiness = clampStat(agent.currentStats.happiness + weekState.happinessDelta);
-        let newCortisol = clampStat((agent.currentStats.cortisol ?? 20) + weekState.cortisolDelta);
+        let newCortisol = Math.max(CORTISOL_FLOOR, clampStat((agent.currentStats.cortisol ?? 20) + weekState.cortisolDelta));
         let newDopamine = clampStat((agent.currentStats.dopamine ?? 50) + weekState.dopamineDelta);
 
         // Task 1: Psychological clamping — cap Happiness based on physiological state.

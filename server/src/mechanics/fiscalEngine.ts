@@ -95,11 +95,12 @@ const QUALITY_GAIN_SCALE_FACTOR = 0.264;
 // At this ratio, quality gain reaches maximum per iteration.
 const TARGET_SPENDING_RATIO = 0.10;
 
-// GDP-scaled gain: max achievable quality gain per iteration when spending ratio >= target.
-// At 100% effect (spendingRatio >= target), gain is 75 quality points per iteration
-// (before diminishing returns). With quality clamp at 100, achieving max quality
-// requires sustained significant spending over multiple iterations.
-const GDP_SCALED_MAX_GAIN_PER_ITER = 75;
+// GDP-scaled max quality gain per iteration at full target spending (10% of GDP per category).
+// At full funding: 6 pts/iter → reaching 100% quality requires ~17 iterations of maximum spending.
+// At typical 2% GDP spending: ~2 pts/iter — quality improves slowly, creating real fiscal trade-offs.
+// At 1% GDP spending: <1.5 pts/iter — quality barely grows, creates meaningful policy tension.
+// Calibrated from simulation data: old value of 75 caused saturation in 3 iterations at 1.8% GDP.
+const GDP_SCALED_MAX_GAIN_PER_ITER = 6;
 
 /**
  * Update a single quality score given spending and config.

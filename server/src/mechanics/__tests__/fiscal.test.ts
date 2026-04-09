@@ -503,9 +503,8 @@ describe('executeBudget with GDP-scaled public goods', () => {
     expect(delta.updatedPublicGoods.infrastructureQuality).toBeGreaterThan(0);
   });
 
-  it('spending 10% of GDP produces quality ~60-70%', () => {
-    // Each category gets 25% of spending, so we need total spending = 40% GDP
-    // for each category to see 10%. Or: allocate 100% to infra and spend 10% GDP.
+  it('spending 10% of GDP produces ~6 quality points per iteration (calibrated max)', () => {
+    // Each category gets 25% of spending, so allocate 100% to infra and spend 10% GDP.
     const infraOnly: BudgetAllocation = {
       infrastructure: 1.0,
       education: 0,
@@ -514,6 +513,7 @@ describe('executeBudget with GDP-scaled public goods', () => {
     };
 
     // 10% of 10000 GDP = 1000 spending on infra
+    // ratioEffect = 1.0, diminishedEffect = 1.0, gain = 6 pts (from 0: result = 6)
     const delta = executeBudget({
       treasuryBalance: 10000, // 10000 * 0.10 = 1000 spending, all to infra
       budgetAllocation: infraOnly,
@@ -524,12 +524,13 @@ describe('executeBudget with GDP-scaled public goods', () => {
       totalEconomyFiat: 10000,
     });
 
-    // 1000 / 10000 = 10% GDP → should produce meaningful quality
-    expect(delta.updatedPublicGoods.infrastructureQuality).toBeGreaterThan(40);
-    expect(delta.updatedPublicGoods.infrastructureQuality).toBeLessThan(80);
+    // 1000 / 10000 = 10% GDP → full target → gain = 6 pts/iter (calibrated max)
+    // Quality does NOT saturate in a single iteration — requires sustained spending
+    expect(delta.updatedPublicGoods.infrastructureQuality).toBeGreaterThan(0);
+    expect(delta.updatedPublicGoods.infrastructureQuality).toBeLessThan(20);
   });
 
-  it('spending 25%+ of GDP produces quality ~90-100%', () => {
+  it('spending 25%+ of GDP still caps at 6 quality points (ratioEffect capped at 1.0)', () => {
     const infraOnly: BudgetAllocation = {
       infrastructure: 1.0,
       education: 0,
@@ -538,7 +539,7 @@ describe('executeBudget with GDP-scaled public goods', () => {
     };
 
     // Want 25% of GDP on infra. Treasury 50000, rate 0.10 = 5000 spending. GDP = 20000.
-    // 5000/20000 = 25%
+    // 5000/20000 = 25% → ratioEffect capped at 1.0 → gain = 6 pts (same as 10% GDP)
     const delta = executeBudget({
       treasuryBalance: 50000,
       budgetAllocation: infraOnly,
@@ -549,7 +550,9 @@ describe('executeBudget with GDP-scaled public goods', () => {
       totalEconomyFiat: 20000,
     });
 
-    expect(delta.updatedPublicGoods.infrastructureQuality).toBeGreaterThan(60);
+    // Overspending above target ratio still only yields 6 pts max (ratioEffect capped at 1.0)
+    expect(delta.updatedPublicGoods.infrastructureQuality).toBeGreaterThan(0);
+    expect(delta.updatedPublicGoods.infrastructureQuality).toBeLessThanOrEqual(6.1);
   });
 
   it('backward compat: old formula when publicGoodsSpendingToGdpScaling is false', () => {
@@ -594,5 +597,53 @@ describe('executeBudget with GDP-scaled public goods', () => {
     });
 
     expect(delta.updatedPublicGoods.infrastructureQuality).toBeLessThan(50);
+  });
+});
+
+// ── GDP-Scaled Quality Calibration Tests ────────────────────────────────────
+// These tests verify the GDP_SCALED_MAX_GAIN_PER_ITER = 6 calibration goal:
+// public goods quality must require sustained fiscal commitment to improve.
+
+describe('GDP-scaled quality calibration', () => {
+  it('produces ~6 quality points at full 10% GDP spending', () => {
+    // spendAmount = 1000, totalEconomyFiat = 10000 → spendingRatio = 0.10 (full target)
+    // ratioEffect = 1.0, diminishedEffect = 1.0, gain = 6.0
+    const result = updatePublicGoodsQuality({
+      currentQuality: 50,
+      spendAmount: 1000,
+      decayRate: 0.5,
+      diminishingExponent: 0.7,
+      gdpScaling: true,
+      totalEconomyFiat: 10000,
+    });
+    expect(result).toBeCloseTo(56, 0);  // 50 + 6 = 56
+  });
+
+  it('produces less than 1.5 quality points at 1% GDP spending', () => {
+    // spendAmount = 100, totalEconomyFiat = 10000 → spendingRatio = 0.01 (10% of target)
+    // ratioEffect = 0.1, diminishedEffect = 0.1^0.7 ≈ 0.2, gain = 6 × 0.2 = 1.2
+    const result = updatePublicGoodsQuality({
+      currentQuality: 50,
+      spendAmount: 100,
+      decayRate: 0.5,
+      diminishingExponent: 0.7,
+      gdpScaling: true,
+      totalEconomyFiat: 10000,
+    });
+    expect(result - 50).toBeLessThan(1.5);
+    expect(result - 50).toBeGreaterThan(0);
+  });
+
+  it('clamps to 100 when quality is near max even at full spending', () => {
+    // 95 + 6 = 101 → clamped to 100
+    const result = updatePublicGoodsQuality({
+      currentQuality: 95,
+      spendAmount: 1000,
+      decayRate: 0.5,
+      diminishingExponent: 0.7,
+      gdpScaling: true,
+      totalEconomyFiat: 10000,  // 10% GDP spending → 6 pts
+    });
+    expect(result).toBe(100);
   });
 });
