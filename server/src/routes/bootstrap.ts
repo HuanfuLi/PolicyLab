@@ -261,42 +261,59 @@ router.post('/:id/bootstrap', async (req, res) => {
     const blueprints = generateAgentRoster(profile, clampedAgentCount, baseFiat);
 
     // 5d: Generate agent backgrounds via LLM in batches.
-    // Batching avoids local-model output-token limits: generating 50 backgrounds in one
-    // call truncates the response (LM Studio default is often 4096 output tokens).
+    // Batching keeps response sizes manageable across model variants.
     // Batches of 10 produce ~800-1200 tokens each, well within any local model limit.
     const ROSTER_BATCH_SIZE = 10;
     const provider = getProvider();
     let rosterEnrichmentFailed = false;
+    let rosterEnrichmentError: string | undefined;
+
+    // Regex fallback: some models (e.g. Gemma-4) produce valid content but with
+    // structural JSON errors (unquoted keys, missing braces). Extract name+background
+    // pairs directly from raw text when parseJSON fails.
+    function extractAgentPairs(text: string): Array<{ name: string; background: string }> {
+      const names = [...text.matchAll(/"name"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
+      const bgs = [...text.matchAll(/"background"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
+      if (names.length > 0 && names.length === bgs.length) {
+        return names.map((name, i) => ({ name, background: bgs[i] }));
+      }
+      return [];
+    }
 
     for (let batchStart = 0; batchStart < blueprints.length; batchStart += ROSTER_BATCH_SIZE) {
       const batchBlueprints = blueprints.slice(batchStart, batchStart + ROSTER_BATCH_SIZE);
       try {
         const rosterRaw = await withRetry(() =>
           provider.chat(buildLocationAgentRosterMessages(profile, batchBlueprints, scenario)));
-        const rosterData = parseJSON<{
-          agents: Array<{ name: string; background: string }>;
-        }>(rosterRaw);
 
-        if (Array.isArray(rosterData.agents)) {
-          for (let i = 0; i < Math.min(rosterData.agents.length, batchBlueprints.length); i++) {
-            const globalIdx = batchStart + i;
-            if (rosterData.agents[i].name) blueprints[globalIdx].name = rosterData.agents[i].name;
-            if (rosterData.agents[i].background) blueprints[globalIdx].background = rosterData.agents[i].background;
-          }
-        } else {
-          console.warn(`[bootstrap] Batch ${batchStart}-${batchStart + ROSTER_BATCH_SIZE}: rosterData.agents is not an array`);
-          rosterEnrichmentFailed = true;
-          break;
+        let agentEntries: Array<{ name: string; background: string }> = [];
+        try {
+          const rosterData = parseJSON<{ agents: Array<{ name: string; background: string }> }>(rosterRaw);
+          if (Array.isArray(rosterData.agents)) agentEntries = rosterData.agents;
+        } catch {
+          // JSON structurally malformed (e.g. missing braces, unquoted keys) —
+          // try regex extraction as a resilient fallback before giving up.
+          agentEntries = extractAgentPairs(rosterRaw);
+          if (agentEntries.length === 0) throw new Error('Both JSON parse and regex extraction failed');
+          console.warn(`[bootstrap] Batch ${batchStart}: JSON parse failed, recovered ${agentEntries.length} agents via regex`);
+        }
+
+        for (let i = 0; i < Math.min(agentEntries.length, batchBlueprints.length); i++) {
+          const globalIdx = batchStart + i;
+          if (agentEntries[i].name) blueprints[globalIdx].name = agentEntries[i].name;
+          if (agentEntries[i].background) blueprints[globalIdx].background = agentEntries[i].background;
         }
       } catch (err) {
-        console.warn(`[bootstrap] Batch ${batchStart}-${batchStart + ROSTER_BATCH_SIZE} LLM enrichment failed:`, err);
+        const detail = err instanceof Error ? err.message : String(err);
+        console.warn(`[bootstrap] Batch ${batchStart} LLM enrichment failed:`, err);
         rosterEnrichmentFailed = true;
+        rosterEnrichmentError = detail;
         break;
       }
     }
 
     if (rosterEnrichmentFailed) {
-      const msg = 'Bootstrap aborted: Agent background generation failed. The LLM call returned an error or malformed JSON. Please check that your LLM provider is running and try again.';
+      const msg = `Bootstrap aborted: Agent background generation failed (${rosterEnrichmentError ?? 'unknown error'}). Check the server console for details.`;
       sendEvent({ type: 'error', step: 'generation', message: msg } as any);
       clearInterval(heartbeatInterval);
       res.end();
