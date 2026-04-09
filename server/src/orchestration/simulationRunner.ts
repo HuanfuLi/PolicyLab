@@ -107,6 +107,17 @@ import {
 import { simulationManager } from './simulationManager.js';
 
 /**
+ * Baseline prices for non-food commodities used as CPI basket fallback when
+ * multi-AMM pools have no trading volume yet (tools, luxury_goods, raw_materials).
+ * Ensures all basket items have non-zero base prices so CPI responds to real price changes.
+ */
+const NON_FOOD_COMMODITY_BASELINES: Record<string, number> = {
+  raw_materials: 4.0,
+  luxury_goods: 12.0,
+  tools: 12.0,
+};
+
+/**
  * Thrown when intent parsing is exhausted (all retries used) for a specific agent.
  * Caught by the outer simulation loop to pause cleanly rather than silently defaulting to REST.
  */
@@ -587,9 +598,9 @@ function getInflationBasketPrices(
   const basePrices = economyConfig.cpiBasePrices ?? {};
   return {
     food: iterationPrices.get('food') ?? priceHistory?.get('food') ?? basePrices.food ?? 1,
-    tools: iterationPrices.get('tools') ?? priceHistory?.get('tools') ?? basePrices.tools ?? 1,
-    luxury_goods: iterationPrices.get('luxury_goods') ?? priceHistory?.get('luxury_goods') ?? basePrices.luxury_goods ?? 1,
-    raw_materials: iterationPrices.get('raw_materials') ?? priceHistory?.get('raw_materials') ?? basePrices.raw_materials ?? 1,
+    tools: iterationPrices.get('tools') ?? priceHistory?.get('tools') ?? basePrices.tools ?? NON_FOOD_COMMODITY_BASELINES.tools,
+    luxury_goods: iterationPrices.get('luxury_goods') ?? priceHistory?.get('luxury_goods') ?? basePrices.luxury_goods ?? NON_FOOD_COMMODITY_BASELINES.luxury_goods,
+    raw_materials: iterationPrices.get('raw_materials') ?? priceHistory?.get('raw_materials') ?? basePrices.raw_materials ?? NON_FOOD_COMMODITY_BASELINES.raw_materials,
   };
 }
 
@@ -3683,7 +3694,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         const configRoot = (session.config as Record<string, unknown> | null) ?? {};
         const persistedEconomyConfig = getEconomyConfig(configRoot);
         const currentPrices = getInflationBasketPrices(sessionId, persistedEconomyConfig, marketState.priceIndices);
-        const hasBasePrices = Object.keys(persistedEconomyConfig.cpiBasePrices ?? {}).length > 0;
+        const hasBasePrices = Object.values(persistedEconomyConfig.cpiBasePrices ?? {})
+          .some(v => (v ?? 0) > 0);
 
         if (!hasBasePrices) {
           persistedEconomyConfig.cpiBasePrices = { ...currentPrices };

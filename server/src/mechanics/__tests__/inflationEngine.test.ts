@@ -227,6 +227,74 @@ describe('Taylor Rule (D-14, D-15)', () => {
   });
 });
 
+describe('CPI movement with realistic basket prices', () => {
+  it('CPI rises above 100 when food price increases from base', () => {
+    const result = computeInflation({
+      iterationNumber: 2,
+      currentPrices: { food: 7.5, tools: 12.0, luxury_goods: 12.0, raw_materials: 4.0 },
+      basePrices:    { food: 6.0, tools: 12.0, luxury_goods: 12.0, raw_materials: 4.0 },
+      m1Current: 80000,
+      m1Previous: 80000,
+      previousCpi: 100,
+      recentCpiHistory: [100],
+      economyConfig: { ...DEFAULT_ECONOMY_CONFIG, cpiBasketWeights: { food: 0.4, tools: 0.25, luxury_goods: 0.2, raw_materials: 0.15 } },
+    });
+    // Food ratio = 7.5/6.0 = 1.25; other ratios = 1.0
+    // CPI = (1.25×0.4 + 1.0×0.25 + 1.0×0.2 + 1.0×0.15) × 100 = 110
+    expect(result.cpi).toBeCloseTo(110, 1);
+    expect(result.inflationRate).toBeGreaterThan(0);
+  });
+
+  it('CPI falls below 100 when food price decreases from base', () => {
+    const result = computeInflation({
+      iterationNumber: 2,
+      currentPrices: { food: 4.8, tools: 12.0, luxury_goods: 12.0, raw_materials: 4.0 },
+      basePrices:    { food: 6.0, tools: 12.0, luxury_goods: 12.0, raw_materials: 4.0 },
+      m1Current: 80000,
+      m1Previous: 80000,
+      previousCpi: 100,
+      recentCpiHistory: [100],
+      economyConfig: { ...DEFAULT_ECONOMY_CONFIG },
+    });
+    // Food ratio = 4.8/6.0 = 0.8; other ratios = 1.0 → CPI < 100
+    expect(result.cpi).toBeLessThan(100);
+    expect(result.inflationRate).toBeLessThan(0);
+  });
+
+  it('treats zero base price as ratio 1 (CPI contribution = weight)', () => {
+    // Documents existing guard: basePrice === 0 → ratio = 1 → CPI ≈ 100
+    const result = computeInflation({
+      iterationNumber: 2,
+      currentPrices: { food: 10.0, tools: 12.0, luxury_goods: 12.0, raw_materials: 4.0 },
+      basePrices:    { food: 0, tools: 0, luxury_goods: 0, raw_materials: 0 },
+      m1Current: 80000,
+      m1Previous: 80000,
+      previousCpi: 100,
+      recentCpiHistory: [100],
+      economyConfig: { ...DEFAULT_ECONOMY_CONFIG },
+    });
+    // All base prices are 0 → all ratios = 1 → CPI = 100
+    expect(result.cpi).toBeCloseTo(100, 1);
+    expect(result.inflationRate).toBeCloseTo(0, 2);
+  });
+
+  it('non-food price increases raise CPI proportional to basket weight', () => {
+    const result = computeInflation({
+      iterationNumber: 3,
+      currentPrices: { food: 6.0, tools: 15.0, luxury_goods: 12.0, raw_materials: 4.0 },
+      basePrices:    { food: 6.0, tools: 12.0, luxury_goods: 12.0, raw_materials: 4.0 },
+      m1Current: 80000,
+      m1Previous: 80000,
+      previousCpi: 100,
+      recentCpiHistory: [100],
+      economyConfig: { ...DEFAULT_ECONOMY_CONFIG, cpiBasketWeights: { food: 0.4, tools: 0.25, luxury_goods: 0.2, raw_materials: 0.15 } },
+    });
+    // tools ratio = 15/12 = 1.25; food/luxury/raw_materials = 1.0
+    // CPI = (1.0×0.4 + 1.25×0.25 + 1.0×0.2 + 1.0×0.15) × 100 = 106.25
+    expect(result.cpi).toBeCloseTo(106.25, 1);
+  });
+});
+
 describe('Smoothing Window (D-13)', () => {
   it('uses 2-iteration window by default', () => {
     // DEFAULT_ECONOMY_CONFIG.inflationSmoothingWindow should be 2
