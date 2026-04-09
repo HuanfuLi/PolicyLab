@@ -151,9 +151,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
           params.max_tokens = options.maxTokens;
         }
 
-        // Structured output: many OpenAI-compatible servers (LM Studio, vLLM) support json_schema.
-        // If the server previously rejected it, fall back to { type: 'json_object' } which has
-        // broader support and at least enforces valid JSON output (though not schema-strict).
+        // Structured output for local models: do NOT set response_format at all.
+        // Both json_schema and json_object cause failures or extreme slowdowns on
+        // local servers (LM Studio + gemma). The prompts already instruct JSON output
+        // and parseJSON handles edge cases. Cloud providers use their own classes
+        // (AnthropicProvider, OpenAIProvider, GeminiProvider) which handle schemas natively.
+        //
+        // If a future local server supports json_schema reliably, set
+        // jsonSchemaUnsupported = false in the constructor to re-enable it.
         if (useJsonSchema) {
           params.response_format = {
             type: 'json_schema',
@@ -163,10 +168,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
               schema: options.jsonSchema!.schema,
             },
           };
-        } else if (options.jsonSchema) {
-          // Server doesn't support json_schema — use basic json_object mode
-          params.response_format = { type: 'json_object' };
         }
+        // NOTE: no json_object fallback — local models handle JSON via prompt instructions
 
         const response = await this.client.chat.completions.create(params as any);
         const content = response.choices[0]?.message?.content ?? '';
