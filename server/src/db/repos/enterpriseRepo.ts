@@ -26,6 +26,7 @@ export function insertEnterprise(sessionId: string, blueprint: EnterpriseBluepri
     initialCapital: blueprint.initialCapital,
     wage: blueprint.wage,
     isServiceEnterprise: blueprint.isServiceEnterprise,
+    employees: JSON.stringify(blueprint.employees ?? []),
   }).run();
 }
 
@@ -40,7 +41,10 @@ export function getEnterprises(sessionId: string): EnterpriseBlueprint[] {
     commodityOutput: row.commodityOutput as EnterpriseCommodity,
     initialCapital: row.initialCapital,
     initialInventory: {},
-    employees: [],
+    employees: (() => {
+      try { return JSON.parse(row.employees ?? '[]') as string[]; }
+      catch { return []; }
+    })(),
     wage: row.wage,
     isServiceEnterprise: row.isServiceEnterprise,
   }));

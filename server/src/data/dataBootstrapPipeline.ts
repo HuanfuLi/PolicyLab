@@ -383,6 +383,8 @@ export function generateEnterprises(
   profile: LocationProfile | null,
   baseFiat: number,
   minimumWage: number,
+  /** Optional: when provided, resolve agent names to UUIDs in ownerId and employees */
+  agentNameToId?: Map<string, string>,
 ): EnterpriseBlueprint[] {
   // Group agents by sector
   const sectorGroups = new Map<EnterpriseSector, AgentBlueprint[]>();
@@ -455,14 +457,19 @@ export function generateEnterprises(
       const entEmployees: string[] = [];
       for (let j = 0; j < employees.length; j++) {
         if (j % owners.length === i) {
-          entEmployees.push(employees[j].name);
+          const agentName = employees[j].name;
+          // Prefer UUID if name-to-ID map provided; fall back to name for backward compat
+          entEmployees.push(agentNameToId?.get(agentName) ?? agentName);
         }
       }
+
+      // Resolve ownerId to UUID if map is provided
+      const ownerIdResolved = agentNameToId?.get(owners[i].name) ?? owners[i].name;
 
       enterprises.push({
         id: `ent_${sector.slice(0, 4)}_${i + 1}`,
         name: `${sectorToNamePrefix(sector)} ${i + 1}`,
-        ownerId: owners[i].name,
+        ownerId: ownerIdResolved,
         sector,
         industry: sectorToIndustry(sector, i),
         commodityOutput: commodity,

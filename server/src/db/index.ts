@@ -22,3 +22,14 @@ sqlite.pragma('busy_timeout = 5000');   // wait up to 5 s on lock contention
 
 export const db = drizzle(sqlite, { schema });
 export { sqlite };
+
+// ── Schema migrations (ALTER TABLE guards for additive column additions) ──────
+// These are one-time idempotent guards that add columns to existing DBs.
+// Drizzle ORM does not auto-migrate on start; we use try/catch ALTER TABLE.
+
+try {
+  // GC1: add employees column to enterprises table (Phase 10 gap closure)
+  sqlite.prepare("ALTER TABLE enterprises ADD COLUMN employees TEXT NOT NULL DEFAULT '[]'").run();
+} catch {
+  // Column already exists — safe to ignore
+}

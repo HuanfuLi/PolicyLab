@@ -1284,19 +1284,47 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       if (existingRegistry.size === 0 && entConfig.bankingEnabled) {
         const blueprints = enterpriseRepo.getEnterprises(sessionId);
         const bankAgent = agents.find(a => a.type === 'bank' && a.isAlive);
+        const employmentReg = getEmploymentRegistry(sessionId);
+
         for (const bp of blueprints) {
           // Resolve owner: ownerId may be UUID (new sessions) or name (legacy sessions)
           const ownerAgent = agents.find(a => a.id === bp.ownerId) ?? agents.find(a => a.name === bp.ownerId);
+          const resolvedOwnerId = ownerAgent?.id ?? bp.ownerId;
+
+          // Resolve employee IDs: bp.employees may contain UUIDs (new) or names (legacy)
+          const resolvedEmployeeIds = bp.employees
+            .map(nameOrId => {
+              const byId = agents.find(a => a.id === nameOrId);
+              if (byId) return byId.id;
+              const byName = agents.find(a => a.name === nameOrId);
+              return byName?.id ?? null;
+            })
+            .filter((id): id is string => id !== null);
+
           existingRegistry.set(bp.id, {
             id: bp.id,
-            ownerId: ownerAgent?.id ?? bp.ownerId,
+            ownerId: resolvedOwnerId,
             ownerName: ownerAgent?.name ?? 'Unknown',
             industry: bp.industry,
-            employees: new Set(bp.employees),
+            employees: new Set(resolvedEmployeeIds),
             applicants: new Set(),
             wage: bp.wage,
             minSkill: 0,
           });
+
+          // ── Populate employment registry so agents know their job (D-24 / GC1 fix) ──
+          // Without this, buildPersonalStatus() returns employed=false for all workers.
+          for (const employeeId of resolvedEmployeeIds) {
+            employmentReg.set(employeeId, {
+              enterpriseId: bp.id,
+              employerId: resolvedOwnerId,
+              employeeId,
+              wage: bp.wage,
+              minSkill: 0,
+              startedAt: 1,
+            });
+          }
+
           // Create enterprise deposit account with initial capital (D-24)
           // ownerAgentId must reference a valid agents(id) FK
           if (bankAgent && ownerAgent) {

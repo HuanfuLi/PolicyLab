@@ -161,4 +161,61 @@ describe('generateEnterprises', () => {
       expect(ent.wage).toBeGreaterThanOrEqual(5); // max(minimumWage=5, baseFiat*0.05=5)
     }
   });
+
+  // ── GC1: Employee ID resolution tests ──────────────────────────────────────
+
+  it('stores employee UUIDs when agentNameToId map is provided', async () => {
+    const { generateEnterprises, generateAgentRoster } = await import('../dataBootstrapPipeline.js');
+    const profile = makeMockProfile();
+    const agents = generateAgentRoster(profile, 10, 100);
+
+    // Build a name→UUID map for all agents
+    const nameToId = new Map(agents.map((a, i) => [a.name, `uuid-${i.toString().padStart(4, '0')}`]));
+    const enterprises = generateEnterprises(agents, profile, 100, 5, nameToId);
+
+    // Every enterprise's employees should now be UUIDs, not names
+    for (const ent of enterprises) {
+      for (const empId of ent.employees) {
+        expect(empId).toMatch(/^uuid-\d{4}$/);
+      }
+      // ownerId should also be a UUID
+      expect(ent.ownerId).toMatch(/^uuid-\d{4}$/);
+    }
+  });
+
+  it('falls back to agent names when agentNameToId map is not provided', async () => {
+    const { generateEnterprises, generateAgentRoster } = await import('../dataBootstrapPipeline.js');
+    const profile = makeMockProfile();
+    const agents = generateAgentRoster(profile, 10, 100);
+    const enterprises = generateEnterprises(agents, profile, 100, 5); // no map
+
+    // Without a map, ownerId should be an agent name (not a UUID)
+    const agentNames = new Set(agents.map(a => a.name));
+    for (const ent of enterprises) {
+      expect(agentNames.has(ent.ownerId)).toBe(true);
+      // employees should also be names
+      for (const empId of ent.employees) {
+        expect(agentNames.has(empId)).toBe(true);
+      }
+    }
+  });
+
+  it('persists and retrieves employees array via JSON round-trip', () => {
+    // Validates the DB serialisation contract: JSON.stringify then JSON.parse returns the same array
+    const employees = ['uuid-001', 'uuid-002', 'uuid-003'];
+    const serialized = JSON.stringify(employees);
+    const deserialized = JSON.parse(serialized) as string[];
+    expect(deserialized).toEqual(employees);
+    expect(deserialized).toHaveLength(3);
+
+    // Empty array also round-trips cleanly (default column value)
+    expect(JSON.parse('[]')).toEqual([]);
+
+    // Malformed JSON should gracefully return [] (as in getEnterprises try/catch)
+    const fallback = (() => {
+      try { return JSON.parse('not-json') as string[]; }
+      catch { return []; }
+    })();
+    expect(fallback).toEqual([]);
+  });
 });

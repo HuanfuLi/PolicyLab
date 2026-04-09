@@ -292,6 +292,8 @@ export const enterprises = sqliteTable('enterprises', {
   isServiceEnterprise: integer('is_service_enterprise', { mode: 'boolean' }).notNull().default(false),
   consecutiveInsolvencyIterations: integer('consecutive_insolvency_iterations').notNull().default(0),
   isBankrupt: integer('is_bankrupt', { mode: 'boolean' }).notNull().default(false),
+  /** JSON array of agent IDs (UUIDs) for employees assigned to this enterprise. */
+  employees: text('employees').notNull().default('[]'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
 });
 
