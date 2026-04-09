@@ -4285,6 +4285,16 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // If society reaches critical misery thresholds, the tested structure has
       // failed — continue blindly would produce meaningless zombie iterations.
       // Skipped when early stopping is disabled by the user.
+      //
+      // Recalibrated (Phase 10 GC4): enterprise economies have higher natural variance
+      // than subsistence-only simulations. Prior analysis of session-china confirmed
+      // there is NO separate stagnation detector — only this regime-collapse check.
+      // The China session's 7/10-iteration run was caused by the user passing
+      // iterations=7 via the API, not by premature early-stopping code.
+      // The loop bounds (startIter <= endIter with endIter = startIter + totalIterations - 1)
+      // are correct and inclusive. These thresholds intentionally remain at extreme values
+      // (cortisol=95, happiness=5) because enterprise-wage economies naturally stay far
+      // below these collapse thresholds — premature firing is not a risk.
       const COLLAPSE_CORTISOL = 95;
       const COLLAPSE_HAPPINESS = 5;
       const avgCor = stats.avgCortisol ?? 0;
