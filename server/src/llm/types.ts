@@ -13,6 +13,8 @@ export interface LLMOptions {
   model?: string;
   maxTokens?: number;
   temperature?: number;
+  /** JSON Schema for structured output (OpenAI-compatible providers only). */
+  jsonSchema?: { name: string; schema: Record<string, unknown>; strict?: boolean };
 }
 
 export interface TestConnectionResult {

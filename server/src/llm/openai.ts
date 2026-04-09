@@ -122,6 +122,18 @@ export class OpenAICompatibleProvider implements LLMProvider {
           params.max_tokens = options.maxTokens;
         }
 
+        // Structured output via JSON Schema (OpenAI-compatible endpoints, e.g. LM Studio).
+        if (options.jsonSchema) {
+          params.response_format = {
+            type: 'json_schema',
+            json_schema: {
+              name: options.jsonSchema.name,
+              strict: options.jsonSchema.strict ?? true,
+              schema: options.jsonSchema.schema,
+            },
+          };
+        }
+
         const response = await this.client.chat.completions.create(params as any);
         const content = response.choices[0]?.message?.content ?? '';
         if (response.choices[0]?.finish_reason === 'length') {
@@ -174,9 +186,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const start = Date.now();
 
     // Step 1: Query /v1/models to verify connectivity and discover loaded models.
-    // This is a lightweight GET that succeeds even when no model is loaded,
-    // letting us distinguish "server unreachable" from "no model loaded".
+    // We treat this as a best-effort discovery, as custom providers might not support it.
     let availableModels: string[] = [];
+    let modelListError: string | null = null;
     try {
       const modelList = await this.client.models.list();
       for await (const m of modelList) {
@@ -185,31 +197,26 @@ export class OpenAICompatibleProvider implements LLMProvider {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const isConn = CONN_ERROR_RE.test(msg);
-      return {
-        ok: false,
-        model: this.defaultModel || '(none)',
-        latencyMs: Date.now() - start,
-        error: isConn
-          ? `Cannot reach ${this.baseURL} — is LM Studio / Ollama running?`
-          : `Server responded but model listing failed: ${msg}`,
-      };
+      if (isConn) {
+        return {
+          ok: false,
+          model: this.defaultModel || '(none)',
+          latencyMs: Date.now() - start,
+          error: `Cannot reach ${this.baseURL} — is LM Studio / Ollama running?`,
+        };
+      }
+      modelListError = msg;
     }
 
-    if (availableModels.length === 0) {
-      return {
-        ok: false,
-        model: '(none)',
-        latencyMs: Date.now() - start,
-        error: 'Connected to the server, but no models are loaded. Load a model in LM Studio / Ollama and try again.',
-      };
-    }
-
-    // Step 2: Pick the model to test with.  Prefer the configured model if it
+    // Step 2: Pick the model to test with. Prefer the configured model if it
     // matches one of the loaded models; otherwise fall back to the first
-    // available model so the health-check can still succeed.
-    const testModel = (this.defaultModel && availableModels.includes(this.defaultModel))
-      ? this.defaultModel
-      : availableModels[0]!;
+    // available model. If no models are known, try the default model anyway.
+    let testModel = this.defaultModel || 'unknown';
+    if (availableModels.length > 0) {
+      testModel = (this.defaultModel && availableModels.includes(this.defaultModel))
+        ? this.defaultModel
+        : availableModels[0]!;
+    }
 
     try {
       const response = await this.client.chat.completions.create({
@@ -221,11 +228,20 @@ export class OpenAICompatibleProvider implements LLMProvider {
       const model = response.model ?? testModel;
       return { ok: true, model, latencyMs };
     } catch (err) {
+      const chatErr = err instanceof Error ? err.message : String(err);
+      let errorDesc = chatErr;
+      
+      if (!modelListError && availableModels.length === 0) {
+        errorDesc = `Connected to the server, but chat failed (${chatErr}). If using LM Studio / Ollama, ensure a model is loaded.`;
+      } else if (modelListError) {
+        errorDesc = `Chat failed (${chatErr}). Model listing also failed earlier: ${modelListError}`;
+      }
+
       return {
         ok: false,
         model: testModel,
         latencyMs: Date.now() - start,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorDesc,
       };
     }
   }

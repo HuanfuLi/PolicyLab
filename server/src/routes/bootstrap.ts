@@ -260,58 +260,55 @@ router.post('/:id/bootstrap', async (req, res) => {
     const baseFiat = Math.max(20, Math.min(500, Math.round(gdpPerCapita / 100)));
     const blueprints = generateAgentRoster(profile, clampedAgentCount, baseFiat);
 
-    // 5d: Generate agent backgrounds via LLM in batches.
-    // Batching keeps response sizes manageable across model variants.
-    // Batches of 10 produce ~800-1200 tokens each, well within any local model limit.
+    // 5d: Generate agent backgrounds via LLM in batches with JSON Schema enforcement.
+    // JSON Schema forces the model to emit valid structured output, eliminating
+    // the malformed JSON (unquoted keys, missing braces) seen with free-form prompting.
+    // Batches of 10 keep each response small (~800-1200 tokens).
     const ROSTER_BATCH_SIZE = 10;
     const provider = getProvider();
     let rosterEnrichmentFailed = false;
     let rosterEnrichmentError: string | undefined;
 
-    // Regex fallback: some models (e.g. Gemma-4) produce valid content but with
-    // structural JSON errors (unquoted keys, missing braces, _name": patterns).
-    // Extract name+background pairs directly from raw text when parseJSON fails.
-    function extractAgentPairs(text: string): Array<{ name: string; background: string }> {
-      // Pre-process: fix _name": → "name": (opening quote replaced by underscore)
-      const processed = text.replace(/_([a-zA-Z]\w*)":/g, '"$1":');
-
-      const names = [...processed.matchAll(/"name"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
-      const bgs = [...processed.matchAll(/"background"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
-
-      // Use min count — one agent may have an unfixable name field (counts differ by 1-2)
-      const count = Math.min(names.length, bgs.length);
-      if (count === 0) {
-        console.warn('[bootstrap] extractAgentPairs: no matches found. names=%d bgs=%d. Raw (first 500):', names.length, bgs.length, text.slice(0, 500));
-        return [];
-      }
-      if (Math.abs(names.length - bgs.length) > 3) {
-        console.warn('[bootstrap] extractAgentPairs: large count mismatch names=%d bgs=%d, proceeding with min=%d', names.length, bgs.length, count);
-      }
-      return Array.from({ length: count }, (_, i) => ({ name: names[i], background: bgs[i] }));
-    }
+    const rosterJsonSchema = {
+      name: 'agent_roster',
+      strict: true,
+      schema: {
+        type: 'object',
+        properties: {
+          agents: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                background: { type: 'string' },
+              },
+              required: ['name', 'background'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['agents'],
+        additionalProperties: false,
+      } as Record<string, unknown>,
+    };
 
     for (let batchStart = 0; batchStart < blueprints.length; batchStart += ROSTER_BATCH_SIZE) {
       const batchBlueprints = blueprints.slice(batchStart, batchStart + ROSTER_BATCH_SIZE);
       try {
         const rosterRaw = await withRetry(() =>
-          provider.chat(buildLocationAgentRosterMessages(profile, batchBlueprints, scenario)));
+          provider.chat(
+            buildLocationAgentRosterMessages(profile, batchBlueprints, scenario),
+            { jsonSchema: rosterJsonSchema },
+          ));
+        const rosterData = parseJSON<{ agents: Array<{ name: string; background: string }> }>(rosterRaw);
 
-        let agentEntries: Array<{ name: string; background: string }> = [];
-        try {
-          const rosterData = parseJSON<{ agents: Array<{ name: string; background: string }> }>(rosterRaw);
-          if (Array.isArray(rosterData.agents)) agentEntries = rosterData.agents;
-        } catch {
-          // JSON structurally malformed (e.g. missing braces, unquoted keys) —
-          // try regex extraction as a resilient fallback before giving up.
-          agentEntries = extractAgentPairs(rosterRaw);
-          if (agentEntries.length === 0) throw new Error('Both JSON parse and regex extraction failed');
-          console.warn(`[bootstrap] Batch ${batchStart}: JSON parse failed, recovered ${agentEntries.length} agents via regex`);
-        }
-
-        for (let i = 0; i < Math.min(agentEntries.length, batchBlueprints.length); i++) {
-          const globalIdx = batchStart + i;
-          if (agentEntries[i].name) blueprints[globalIdx].name = agentEntries[i].name;
-          if (agentEntries[i].background) blueprints[globalIdx].background = agentEntries[i].background;
+        if (Array.isArray(rosterData.agents)) {
+          for (let i = 0; i < Math.min(rosterData.agents.length, batchBlueprints.length); i++) {
+            const globalIdx = batchStart + i;
+            if (rosterData.agents[i].name) blueprints[globalIdx].name = rosterData.agents[i].name;
+            if (rosterData.agents[i].background) blueprints[globalIdx].background = rosterData.agents[i].background;
+          }
         }
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
