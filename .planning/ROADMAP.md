@@ -205,7 +205,7 @@ Plans:
 **Goal:** Make the simulation engine produce economically coherent outcomes by auto-creating enterprises from bootstrap data, wiring enterprise wage/production cycles through the banking system, implementing Taylor Rule central bank feedback with rate ceilings, grounding narratives in pre-interpreted telemetry digests with hard validation, and enriching agent reflections with personal stat trajectories
 **Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-17, D-18, D-19, D-20, D-21, D-22, D-23, D-24, D-25, D-26, D-27, D-28, D-29, D-30, D-31, D-32
 **Depends on:** Phase 9
-**Plans:** 8/9 plans executed
+**Plans:** 10/13 plans executed
 
 Plans:
 - [x] 10-01-PLAN.md — Wave 0: Types, DB schema, EconomyConfig extensions (incl. D-30/D-31/D-32), test scaffolds
@@ -216,4 +216,4 @@ Plans:
 - [x] 10-05b-PLAN.md — Fiscal realism: income/production tax (D-32), public goods spending-to-GDP scaling (D-31), decay rebalancing
 - [x] 10-06-PLAN.md — Narrative grounding: telemetry digest, data-driven directive, validation + re-generation
 - [x] 10-07-PLAN.md — Agent context: banking ROI prompts, reflection stat trajectory, runtime assertions
-- [ ] 10-08-PLAN.md — Integration verification + human approval of simulation realism
+- [x] 10-08-PLAN.md — Integration verification + human approval of simulation realism

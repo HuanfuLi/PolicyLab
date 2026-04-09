@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase complete — ready for verification
-stopped_at: Completed 10-08-PLAN.md (Task 2 pending human verify)
-last_updated: "2026-04-08T21:05:38.648Z"
+stopped_at: Completed 10-fix-simulation-realism-GC1-PLAN.md
+last_updated: "2026-04-09T04:21:51.125Z"
 progress:
   total_phases: 10
   completed_phases: 6
-  total_plans: 47
-  completed_plans: 43
+  total_plans: 51
+  completed_plans: 45
 ---
 
 # Project State
@@ -86,6 +86,7 @@ Plan: 9 of 9
 | Phase 10 P05b | 423 | 3 tasks | 4 files |
 | Phase 10 P06 | 367 | 2 tasks | 4 files |
 | Phase 10 P08 | 453 | 1 tasks | 4 files |
+| Phase 10-fix-simulation-realism PGC1 | 8m | 4 tasks | 7 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -194,6 +195,8 @@ Recent decisions affecting current work:
 - [Phase 10]: GDP scaling target ratio 10% per category; max gain 75 quality points/iteration
 - [Phase 10]: TelemetryLog lacks agentsAlive/agentsDied; passed as separate params to narrative validation functions
 - [Phase 10]: EnterpriseBlueprint/EnterpriseSector/EnterpriseCommodity types added to shared (were missing from prior wave merges)
+- [Phase 10-fix-simulation-realism]: ALTER TABLE guard pattern for additive SQLite column additions (no migration runner)
+- [Phase 10-fix-simulation-realism]: Employment registry populated at simulation init so all agents immediately know their employer
 
 ### Roadmap Evolution
 
@@ -216,6 +219,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-08T21:05:38.644Z
-Stopped at: Completed 10-08-PLAN.md (Task 2 pending human verify)
+Last session: 2026-04-09T04:21:51.120Z
+Stopped at: Completed 10-fix-simulation-realism-GC1-PLAN.md
 Resume file: None
