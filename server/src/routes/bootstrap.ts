@@ -22,6 +22,7 @@ import {
 } from '../data/dataBootstrapPipeline.js';
 import { insertEnterprise } from '../db/repos/enterpriseRepo.js';
 import { searchLocations } from '../data/photonGeocoder.js';
+import { getCachedLLMData, setCachedLLMData } from '../data/locationCache.js';
 import { getProvider } from '../llm/gateway.js';
 import { withRetry } from '../llm/retry.js';
 import {
@@ -161,74 +162,96 @@ router.post('/:id/bootstrap', async (req, res) => {
     sendEvent({ type: 'step_start', step: 'economics', stepIndex: 2, totalSteps: 6 });
     sendEvent({ type: 'step_done', step: 'economics', stepIndex: 2 });
 
-    // Step 3: Governance (LLM call for qualitative governance summary)
+    // Step 3 & 4: Governance + Infrastructure
+    // Check LLM cache first — these are country-level and rarely change
+    const llmCache = await getCachedLLMData(countryCode);
+
+    // Step 3: Governance
     sendEvent({ type: 'step_start', step: 'governance', stepIndex: 3, totalSteps: 6 });
-    try {
-      const provider = getProvider();
-      const govRaw = await withRetry(() =>
-        provider.chat([
-          { role: 'system', content: 'You are a political analyst. Describe the government type, key economic regulations, and property rights system.' },
-          { role: 'user', content: `Briefly describe the government type, key economic regulations, and property rights system for ${location} (${countryCode}). Be factual and concise.` },
-        ], {
-          jsonSchema: {
-            name: 'governance_analysis',
-            schema: {
-              type: 'object',
-              properties: {
-                governmentType: { type: 'string' },
-                keyRegulations: { type: 'string' },
-                propertyRights: { type: 'string' },
+    if (llmCache?.governance) {
+      profile.governance = llmCache.governance as typeof profile.governance;
+      console.log(`[bootstrap] Governance loaded from cache for ${countryCode}`);
+    } else {
+      try {
+        const provider = getProvider();
+        const govRaw = await withRetry(() =>
+          provider.chat([
+            { role: 'system', content: 'You are a political analyst. Describe the government type, key economic regulations, and property rights system.' },
+            { role: 'user', content: `Briefly describe the government type, key economic regulations, and property rights system for ${location} (${countryCode}). Be factual and concise.` },
+          ], {
+            jsonSchema: {
+              name: 'governance_analysis',
+              schema: {
+                type: 'object',
+                properties: {
+                  governmentType: { type: 'string' },
+                  keyRegulations: { type: 'string' },
+                  propertyRights: { type: 'string' },
+                },
+                required: ['governmentType', 'keyRegulations', 'propertyRights'],
+                additionalProperties: false,
               },
-              required: ['governmentType', 'keyRegulations', 'propertyRights'],
-              additionalProperties: false,
             },
-          },
-        }),
-      );
-      const govData = parseJSON<{ governmentType: string; keyRegulations: string; propertyRights: string }>(govRaw);
-      profile.governance = {
-        value: `${govData.governmentType}. ${govData.keyRegulations}`,
-        source: 'llm',
-        confidence: 'medium',
-      };
-    } catch {
-      // Keep fallback governance
-      sendEvent({ type: 'step_fallback', step: 'governance', stepIndex: 3, fallbackSource: 'llm' });
+          }),
+        );
+        const govData = parseJSON<{ governmentType: string; keyRegulations: string; propertyRights: string }>(govRaw);
+        profile.governance = {
+          value: `${govData.governmentType}. ${govData.keyRegulations}`,
+          source: 'llm',
+          confidence: 'medium',
+        };
+      } catch {
+        sendEvent({ type: 'step_fallback', step: 'governance', stepIndex: 3, fallbackSource: 'llm' });
+      }
     }
     sendEvent({ type: 'step_done', step: 'governance', stepIndex: 3 });
 
-    // Step 4: Infrastructure (LLM call for qualitative infrastructure summary)
+    // Step 4: Infrastructure
     sendEvent({ type: 'step_start', step: 'infrastructure', stepIndex: 4, totalSteps: 6 });
-    try {
-      const provider = getProvider();
-      const infraRaw = await withRetry(() =>
-        provider.chat([
-          { role: 'system', content: 'You are an infrastructure analyst. Describe the infrastructure state.' },
-          { role: 'user', content: `Briefly describe the infrastructure state for ${location} (${countryCode}): transportation, energy, communications. Be factual and concise.` },
-        ], {
-          jsonSchema: {
-            name: 'infrastructure_analysis',
-            schema: {
-              type: 'object',
-              properties: {
-                summary: { type: 'string' },
+    if (llmCache?.infrastructure) {
+      profile.infrastructure = llmCache.infrastructure as typeof profile.infrastructure;
+      console.log(`[bootstrap] Infrastructure loaded from cache for ${countryCode}`);
+    } else {
+      try {
+        const provider = getProvider();
+        const infraRaw = await withRetry(() =>
+          provider.chat([
+            { role: 'system', content: 'You are an infrastructure analyst. Describe the infrastructure state.' },
+            { role: 'user', content: `Briefly describe the infrastructure state for ${location} (${countryCode}): transportation, energy, communications. Be factual and concise.` },
+          ], {
+            jsonSchema: {
+              name: 'infrastructure_analysis',
+              schema: {
+                type: 'object',
+                properties: {
+                  summary: { type: 'string' },
+                },
+                required: ['summary'],
+                additionalProperties: false,
               },
-              required: ['summary'],
-              additionalProperties: false,
             },
-          },
-        }),
-      );
-      const infraData = parseJSON<{ summary: string }>(infraRaw);
-      profile.infrastructure = {
-        value: infraData.summary,
-        source: 'llm',
-        confidence: 'medium',
-      };
-    } catch {
-      sendEvent({ type: 'step_fallback', step: 'infrastructure', stepIndex: 4, fallbackSource: 'llm' });
+          }),
+        );
+        const infraData = parseJSON<{ summary: string }>(infraRaw);
+        profile.infrastructure = {
+          value: infraData.summary,
+          source: 'llm',
+          confidence: 'medium',
+        };
+      } catch {
+        sendEvent({ type: 'step_fallback', step: 'infrastructure', stepIndex: 4, fallbackSource: 'llm' });
+      }
     }
     sendEvent({ type: 'step_done', step: 'infrastructure', stepIndex: 4 });
+
+    // Cache governance + infrastructure for future retries of same country
+    if (!llmCache && (profile.governance?.source === 'llm' || profile.infrastructure?.source === 'llm')) {
+      await setCachedLLMData(
+        countryCode,
+        profile.governance ?? null,
+        profile.infrastructure ?? null,
+      ).catch(() => {});
+    }
 
     // Step 5: Generation — convert profile to session artifacts
     sendEvent({ type: 'step_start', step: 'generation', stepIndex: 5, totalSteps: 6 });

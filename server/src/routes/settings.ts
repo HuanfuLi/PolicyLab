@@ -9,6 +9,7 @@ import type { SkillMatrix, Inventory } from '@policylab/shared';
 import { resolveAction, clampHappinessByPhysiology } from '../mechanics/physicsEngine.js';
 import { getPhysicsConfig, updatePhysicsConfig, resetPhysicsConfig } from '../mechanics/physicsConfig.js';
 import { normalizeActionCode } from '../mechanics/actionCodes.js';
+import { clearCache, getCacheStats } from '../data/locationCache.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -331,6 +332,20 @@ router.post('/trace-physics', (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+// ── Cache management ────────────────────────────────────────────────────────
+
+// GET /api/settings/cache — cache statistics
+router.get('/cache', async (_req, res) => {
+  const stats = await getCacheStats();
+  res.json(stats);
+});
+
+// DELETE /api/settings/cache — clear all cached data
+router.delete('/cache', async (_req, res) => {
+  const deleted = await clearCache();
+  res.json({ ok: true, filesDeleted: deleted });
 });
 
 export default router;

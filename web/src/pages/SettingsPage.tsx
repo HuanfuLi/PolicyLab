@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Server, CheckCircle2, AlertTriangle, Key, XCircle, ToggleLeft, ToggleRight, FlaskConical, Plus, Trash2 } from 'lucide-react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Server, CheckCircle2, AlertTriangle, Key, XCircle, ToggleLeft, ToggleRight, FlaskConical, Plus, Trash2, Database } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { AppSettings, ProviderConfig, ProviderConfigResponse, LLMProviderType } from '@policylab/shared';
 import PhysicsLaboratory from './PhysicsLaboratory';
@@ -120,10 +120,39 @@ const SettingsPage = () => {
   // Extra providers for parallel simulation
   const [extraProviders, setExtraProviders] = useState<ExtraProviderSlot[]>([]);
 
+  // Cache management
+  const [cacheStats, setCacheStats] = useState<{ fileCount: number; totalSizeKB: number; countries: string[] } | null>(null);
+  const [cacheClearing, setCacheClearing] = useState(false);
+  const [cacheClearResult, setCacheClearResult] = useState<string | null>(null);
+
+  const loadCacheStats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings/cache');
+      if (res.ok) setCacheStats(await res.json());
+    } catch { /* ignore */ }
+  }, []);
+
+  const handleClearCache = useCallback(async () => {
+    setCacheClearing(true);
+    setCacheClearResult(null);
+    try {
+      const res = await fetch('/api/settings/cache', { method: 'DELETE' });
+      if (res.ok) {
+        const data = await res.json();
+        setCacheClearResult(`Cleared ${data.filesDeleted} cached files`);
+        setCacheStats({ fileCount: 0, totalSizeKB: 0, countries: [] });
+      }
+    } catch {
+      setCacheClearResult('Failed to clear cache');
+    } finally {
+      setCacheClearing(false);
+    }
+  }, []);
+
   // Stores per-provider form values so switching back restores what the user entered
   const savedConfigs = useRef<Partial<Record<Provider, SavedConfig>>>({});
 
-  useEffect(() => { loadSettings(); }, []);
+  useEffect(() => { loadSettings(); loadCacheStats(); }, []);
 
   useEffect(() => {
     if (!settings) return;
@@ -820,6 +849,49 @@ const SettingsPage = () => {
             {sandboxOutput}
           </pre>
         )}
+      </div>
+
+      {/* Location Data Cache */}
+      <div style={{
+        background: 'var(--glass-bg)', border: '1px solid var(--glass-border)',
+        borderRadius: 12, padding: '1.5rem', marginBottom: '1.5rem',
+      }}>
+        <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 0 }}>
+          <Database size={20} /> Location Data Cache
+        </h2>
+        <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem', margin: '0.5rem 0 1rem' }}>
+          Cached World Bank indicators and LLM-generated governance/infrastructure descriptions.
+          Cache is per-country with a 30-day TTL.
+        </p>
+        {cacheStats && (
+          <div style={{ display: 'flex', gap: '2rem', marginBottom: '1rem', fontSize: '0.9rem' }}>
+            <span><strong>{cacheStats.fileCount}</strong> cached files</span>
+            <span><strong>{cacheStats.totalSizeKB}</strong> KB total</span>
+            {cacheStats.countries.length > 0 && (
+              <span>Countries: {cacheStats.countries.join(', ')}</span>
+            )}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <button
+            onClick={handleClearCache}
+            disabled={cacheClearing || (cacheStats?.fileCount === 0)}
+            style={{
+              padding: '0.5rem 1rem', borderRadius: 8, cursor: 'pointer',
+              background: 'var(--color-red, #ef4444)', color: '#fff', border: 'none',
+              opacity: cacheClearing || (cacheStats?.fileCount === 0) ? 0.5 : 1,
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            <Trash2 size={14} />
+            {cacheClearing ? 'Clearing...' : 'Clear Cache'}
+          </button>
+          {cacheClearResult && (
+            <span style={{ fontSize: '0.85rem', color: 'var(--color-green, #22c55e)' }}>
+              {cacheClearResult}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Physics Laboratory — interactive debugging & transparency tool */}
