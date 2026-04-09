@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase complete — ready for verification
-stopped_at: Completed 10-GC2-PLAN.md
-last_updated: "2026-04-09T04:25:16.146Z"
+stopped_at: Completed 10-GC3-PLAN.md
+last_updated: "2026-04-09T04:29:06.892Z"
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 51
-  completed_plans: 46
+  completed_plans: 47
 ---
 
 # Project State
@@ -88,6 +88,7 @@ Plan: 9 of 9
 | Phase 10 P08 | 453 | 1 tasks | 4 files |
 | Phase 10-fix-simulation-realism PGC1 | 8m | 4 tasks | 7 files |
 | Phase 10-fix-simulation-realism PGC2 | 6 | 2 tasks | 2 files |
+| Phase 10-fix-simulation-realism PGC3 | 8 | 2 tasks | 3 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -200,6 +201,8 @@ Recent decisions affecting current work:
 - [Phase 10-fix-simulation-realism]: Employment registry populated at simulation init so all agents immediately know their employer
 - [Phase 10-fix-simulation-realism]: GC2: value-aware hasBasePrices guard (Object.values.some) detects all-zero cpiBasePrices as uninitialized
 - [Phase 10-fix-simulation-realism]: GC2: module-scope NON_FOOD_COMMODITY_BASELINES (tools=12, luxury_goods=12, raw_materials=4) replaces literal 1 in basket price fallback
+- [Phase 10-fix-simulation-realism]: GDP_SCALED_MAX_GAIN_PER_ITER reduced from 75 to 6: at China's 1.8% GDP spending gain drops from 22.8 to 1.8 pts/iter, requiring sustained fiscal commitment
+- [Phase 10-fix-simulation-realism]: CORTISOL_FLOOR = 3 applied at final stat commit sites only (not runningCortisol accumulator) to prevent cortisol collapsing to zero in well-functioning economies
 
 ### Roadmap Evolution
 
@@ -222,6 +225,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-09T04:25:16.142Z
-Stopped at: Completed 10-GC2-PLAN.md
+Last session: 2026-04-09T04:29:06.887Z
+Stopped at: Completed 10-GC3-PLAN.md
 Resume file: None
