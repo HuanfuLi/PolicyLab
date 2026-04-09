@@ -4216,13 +4216,22 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
 
         // 3. Persist role changes to roleChanges table (lifecycle events)
+        // Validate agentId against loaded agents — LLM may return names instead of UUIDs
+        const agentIdSet = new Set(agents.map(a => a.id));
+        const agentNameToIdMap = new Map(agents.map(a => [a.name, a.id]));
         for (const evt of resolution.lifecycleEvents ?? []) {
           const e = evt as { type: string; agentId?: string; detail?: string; fromRole?: string; toRole?: string };
           if (e.type === 'role_change' && e.agentId) {
+            // Resolve: try UUID first, then name lookup, skip if neither matches
+            const resolvedId = agentIdSet.has(e.agentId) ? e.agentId : agentNameToIdMap.get(e.agentId);
+            if (!resolvedId) {
+              console.warn(`[ROLE_CHANGE] Skipping — agentId "${e.agentId}" not found in agents table`);
+              continue;
+            }
             db.insert(roleChanges).values({
               id: uuidv4(),
               sessionId,
-              agentId: e.agentId,
+              agentId: resolvedId,
               fromRole: e.fromRole ?? '',
               toRole: e.toRole ?? '',
               reason: e.detail ?? null,
