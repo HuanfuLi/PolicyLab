@@ -1,5 +1,73 @@
 import { describe, it, expect } from 'vitest';
 import { distributeProRata } from '@policylab/shared';
+import type { Agent } from '@policylab/shared';
+import { resolveAction } from '../physicsEngine.js';
+
+// Minimal agent fixture for physicsEngine unit tests
+function makeAgent(overrides: Partial<Agent> = {}): Agent {
+  return {
+    id: 'agent1',
+    sessionId: 'session1',
+    name: 'Test Agent',
+    role: 'farmer',
+    background: '',
+    initialStats: { wealth: 100, health: 100, happiness: 50, cortisol: 10, dopamine: 50, satiety: 80 },
+    currentStats: { wealth: 100, health: 100, happiness: 50, cortisol: 10, dopamine: 50, satiety: 80 },
+    isAlive: true,
+    status: 'alive',
+    type: 'citizen',
+    bornAtIteration: 0,
+    diedAtIteration: null,
+    ...overrides,
+  };
+}
+
+// ── D-08: QUIT_JOB Labor Mobility Action Deltas ───────────────────────────────
+
+describe('D-08: QUIT_JOB Action Deltas', () => {
+  it('produces zero wealth and health delta — no income or physical cost', () => {
+    const result = resolveAction({
+      agent: makeAgent(),
+      actionCode: 'QUIT_JOB',
+      allAgents: [],
+      isFirstAction: true,
+    });
+    expect(result.wealthDelta).toBe(0);
+    expect(result.healthDelta).toBe(0);
+  });
+
+  it('applies happiness penalty (-1) — loss of economic security', () => {
+    const result = resolveAction({
+      agent: makeAgent(),
+      actionCode: 'QUIT_JOB',
+      allAgents: [],
+      isFirstAction: true,
+    });
+    expect(result.happinessDelta).toBe(-1);
+  });
+
+  it('applies cortisol spike (+4) — uncertainty of unemployment', () => {
+    const result = resolveAction({
+      agent: makeAgent(),
+      actionCode: 'QUIT_JOB',
+      allAgents: [],
+      isFirstAction: true,
+    });
+    expect(result.cortisolDelta).toBe(4);
+  });
+
+  it('includes trace entry explaining the cortisol spike', () => {
+    const result = resolveAction({
+      agent: makeAgent(),
+      actionCode: 'QUIT_JOB',
+      allAgents: [],
+      isFirstAction: true,
+    });
+    const traceText = result.trace.join('\n');
+    expect(traceText).toContain('cortisol');
+    expect(traceText).toContain('uncertainty');
+  });
+});
 
 describe('Edge Cases - BUG-02, BUG-03, BUG-05, BUG-06', () => {
   describe('BUG-02: Non-divisible UBI Distribution', () => {
