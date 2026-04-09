@@ -260,37 +260,47 @@ router.post('/:id/bootstrap', async (req, res) => {
     const baseFiat = Math.max(20, Math.min(500, Math.round(gdpPerCapita / 100)));
     const blueprints = generateAgentRoster(profile, clampedAgentCount, baseFiat);
 
-    // 5d: Generate agent backgrounds via LLM
-    // NOTE: No jsonSchema here — this is a large creative generation (30+ agents with
-    // detailed backgrounds). Structured output enforcement makes local models (LM Studio)
-    // 10x+ slower, causing timeouts and fallback to placeholder names. The prompt already
-    // instructs JSON format and parseJSON handles edge cases robustly.
-    try {
-      const provider = getProvider();
-      const rosterRaw = await withRetry(() =>
-        provider.chat(
-          buildLocationAgentRosterMessages(profile, blueprints, scenario)));
-      const rosterData = parseJSON<{
-        agents: Array<{ name: string; background: string }>;
-      }>(rosterRaw);
+    // 5d: Generate agent backgrounds via LLM in batches.
+    // Batching avoids local-model output-token limits: generating 50 backgrounds in one
+    // call truncates the response (LM Studio default is often 4096 output tokens).
+    // Batches of 10 produce ~800-1200 tokens each, well within any local model limit.
+    const ROSTER_BATCH_SIZE = 10;
+    const provider = getProvider();
+    let rosterEnrichmentFailed = false;
 
-      // Apply LLM-generated names and backgrounds to blueprints
-      if (Array.isArray(rosterData.agents)) {
-        for (let i = 0; i < Math.min(rosterData.agents.length, blueprints.length); i++) {
-          if (rosterData.agents[i].name) blueprints[i].name = rosterData.agents[i].name;
-          if (rosterData.agents[i].background) blueprints[i].background = rosterData.agents[i].background;
+    for (let batchStart = 0; batchStart < blueprints.length; batchStart += ROSTER_BATCH_SIZE) {
+      const batchBlueprints = blueprints.slice(batchStart, batchStart + ROSTER_BATCH_SIZE);
+      try {
+        const rosterRaw = await withRetry(() =>
+          provider.chat(buildLocationAgentRosterMessages(profile, batchBlueprints, scenario)));
+        const rosterData = parseJSON<{
+          agents: Array<{ name: string; background: string }>;
+        }>(rosterRaw);
+
+        if (Array.isArray(rosterData.agents)) {
+          for (let i = 0; i < Math.min(rosterData.agents.length, batchBlueprints.length); i++) {
+            const globalIdx = batchStart + i;
+            if (rosterData.agents[i].name) blueprints[globalIdx].name = rosterData.agents[i].name;
+            if (rosterData.agents[i].background) blueprints[globalIdx].background = rosterData.agents[i].background;
+          }
+        } else {
+          console.warn(`[bootstrap] Batch ${batchStart}-${batchStart + ROSTER_BATCH_SIZE}: rosterData.agents is not an array`);
+          rosterEnrichmentFailed = true;
+          break;
         }
+      } catch (err) {
+        console.warn(`[bootstrap] Batch ${batchStart}-${batchStart + ROSTER_BATCH_SIZE} LLM enrichment failed:`, err);
+        rosterEnrichmentFailed = true;
+        break;
       }
-    } catch (err) {
-      console.warn('[bootstrap] Agent roster LLM enrichment failed, continuing with default backgrounds:', err);
-      sendEvent({
-        type: 'step_fallback',
-        step: 'generation',
-        stepIndex: 5,
-        fallbackSource: 'llm',
-        message: 'Agent background generation failed — using role-based defaults',
-      } as any);
-      // Continue with stub backgrounds already set on blueprints
+    }
+
+    if (rosterEnrichmentFailed) {
+      const msg = 'Bootstrap aborted: Agent background generation failed. The LLM call returned an error or malformed JSON. Please check that your LLM provider is running and try again.';
+      sendEvent({ type: 'error', step: 'generation', message: msg } as any);
+      clearInterval(heartbeatInterval);
+      res.end();
+      return;
     }
 
     // D-27: Validate no stub backgrounds survived LLM enrichment.
