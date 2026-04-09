@@ -15,6 +15,14 @@ const IdeaInput = () => {
 
   const bootstrapStore = useBootstrapStore();
 
+  // Reset stale bootstrap state on mount — prevents showing "Building Simulation"
+  // from a previous interrupted/completed bootstrap when the user returns to this page.
+  useEffect(() => {
+    if (bootstrapStore.mode !== 'idle') {
+      bootstrapStore.reset();
+    }
+  }, []);
+
   const presets = [
     "A society where everyone shares all resources equitably.",
     "A pure free-market libertarian city state.",
@@ -53,7 +61,7 @@ const IdeaInput = () => {
       navigate(`/session/${bootstrapStore.sessionId}/design`);
       bootstrapStore.reset();
     }
-  }, [bootstrapStore.mode, bootstrapStore.sessionId, navigate, bootstrapStore]);
+  }, [bootstrapStore.mode, bootstrapStore.sessionId, navigate]);
 
   const handleBack = () => {
     setMode(null);
