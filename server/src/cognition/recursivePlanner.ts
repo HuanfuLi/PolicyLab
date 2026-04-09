@@ -96,8 +96,7 @@ function needsNewPlan(
     agentId: string,
     currentIteration: number,
     currentStats: { wealth: number; health: number },
-    isStarving: boolean,
-): { needsPlan: boolean; reason: 'none' | 'expired' | 'completed' | 'crisis' } {
+    isStarving: boolean): { needsPlan: boolean; reason: 'none' | 'expired' | 'completed' | 'crisis' } {
     const existing = getAgentPlan(sessionId, agentId);
 
     if (!existing) {
@@ -137,8 +136,7 @@ function buildPlanningPrompt(
     memories: ScoredMemory[],
     currentStats: { wealth: number; health: number; happiness: number },
     reason: string,
-    existingPlan: AgentPlan | null,
-): LLMMessage[] {
+    existingPlan: AgentPlan | null): LLMMessage[] {
     const memoriesText = formatMemoriesForPrompt(memories, 800);
 
     let contextNote = '';
@@ -190,14 +188,12 @@ export async function runPlanning(
     currentStats: { wealth: number; health: number; happiness: number },
     isStarving: boolean,
     provider: LLMProvider,
-    options?: LLMOptions,
-): Promise<PlanningResult> {
+    options?: LLMOptions): Promise<PlanningResult> {
     const key = planKey(sessionId, agentId);
     const existing = getAgentPlan(sessionId, agentId);
 
     const { needsPlan, reason } = needsNewPlan(
-        sessionId, agentId, currentIteration, currentStats, isStarving,
-    );
+        sessionId, agentId, currentIteration, currentStats, isStarving);
 
     if (!needsPlan && existing) {
         // Advance existing plan
@@ -215,31 +211,17 @@ export async function runPlanning(
     const memories = retrieveMemories(
         sessionId, agentId, currentIteration,
         'plan goal strategy survival food wealth health work',
-        PLANNING_CONTEXT_SIZE,
-    );
+        PLANNING_CONTEXT_SIZE);
 
     let plan: AgentPlan;
     const isOverwrite = reason === 'crisis' && existing !== null;
 
     try {
         const messages = buildPlanningPrompt(
-            agentName, agentRole, memories, currentStats, reason, existing,
-        );
+            agentName, agentRole, memories, currentStats, reason, existing);
         const raw = await provider.chat(messages, {
             ...options,
-            temperature: 0.6,
-            jsonSchema: {
-                name: 'agent_plan',
-                schema: {
-                    type: 'object',
-                    properties: {
-                        goal: { type: 'string' },
-                        steps: { type: 'array', items: { type: 'string' } },
-                    },
-                    required: ['goal', 'steps'],
-                    additionalProperties: false,
-                },
-            },
+            temperature: 0.6
         });
 
         const parsed = parseJSON<Record<string, unknown>>(raw);
@@ -290,8 +272,7 @@ function generateDeterministicPlan(
     stats: { wealth: number; health: number; happiness: number },
     isStarving: boolean,
     currentIteration: number,
-    isOverwrite: boolean,
-): AgentPlan {
+    isOverwrite: boolean): AgentPlan {
     const steps: string[] = [];
 
     if (isStarving || stats.health < 30) {

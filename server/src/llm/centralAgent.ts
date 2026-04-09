@@ -45,30 +45,6 @@ export async function brainstorm(
   const provider = getProvider();
   const messages = buildBrainstormMessages(idea, history, userMessage, currentChecklist);
   const raw = await withRetry(() => provider.chat(messages, {
-    jsonSchema: {
-      name: 'brainstorm_response',
-      schema: {
-        type: 'object',
-        properties: {
-          reply: { type: 'string' },
-          checklist: {
-            type: 'object',
-            properties: {
-              governance: { type: 'boolean' },
-              economy: { type: 'boolean' },
-              legal: { type: 'boolean' },
-              culture: { type: 'boolean' },
-              infrastructure: { type: 'boolean' },
-            },
-            required: ['governance', 'economy', 'legal', 'culture', 'infrastructure'],
-            additionalProperties: false,
-          },
-          readyForDesign: { type: 'boolean' },
-        },
-        required: ['reply', 'checklist', 'readyForDesign'],
-        additionalProperties: false,
-      },
-    },
   }));
 
   let parsed: { reply: string; checklist: BrainstormChecklist; readyForDesign: boolean };
@@ -163,22 +139,6 @@ export async function generateDesign(
 
   const overviewData = await withRetry(async () => {
     const raw = await provider.chat(buildOverviewMessages(session.idea, brainstormSummary), {
-      jsonSchema: {
-        name: 'society_overview',
-        schema: {
-          type: 'object',
-          properties: {
-            societyName: { type: 'string' },
-            overview: { type: 'string' },
-            timeScale: { type: 'string' },
-            agentCount: { type: 'number' },
-            governanceModel: { type: 'string' },
-            economicModel: { type: 'string' },
-          },
-          required: ['societyName', 'overview', 'timeScale', 'agentCount', 'governanceModel', 'economicModel'],
-          additionalProperties: false,
-        },
-      },
     });
     return parseJSON<{
       societyName: string;
@@ -215,20 +175,7 @@ export async function generateDesign(
         overviewData.overview,
         overviewData.governanceModel,
         overviewData.economicModel
-      ),
-      {
-        jsonSchema: {
-          name: 'law_document',
-          schema: {
-            type: 'object',
-            properties: {
-              law: { type: 'string' },
-            },
-            required: ['law'],
-            additionalProperties: false,
-          },
-        },
-      }
+      )
     );
     return parseJSON<{ law: string }>(raw);
   });
@@ -253,58 +200,6 @@ export async function generateDesign(
         overviewData.economicModel
       ),
       {
-        jsonSchema: {
-          name: 'agent_roster',
-          schema: {
-            type: 'object',
-            properties: {
-              agents: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    name: { type: 'string' },
-                    role: { type: 'string' },
-                    background: { type: 'string' },
-                    personalityTraits: { type: 'array', items: { type: 'string' } },
-                    initialStats: {
-                      type: 'object',
-                      properties: {
-                        wealth: { type: 'number' },
-                        health: { type: 'number' },
-                        happiness: { type: 'number' },
-                        cortisol: { type: 'number' },
-                        dopamine: { type: 'number' },
-                      },
-                      required: ['wealth', 'health', 'happiness'],
-                      additionalProperties: false,
-                    },
-                  },
-                  required: ['name', 'role', 'background', 'initialStats'],
-                  additionalProperties: false,
-                },
-              },
-              enterprises: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'string' },
-                    name: { type: 'string' },
-                    ownerAgentName: { type: 'string' },
-                    sector: { type: 'string' },
-                    industry: { type: 'string' },
-                    initialEmployeeNames: { type: 'array', items: { type: 'string' } },
-                  },
-                  required: ['id', 'name', 'ownerAgentName', 'sector', 'industry'],
-                  additionalProperties: false,
-                },
-              },
-            },
-            required: ['agents'],
-            additionalProperties: false,
-          },
-        },
       }
     );
     const parsed = parseJSON<{
@@ -464,7 +359,7 @@ export async function refine(
     userMessage
   );
 
-  const raw = await withRetry(() => provider.chat(messages, {}));
+  const raw = await withRetry(() => provider.chat(messages));
   const parsed = parseJSON<{
     reply: string;
     artifactsUpdated: Array<'overview' | 'law' | 'agents'>;

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Server, CheckCircle2, AlertTriangle, Key, XCircle, ToggleLeft, ToggleRight, FlaskConical, Plus, Trash2, Database } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
+import { settingsApi } from '../api/settings';
 import type { AppSettings, ProviderConfig, ProviderConfigResponse, LLMProviderType } from '@policylab/shared';
 import PhysicsLaboratory from './PhysicsLaboratory';
 
@@ -82,6 +83,8 @@ interface ExtraProviderSlot {
   provider: LLMProviderType;
   apiKey: string;
   hasApiKey: boolean;
+  _testing?: boolean;
+  _testResult?: string;
   baseUrl: string;
   model: string;
   rateLimit: string; // stored as string for input; empty = unlimited
@@ -726,6 +729,42 @@ const SettingsPage = () => {
                       <input type="number" className="input-glass" style={{ maxWidth: '150px' }}
                         value={ep.rateLimit} onChange={e => updateSlot({ rateLimit: e.target.value })}
                         min={1} placeholder="No limit" />
+                    </div>
+
+                    {/* Test button */}
+                    <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                      <button
+                        className="btn-secondary"
+                        style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                        disabled={ep._testing}
+                        onClick={async () => {
+                          updateSlot({ _testing: true, _testResult: undefined });
+                          try {
+                            const result = await settingsApi.testProviderSlot(idx, {
+                              provider: ep.provider,
+                              ...(ep.apiKey.trim() ? { apiKey: ep.apiKey.trim() } : {}),
+                              baseUrl: ep.baseUrl,
+                              model: ep.model,
+                              vertexProjectId: ep.vertexProjectId,
+                              vertexLocation: ep.vertexLocation,
+                            });
+                            updateSlot({ _testing: false, _testResult: result.ok ? `OK: ${result.model} (${result.latencyMs}ms)` : `Error: ${result.error}` });
+                          } catch (err) {
+                            updateSlot({ _testing: false, _testResult: `Error: ${err instanceof Error ? err.message : String(err)}` });
+                          }
+                        }}
+                      >
+                        {ep._testing ? 'Testing...' : 'Test'}
+                      </button>
+                      {ep._testResult && (
+                        <span style={{
+                          marginLeft: '0.5rem',
+                          fontSize: '0.78rem',
+                          color: ep._testResult.startsWith('OK') ? 'var(--success)' : 'var(--danger)',
+                        }}>
+                          {ep._testResult}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -48,31 +48,6 @@ export class AnthropicProvider implements LLMProvider {
       content: typeof m.content === 'string' ? m.content : m.content.map(b => b.text).join('\n'),
     }));
 
-    // Structured output: use tool_use to constrain JSON output
-    if (options.jsonSchema) {
-      const response = await this.client.messages.create({
-        model: options.model ?? this.defaultModel,
-        max_tokens: options.maxTokens ?? 65536,
-        system,
-        messages: mapped,
-        tools: [{
-          name: options.jsonSchema.name,
-          description: `Generate structured output matching the ${options.jsonSchema.name} schema.`,
-          input_schema: options.jsonSchema.schema as Anthropic.Tool.InputSchema,
-        }],
-        tool_choice: { type: 'tool' as const, name: options.jsonSchema.name },
-      });
-
-      if (response.stop_reason === 'max_tokens') {
-        throw new Error('LLM response truncated (hit max_tokens). Respond more concisely.');
-      }
-      const toolBlock = response.content.find(b => b.type === 'tool_use');
-      if (!toolBlock || toolBlock.type !== 'tool_use') {
-        throw new Error('Expected tool_use response for structured output');
-      }
-      return JSON.stringify(toolBlock.input);
-    }
-
     const response = await this.client.messages.create({
       model: options.model ?? this.defaultModel,
       max_tokens: options.maxTokens ?? 65536,

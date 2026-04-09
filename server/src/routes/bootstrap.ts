@@ -179,21 +179,7 @@ router.post('/:id/bootstrap', async (req, res) => {
             { role: 'system', content: 'You are a political analyst. Describe the government type, key economic regulations, and property rights system.' },
             { role: 'user', content: `Briefly describe the government type, key economic regulations, and property rights system for ${location} (${countryCode}). Be factual and concise.` },
           ], {
-            jsonSchema: {
-              name: 'governance_analysis',
-              schema: {
-                type: 'object',
-                properties: {
-                  governmentType: { type: 'string' },
-                  keyRegulations: { type: 'string' },
-                  propertyRights: { type: 'string' },
-                },
-                required: ['governmentType', 'keyRegulations', 'propertyRights'],
-                additionalProperties: false,
-              },
-            },
-          }),
-        );
+          }));
         const govData = parseJSON<{ governmentType: string; keyRegulations: string; propertyRights: string }>(govRaw);
         profile.governance = {
           value: `${govData.governmentType}. ${govData.keyRegulations}`,
@@ -218,20 +204,7 @@ router.post('/:id/bootstrap', async (req, res) => {
           provider.chat([
             { role: 'system', content: 'You are an infrastructure analyst. Describe the infrastructure state.' },
             { role: 'user', content: `Briefly describe the infrastructure state for ${location} (${countryCode}): transportation, energy, communications. Be factual and concise.` },
-          ], {
-            jsonSchema: {
-              name: 'infrastructure_analysis',
-              schema: {
-                type: 'object',
-                properties: {
-                  summary: { type: 'string' },
-                },
-                required: ['summary'],
-                additionalProperties: false,
-              },
-            },
-          }),
-        );
+          ]));
         const infraData = parseJSON<{ summary: string }>(infraRaw);
         profile.infrastructure = {
           value: infraData.summary,
@@ -249,8 +222,7 @@ router.post('/:id/bootstrap', async (req, res) => {
       await setCachedLLMData(
         countryCode,
         profile.governance ?? null,
-        profile.infrastructure ?? null,
-      ).catch(() => {});
+        profile.infrastructure ?? null).catch(() => {});
     }
 
     // Step 5: Generation — convert profile to session artifacts
@@ -268,20 +240,7 @@ router.post('/:id/bootstrap', async (req, res) => {
           provider.chat(
             buildScenarioInterpretationMessages(scenario, economyConfig, profile),
             {
-              jsonSchema: {
-                name: 'scenario_overrides',
-                schema: {
-                  type: 'object',
-                  properties: {
-                    parameterOverrides: { type: 'object', additionalProperties: {} },
-                  },
-                  required: ['parameterOverrides'],
-                  additionalProperties: false,
-                },
-              },
-            },
-          ),
-        );
+            }));
         console.log('[bootstrap] Scenario interpretation raw:', scenarioRaw.slice(0, 500));
         const overrides = parseJSON<{ parameterOverrides: Record<string, number | boolean> }>(scenarioRaw);
         if (overrides.parameterOverrides && Object.keys(overrides.parameterOverrides).length > 0) {
@@ -310,9 +269,7 @@ router.post('/:id/bootstrap', async (req, res) => {
       const provider = getProvider();
       const rosterRaw = await withRetry(() =>
         provider.chat(
-          buildLocationAgentRosterMessages(profile, blueprints, scenario),
-        ),
-      );
+          buildLocationAgentRosterMessages(profile, blueprints, scenario)));
       const rosterData = parseJSON<{
         agents: Array<{ name: string; background: string }>;
       }>(rosterRaw);
@@ -352,22 +309,7 @@ router.post('/:id/bootstrap', async (req, res) => {
       const provider = getProvider();
       const lawRaw = await withRetry(() =>
         provider.chat(
-          buildLocationLawMessages(profile, lawContext, scenario),
-          {
-            jsonSchema: {
-              name: 'law_document',
-              schema: {
-                type: 'object',
-                properties: {
-                  law: { type: 'string' },
-                },
-                required: ['law'],
-                additionalProperties: false,
-              },
-            },
-          },
-        ),
-      );
+          buildLocationLawMessages(profile, lawContext, scenario)));
       const lawData = parseJSON<{ law: string }>(lawRaw);
       law = lawData.law;
     } catch (err) {
@@ -395,20 +337,7 @@ ${scenario ? `\nPolicy scenario to explore: ${scenario}` : ''}
 
 The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "Detroit Economic Recovery Model"). The overview should describe the economic context, key challenges, and what this simulation will explore. Use real numbers from the data above.` },
         ], {
-          jsonSchema: {
-            name: 'society_overview',
-            schema: {
-              type: 'object',
-              properties: {
-                title: { type: 'string' },
-                overview: { type: 'string' },
-              },
-              required: ['title', 'overview'],
-              additionalProperties: false,
-            },
-          },
-        }),
-      );
+        }));
       const overviewData = parseJSON<{ title: string; overview: string }>(overviewRaw);
       societyTitle = overviewData.title || location;
       societyOverview = overviewData.overview;
@@ -499,8 +428,7 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
       blueprints,
       profile,
       baseFiat,
-      finalConfig.minimumWage ?? 5,
-    );
+      finalConfig.minimumWage ?? 5);
     for (const bp of enterpriseBlueprints) {
       // Resolve ownerId from agent name to UUID (generateEnterprises uses names)
       const ownerUuid = agentNameToId.get(bp.ownerId);
@@ -562,8 +490,7 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
 function createFallbackProfile(
   locationName: string,
   countryCode: string,
-  coordinates: { lat: number; lon: number },
-): LocationProfile {
+  coordinates: { lat: number; lon: number }): LocationProfile {
   return {
     locationName,
     countryCode: countryCode.toUpperCase(),

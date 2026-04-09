@@ -191,6 +191,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
             actionTarget: string | null;
             actions: ActionQueueRecord[];
             narrative: string;
+            reasoning: string;
           }>;
         }>;
       };

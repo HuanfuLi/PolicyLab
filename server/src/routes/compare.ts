@@ -129,8 +129,7 @@ const PARAM_LABELS: Record<string, string> = {
 /** Compute deterministic param diffs between two sessions' economyConfig objects. */
 function computeParamDiffs(
   config1: Record<string, unknown>,
-  config2: Record<string, unknown>,
-): EconomyParamDiff[] {
+  config2: Record<string, unknown>): EconomyParamDiff[] {
   const allKeys = new Set([...Object.keys(config1), ...Object.keys(config2)]);
   const diffs: EconomyParamDiff[] = [];
   for (const key of allKeys) {
@@ -172,33 +171,7 @@ router.post('/', async (req, res) => {
     const provider = getProvider();
     const llmMessages = buildComparisonMessages(summary1, summary2);
     const raw = await provider.chat(llmMessages, {
-      model: settings.centralAgentModel,
-      jsonSchema: {
-        name: 'session_comparison',
-        schema: {
-          type: 'object',
-          properties: {
-            narrative: { type: 'string' },
-            dimensions: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  session1Score: { type: 'number' },
-                  session2Score: { type: 'number' },
-                  analysis: { type: 'string' },
-                },
-                required: ['name', 'session1Score', 'session2Score', 'analysis'],
-                additionalProperties: false,
-              },
-            },
-            verdict: { type: 'string' },
-          },
-          required: ['narrative', 'dimensions', 'verdict'],
-          additionalProperties: false,
-        },
-      },
+      model: settings.centralAgentModel
     });
     const parsed = parseJSON<{ narrative: string; dimensions: ComparisonResult['dimensions']; verdict: string }>(raw);
 

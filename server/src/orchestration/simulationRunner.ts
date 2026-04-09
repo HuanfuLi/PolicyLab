@@ -116,8 +116,7 @@ export class SimulationPausedError extends Error {
     public readonly iterationNumber: number,
     public readonly agentId: string,
     public readonly agentName: string,
-    message: string,
-  ) {
+    message: string) {
     super(message);
     this.name = 'SimulationPausedError';
   }
@@ -256,8 +255,7 @@ function computeSystemFiatTotal(
   treasury: number,
   wealthOverrides?: Map<string, number>,
   depositBalances: number = 0,
-  collateralEscrow: number = 0,
-): number {
+  collateralEscrow: number = 0): number {
   // M18 fix: exclude bank agents from fiat sum — bank reserves are already
   // represented via depositBalances + collateralEscrow to avoid double-counting
   const agentFiat = agents
@@ -456,8 +454,7 @@ function applyMETMetabolism(
   state: AgentWeekState,
   agent: { role: string; age?: number; weightKg?: number; currentWealth: number },
   sessionId: string,
-  iterationNumber: number,
-): void {
+  iterationNumber: number): void {
   // ── Luxury services: consume 1 unit to sharply reduce Cortisol ──────────
   if (state.inventory.luxury_goods.quantity > 0) {
     state.inventory.luxury_goods.quantity -= 1;
@@ -581,8 +578,7 @@ function updatePriceHistory(sessionId: string, priceIndices: PriceIndex[]): void
 function getInflationBasketPrices(
   sessionId: string,
   economyConfig: ReturnType<typeof getEconomyConfig>,
-  priceIndices: PriceIndex[] = [],
-): Record<string, number> {
+  priceIndices: PriceIndex[] = []): Record<string, number> {
   const iterationPrices = new Map<ItemType, number>();
   for (const idx of priceIndices) {
     iterationPrices.set(idx.itemType, idx.volume > 0 ? idx.vwap : idx.lastPrice);
@@ -1107,8 +1103,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       const restoredTreasury = savedAMMForTreasury?.treasury;
       sessionStateTreasury.set(
         sessionId,
-        restoredTreasury !== undefined ? restoredTreasury : Math.max(citizenAgents.length, 1) * 500,
-      );
+        restoredTreasury !== undefined ? restoredTreasury : Math.max(citizenAgents.length, 1) * 500);
     }
 
     // ── Phase 2: Darwinian Market Protocol — Genesis Endowment ────────────
@@ -1224,8 +1219,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         const restoredTreasury = savedAMM?.treasury;
         sessionStateTreasury.set(
           sessionId,
-          restoredTreasury !== undefined ? restoredTreasury : Math.max(citizenAgents.length, 1) * 500,
-        );
+          restoredTreasury !== undefined ? restoredTreasury : Math.max(citizenAgents.length, 1) * 500);
       }
 
       if (multiMissing) {
@@ -1373,8 +1367,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           sessionStateTreasury.get(sessionId) ?? 0,
           undefined,
           baselineDeposits,
-          baselineCollateral,
-        ),
+          baselineCollateral),
       });
     }
 
@@ -1476,8 +1469,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       const cognitiveOutputs = await runCognitivePreProcessing(
         sessionId, iterNum, cognitiveInputs, citizenProv,
         { model: settings.citizenAgentModel },
-        settings.maxConcurrency,
-      );
+        settings.maxConcurrency);
       const employmentBoard = buildEmploymentBoardEntries(sessionId);
 
       // C1: Build MarketIntelligence block once per iteration (all agents see same market)
@@ -1562,8 +1554,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               iterNum,
               agent.id,
               agent.name,
-              `Simulation paused: stop requested before launching "${agent.name}" at iteration ${iterNum}. Resume will retry this iteration.`,
-            );
+              `Simulation paused: stop requested before launching "${agent.name}" at iteration ${iterNum}. Resume will retry this iteration.`);
           }
 
           // Build economy context for the agent
@@ -1699,8 +1690,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           const subconsciousDrive = getSubconsciousDrive(
             agent.currentStats.cortisol ?? 20,
             agent.currentStats.wealth,
-            agent.currentStats.health,
-          );
+            agent.currentStats.health);
 
           // Runtime assertion: verify agent context includes accurate personal data (D-22)
           assertAgentContext(agent.id, agent);
@@ -1733,8 +1723,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             inflationContext,
             centralBankContext,
             ammMarketData,
-            enterpriseContext,
-          );
+            enterpriseContext);
 
           // throwOnExhaustion: true — after all retries, throw instead of silently defaulting to REST.
           // This surfaces parse/context failures so the simulation can pause rather than
@@ -1743,31 +1732,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             provider: citizenProv,
             messages,
             options: {
-              model: settings.citizenAgentModel,
-              jsonSchema: {
-                name: 'citizen_intent',
-                schema: {
-                  type: 'object',
-                  properties: {
-                    internal_monologue: { type: 'string' },
-                    public_narrative: { type: 'string' },
-                    actions: {
-                      type: 'array',
-                      items: {
-                        type: 'object',
-                        properties: {
-                          actionCode: { type: 'string' },
-                          parameters: { type: 'object', additionalProperties: {} },
-                        },
-                        required: ['actionCode', 'parameters'],
-                        additionalProperties: false,
-                      },
-                    },
-                  },
-                  required: ['internal_monologue', 'public_narrative', 'actions'],
-                  additionalProperties: false,
-                },
-              },
+              model: settings.citizenAgentModel
             },
             parse: parseSinglePassIntent,
             fallback: {
@@ -1852,8 +1817,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           throw new SimulationPausedError(
             isCtx ? 'context-overflow' : isProvider ? 'provider-failure' : 'parse-failure',
             iterNum, agent.id, agent.name,
-            `Simulation paused: ${isCtx ? 'context length exceeded' : isProvider ? 'provider connection failure' : 'parser failure'} for "${agent.name}" at iteration ${iterNum}. Resume will retry this iteration.`,
-          );
+            `Simulation paused: ${isCtx ? 'context length exceeded' : isProvider ? 'provider connection failure' : 'parser failure'} for "${agent.name}" at iteration ${iterNum}. Resume will retry this iteration.`);
         }
       });
 
@@ -1869,8 +1833,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           iterNum,
           'system',
           'system',
-          `Simulation paused: user pause requested during intent collection at iteration ${iterNum}. Resume will retry this iteration.`,
-        );
+          `Simulation paused: user pause requested during intent collection at iteration ${iterNum}. Resume will retry this iteration.`);
       }
 
       // ── Phase Sheriff A: Legality detection ───────────────────────────────
@@ -1889,30 +1852,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           }));
           const legalityMessages = buildLegalityCheckPrompt(legalityInput, session.law, session.societyOverview ?? null);
           const rawLegality = await provider.chat(legalityMessages, {
-            model: settings.centralAgentModel,
-            jsonSchema: {
-              name: 'legality_check',
-              schema: {
-                type: 'object',
-                properties: {
-                  illegalAgents: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        agentId: { type: 'string' },
-                        actionCode: { type: 'string' },
-                        reason: { type: 'string' },
-                      },
-                      required: ['agentId', 'actionCode', 'reason'],
-                      additionalProperties: false,
-                    },
-                  },
-                },
-                required: ['illegalAgents'],
-                additionalProperties: false,
-              },
-            },
+            model: settings.centralAgentModel
           });
           const parsedLegality = parseJSON<{ illegalAgents?: Array<{ agentId: string; actionCode: string; reason: string }> }>(rawLegality);
           if (Array.isArray(parsedLegality?.illegalAgents)) {
@@ -1977,8 +1917,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         telemetryLogs.length >= 2 ? telemetryLogs[telemetryLogs.length - 2] : null,
         agentStatsForDigest,
         citizenAgentsForDigest.length,
-        deathCountThisIter,
-      );
+        deathCountThisIter);
 
       if (aliveAgents.length > MAPREDUCE_THRESHOLD) {
         // ── Map-Reduce path for large sessions (role-based clustering) ──
@@ -2017,30 +1956,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
                     }));
                     const legalityMsgs = buildLegalityCheckPrompt(legalityInput, session.law!, session.societyOverview ?? null);
                     const rawLegality = await citizenProv.chat(legalityMsgs, {
-                      model: settings.citizenAgentModel,
-                      jsonSchema: {
-                        name: 'legality_check',
-                        schema: {
-                          type: 'object',
-                          properties: {
-                            illegalAgents: {
-                              type: 'array',
-                              items: {
-                                type: 'object',
-                                properties: {
-                                  agentId: { type: 'string' },
-                                  actionCode: { type: 'string' },
-                                  reason: { type: 'string' },
-                                },
-                                required: ['agentId', 'actionCode', 'reason'],
-                                additionalProperties: false,
-                              },
-                            },
-                          },
-                          required: ['illegalAgents'],
-                          additionalProperties: false,
-                        },
-                      },
+                      model: settings.citizenAgentModel
                     });
                     const parsed = JSON.parse(rawLegality) as { illegalAgents?: Array<{ agentId: string; actionCode: string; reason: string }> };
                     return Array.isArray(parsed?.illegalAgents) ? parsed.illegalAgents : [];
@@ -2124,8 +2040,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           previousTelemetry,
           telemetryLogs.length >= 2 ? telemetryLogs[telemetryLogs.length - 2] : null,
           citizenAgentsForDigest.length,
-          deathsInResolution,
-        );
+          deathsInResolution);
         if (!narrativeCheck.passed) {
           appendTrace(sessionId, `[NARRATIVE] Validation failed: ${narrativeCheck.failures.join('; ')}. Regenerating...`);
           // One retry with stricter prompt
@@ -2163,8 +2078,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             previousTelemetry,
             telemetryLogs.length >= 2 ? telemetryLogs[telemetryLogs.length - 2] : null,
             citizenAgentsForDigest.length,
-            deathsInResolution,
-          );
+            deathsInResolution);
           if (!retryCheck.passed) {
             appendTrace(sessionId, `[NARRATIVE] Retry still failed validation: ${retryCheck.failures.join('; ')}. Using anyway.`);
           }
@@ -2712,8 +2626,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           // Use pro-rata shares based on available wealth; cap each contributor at their available
           const targetShares = distributeProRata(
             Math.min(EMBEZZLE_TARGET, Math.floor(totalAvailable)),
-            availableList.map(a => (a > 0 ? a : 0)),
-          );
+            availableList.map(a => (a > 0 ? a : 0)));
 
           let totalEmbezzled = 0;
           for (let i = 0; i < contributors.length; i++) {
@@ -3137,8 +3050,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           const fractionalRemainder = seizedWealthPool - integerPool;
           const equalShares = distributeProRata(
             integerPool,
-            survivorUpdates.map(() => 1),
-          );
+            survivorUpdates.map(() => 1));
           // Preserve the fractional remainder by routing it to the first survivor.
           const seizedUBI = seizedWealthPool / survivorUpdates.length; // for display only
           for (let i = 0; i < survivorUpdates.length; i++) {
@@ -3221,8 +3133,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             if (action.actionCode === 'BUY_SHARES') {
               // Find enterprise owner by name or ID
               const enterpriseOwner = aliveAgents.find(
-                a => a.id === rawTarget || a.name.toLowerCase() === targetText,
-              );
+                a => a.id === rawTarget || a.name.toLowerCase() === targetText);
               if (!enterpriseOwner) continue;
               const sharesToBuy = typeof action.parameters?.quantity === 'number' ? action.parameters.quantity : 10;
               const totalShares = sharesByEnterprise.get(enterpriseOwner.id) ?? 0;
@@ -3235,15 +3146,13 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             } else if (action.actionCode === 'SELL_SHARES') {
               // Seller sells to any willing buyer (we pick the first available non-owner agent)
               const enterpriseOwner = aliveAgents.find(
-                a => a.id === rawTarget || a.name.toLowerCase() === targetText,
-              );
+                a => a.id === rawTarget || a.name.toLowerCase() === targetText);
               if (!enterpriseOwner) continue;
               const sharesToSell = typeof action.parameters?.quantity === 'number' ? action.parameters.quantity : 10;
               const totalShares = sharesByEnterprise.get(enterpriseOwner.id) ?? 0;
               // Buy side: pick the first alive agent that is not the seller and not the enterprise owner
               const potentialBuyer = aliveAgents.find(
-                a => a.id !== intent.agentId && a.id !== enterpriseOwner.id,
-              );
+                a => a.id !== intent.agentId && a.id !== enterpriseOwner.id);
               if (!potentialBuyer) continue;
               cmktPendingShareSales.push({
                 sellerId: intent.agentId,
@@ -3263,8 +3172,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               } else {
                 // Corporate bond: target is enterprise owner
                 const enterpriseOwner = aliveAgents.find(
-                  a => a.id === rawTarget || a.name.toLowerCase() === targetText,
-                );
+                  a => a.id === rawTarget || a.name.toLowerCase() === targetText);
                 if (!enterpriseOwner) continue;
                 const couponRate = cmktEconomyConfig.govBondCouponRate ?? 0.01;
                 const maturityIter = iterNum + (cmktEconomyConfig.govBondTermIterations ?? 10);
@@ -3350,8 +3258,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               `depositUpdates=${bankingDelta.depositUpdates.length}`,
               bankingDelta.newLoans.map(l => `loan:borrower=${l.borrowerAgentId},lender=${l.lenderAgentId}`),
               bankingDelta.newDeposits.map(d => `dep:owner=${d.ownerAgentId},bank=${d.bankAgentId}`),
-              bankingDelta.balanceSheetSnapshots.map(s => `sheet:agent=${s.agentId}`),
-            );
+              bankingDelta.balanceSheetSnapshots.map(s => `sheet:agent=${s.agentId}`));
           }
           throw bankErr;
         }
@@ -3432,8 +3339,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         // Apply treasury delta (gov bond purchases, gov coupon/maturity payments)
         sessionStateTreasury.set(
           sessionId,
-          (sessionStateTreasury.get(sessionId) ?? 0) + cmktDelta.treasuryDelta,
-        );
+          (sessionStateTreasury.get(sessionId) ?? 0) + cmktDelta.treasuryDelta);
 
         // Append capital market traces to physics trace log
         if (cmktDelta.trace.length > 0) {
@@ -3772,8 +3678,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           treasuryBalance,
           finalWealthByAgentId,
           bankingTotalDeposits,
-          bankingCollateralEscrow,
-        );
+          bankingCollateralEscrow);
         const latestSnapshot = macroSnapshotRepo.getLatestSnapshot(db, sessionId);
         const smoothingWindow = persistedEconomyConfig.inflationSmoothingWindow ?? DEFAULT_ECONOMY_CONFIG.inflationSmoothingWindow ?? 3;
         const recentSnapshots = macroSnapshotRepo.getRecentSnapshots(db, sessionId, smoothingWindow);
@@ -3968,8 +3873,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           treasury,
           finalWealthByAgentId,
           bankingTotalDeposits,
-          bankingCollateralEscrow,
-        );
+          bankingCollateralEscrow);
         const totalCaloriesBurned = [...weekStateMap.values()].reduce((sum, ws) => sum + ws.caloriesBurned, 0);
         const totalCaloriesProduced = [...weekStateMap.values()].reduce((sum, ws) => sum + ws.caloriesProduced, 0);
         const totalFailedActions = [...weekStateMap.values()].reduce((sum, ws) => sum + ws.failedActionCount, 0);
@@ -4164,8 +4068,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           sessionStateTreasury.get(sessionId) ?? 0,
           undefined,
           bankingTotalDeposits,
-          bankingCollateralEscrow,
-        );
+          bankingCollateralEscrow);
 
         let sfcEntry = sessionSFCTracking.get(sessionId);
         if (!sfcEntry) {
@@ -4288,8 +4191,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         const msg = iterErr instanceof Error ? iterErr.message : String(iterErr);
         if (msg.includes('FOREIGN KEY')) {
           console.error(`[FK_DEBUG] Iteration snapshot FK error at iter ${iterNum}:`,
-            `lifecycleEvents=${JSON.stringify(resolution.lifecycleEvents?.slice(0, 5))}`,
-          );
+            `lifecycleEvents=${JSON.stringify(resolution.lifecycleEvents?.slice(0, 5))}`);
         }
         throw iterErr;
       }
@@ -4410,16 +4312,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         try {
           const messages = buildPostMortemPrompt(input);
           const raw = await citizenProv.chat(messages, {
-            model: settings.citizenAgentModel,
-            jsonSchema: {
-              name: 'post_mortem',
-              schema: {
-                type: 'object',
-                properties: { postMortemCritique: { type: 'string' } },
-                required: ['postMortemCritique'],
-                additionalProperties: false,
-              },
-            },
+            model: settings.citizenAgentModel
           });
           const parsed = JSON.parse(raw);
           return `${agent.name} (${agent.role}, died Iter ${diedAtIteration}): "${parsed.postMortemCritique}"`;
@@ -4456,8 +4349,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // Structured pause: persist simulation-paused stage so the resume route can restart.
       // The failing iteration was never committed, so resuming will retry it from scratch.
       console.error(
-        `[SimulationRunner] Session ${sessionId} paused — ${err.reason} for agent "${err.agentName}" at iteration ${err.iterationNumber}`,
-      );
+        `[SimulationRunner] Session ${sessionId} paused — ${err.reason} for agent "${err.agentName}" at iteration ${err.iterationNumber}`);
       try { await sessionRepo.updateStage(sessionId, 'simulation-paused'); } catch { /* best-effort */ }
       try { simulationManager.broadcast(sessionId, { type: 'error', message: err.message }); } catch { /* best-effort */ }
     } else {

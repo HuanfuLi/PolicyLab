@@ -193,6 +193,56 @@ router.post('/test', async (req, res) => {
   }
 });
 
+// POST /api/settings/test-provider/:index — test a specific extra provider slot
+router.post('/test-provider/:index', async (req, res) => {
+  try {
+    const slotIndex = parseInt(req.params.index, 10);
+    const saved = readSettings();
+    const slots = saved.providers ?? [];
+    const body = (req.body ?? {}) as Partial<{ provider: string; apiKey: string; baseUrl: string; model: string; vertexProjectId: string; vertexLocation: string }>;
+
+    if (isNaN(slotIndex) || slotIndex < 0) {
+      return res.json({ ok: false, model: '', latencyMs: 0, error: 'Invalid provider slot index' });
+    }
+
+    // Build test settings from the saved slot + any overrides from body
+    const slot = slots[slotIndex];
+    const testProvider = body.provider ?? slot?.provider ?? 'local';
+    const testSettings: import('@policylab/shared').AppSettings = {
+      ...saved,
+      provider: testProvider as import('@policylab/shared').AppSettings['provider'],
+      apiKey: body.apiKey?.trim() || slot?.apiKey || '',
+      baseUrl: body.baseUrl?.trim() || slot?.baseUrl || 'http://localhost:1234/v1',
+      centralAgentModel: body.model?.trim() || slot?.model || 'local-model',
+      citizenAgentModel: body.model?.trim() || slot?.model || 'local-model',
+      vertexProjectId: body.vertexProjectId?.trim() || slot?.vertexProjectId || '',
+      vertexLocation: body.vertexLocation?.trim() || slot?.vertexLocation || '',
+    };
+
+    // Validate: cloud providers require an API key
+    const needsKey = testSettings.provider !== 'local' && testSettings.provider !== 'vertex';
+    if (needsKey && !testSettings.apiKey) {
+      return res.json({
+        ok: false,
+        model: testSettings.centralAgentModel,
+        latencyMs: 0,
+        error: `No API key configured for provider slot ${slotIndex}. Enter a key and try again.`,
+      });
+    }
+
+    const tempProvider = createProviderFromSettings(testSettings);
+    const result = await tempProvider.testConnection();
+    res.json(result);
+  } catch (err) {
+    res.json({
+      ok: false,
+      model: '',
+      latencyMs: 0,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 // POST /api/settings/sandbox — run the deterministic physics sandbox test (no LLM calls)
 router.post('/sandbox', (_req, res) => {
   const sandboxPath = path.resolve(__dirname, '../mechanics/__tests__/physics_sandbox.ts');

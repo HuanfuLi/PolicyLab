@@ -896,14 +896,21 @@ function AgentIntentCard({ agent, history, pending }: AgentIntentCardProps) {
                   </span>
                   {actionQueueBadges(record.actions, record.actionCode, record.actionTarget)}
                 </div>
-                {isOpen && record.narrative && (
+                {isOpen && (record.narrative || record.reasoning) && (
                   <div style={{
                     padding: '0.4rem 0.75rem 0.4rem 1.5rem',
                     fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5,
                     borderTop: '1px solid var(--glass-border)',
                     background: 'var(--panel-alpha-05)',
                   }}>
-                    {record.narrative}
+                    {record.reasoning && (
+                      <div style={{ marginBottom: record.narrative ? '0.3rem' : 0, fontStyle: 'italic', color: 'var(--text-dim)' }}>
+                        {record.reasoning}
+                      </div>
+                    )}
+                    {record.narrative && record.narrative !== record.reasoning && (
+                      <div>{record.narrative}</div>
+                    )}
                   </div>
                 )}
               </div>

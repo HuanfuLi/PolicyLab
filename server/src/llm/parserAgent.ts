@@ -109,8 +109,7 @@ function extractTargetName(text: string, aliveAgentNames: string[]): string | nu
  */
 export function parseByKeywords(
     text: string,
-    aliveAgentNames: string[],
-): { actionCode: ActionCode; actionTarget: string | null } | null {
+    aliveAgentNames: string[]): { actionCode: ActionCode; actionTarget: string | null } | null {
     const normalized = text.toLowerCase();
 
     for (const rule of KEYWORD_RULES) {
@@ -136,8 +135,7 @@ function buildParserPrompt(
     naturalLanguageIntent: string,
     agentName: string,
     agentRole: string,
-    aliveAgentNames: string[],
-): LLMMessage[] {
+    aliveAgentNames: string[]): LLMMessage[] {
     const validActions = [
         'WORK_AT_ENTERPRISE', 'REST', 'STRIKE', 'STEAL', 'HELP',
         'INVEST', 'PRODUCE_AND_SELL',
@@ -212,8 +210,7 @@ function parseParserResponse(raw: string): { actionCode: ActionCode; actionTarge
 export async function runParserAgent(
     input: ParserAgentInput,
     provider: LLMProvider,
-    options?: LLMOptions,
-): Promise<ParserAgentOutput> {
+    options?: LLMOptions): Promise<ParserAgentOutput> {
     const { naturalLanguageIntent, agentName, agentRole, aliveAgentNames } = input;
 
     // Guard: empty or extremely short input
@@ -243,18 +240,6 @@ export async function runParserAgent(
         const raw = await provider.chat(messages, {
             ...options,
             temperature: 0, // Deterministic
-            jsonSchema: {
-                name: 'action_parse',
-                schema: {
-                    type: 'object',
-                    properties: {
-                        actionCode: { type: 'string' },
-                        actionTarget: { type: ['string', 'null'] },
-                    },
-                    required: ['actionCode', 'actionTarget'],
-                    additionalProperties: false,
-                },
-            },
         });
         const { actionCode, actionTarget } = parseParserResponse(raw);
         return {
@@ -298,8 +283,7 @@ export async function batchParseIntents(
     inputs: ParserAgentInput[],
     provider: LLMProvider,
     options?: LLMOptions,
-    concurrency: number = 10,
-): Promise<Map<string, ParserAgentOutput>> {
+    concurrency: number = 10): Promise<Map<string, ParserAgentOutput>> {
     const results = new Map<string, ParserAgentOutput>();
 
     // First pass: try keyword parsing (synchronous, instant)

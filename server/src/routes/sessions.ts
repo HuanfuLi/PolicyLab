@@ -169,6 +169,7 @@ router.get('/:id/agent-intents', async (req, res) => {
         actionTarget: agentIntents.actionTarget,
         actionQueue: agentIntents.actionQueue,
         intent: agentIntents.intent,
+        reasoning: agentIntents.reasoning,
         iterationNumber: iterations.iterationNumber,
       })
       .from(agentIntents)
@@ -192,6 +193,7 @@ router.get('/:id/agent-intents', async (req, res) => {
         actionTarget: string | null;
         actions: Array<{ actionCode: string; parameters: Record<string, unknown> }>;
         narrative: string;
+        reasoning: string;
       }>;
     }>();
     for (const row of rows) {
@@ -211,6 +213,7 @@ router.get('/:id/agent-intents', async (req, res) => {
         actionTarget: row.actionTarget ?? null,
         actions,
         narrative: row.intent,
+        reasoning: row.reasoning ?? '',
       });
     }
 

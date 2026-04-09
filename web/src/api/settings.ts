@@ -12,6 +12,10 @@ export const settingsApi = {
   test: (overrides?: Partial<AppSettings>) =>
     apiFetch<TestResult>('/settings/test', 'POST', overrides ?? {}),
 
+  // Test a specific extra provider slot by index
+  testProviderSlot: (index: number, overrides?: Record<string, string>) =>
+    apiFetch<TestResult>(`/settings/test-provider/${index}`, 'POST', overrides ?? {}),
+
   // ── Physics Laboratory API ──────────────────────────────────────────────
 
   /** Fetch the current live physics configuration (all numerical constants). */

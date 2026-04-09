@@ -63,8 +63,7 @@ function reflectionKey(sessionId: string, agentId: string): string {
 export function shouldReflect(
     sessionId: string,
     agentId: string,
-    currentIteration: number,
-): { shouldTrigger: boolean; importanceSum: number } {
+    currentIteration: number): { shouldTrigger: boolean; importanceSum: number } {
     const key = reflectionKey(sessionId, agentId);
     const lastReflection = lastReflectionIter.get(key) ?? 0;
     const importanceSum = getRecentImportanceSum(sessionId, agentId, lastReflection);
@@ -85,8 +84,7 @@ function buildReflectionPrompt(
     agentName: string,
     agentRole: string,
     recentMemories: ScoredMemory[],
-    currentStats: { wealth: number; health: number; happiness: number },
-): LLMMessage[] {
+    currentStats: { wealth: number; health: number; happiness: number }): LLMMessage[] {
     const memoriesText = formatMemoriesForPrompt(recentMemories, 1200);
 
     const systemPrompt = `You are the inner consciousness of ${agentName}, a ${agentRole} in a simulated society.
@@ -134,8 +132,7 @@ export async function runReflection(
     currentIteration: number,
     currentStats: { wealth: number; health: number; happiness: number },
     provider: LLMProvider,
-    options?: LLMOptions,
-): Promise<ReflectionResult> {
+    options?: LLMOptions): Promise<ReflectionResult> {
     const key = reflectionKey(sessionId, agentId);
     const { shouldTrigger, importanceSum } = shouldReflect(sessionId, agentId, currentIteration);
 
@@ -149,8 +146,7 @@ export async function runReflection(
         agentId,
         currentIteration,
         'personal finances security resources fairness society relationships',
-        REFLECTION_CONTEXT_SIZE,
-    );
+        REFLECTION_CONTEXT_SIZE);
 
     let reflectionText: string;
     let metadata: { economicSentiment: string; classConsciousness: string; primaryConcern: string } = {
@@ -165,20 +161,6 @@ export async function runReflection(
         const raw = await provider.chat(messages, {
             ...options,
             temperature: 0.7, // Some creativity for reflections
-            jsonSchema: {
-                name: 'agent_reflection',
-                schema: {
-                    type: 'object',
-                    properties: {
-                        reflection: { type: 'string' },
-                        economicSentiment: { type: 'string' },
-                        classConsciousness: { type: 'string' },
-                        primaryConcern: { type: 'string' },
-                    },
-                    required: ['reflection', 'economicSentiment', 'classConsciousness', 'primaryConcern'],
-                    additionalProperties: false,
-                },
-            },
         });
 
         const parsed = parseJSON<Record<string, unknown>>(raw);
@@ -221,8 +203,7 @@ export async function runReflection(
 function generateDeterministicReflection(
     agentName: string,
     stats: { wealth: number; health: number; happiness: number },
-    memories: ScoredMemory[],
-): string {
+    memories: ScoredMemory[]): string {
     const parts: string[] = [];
 
     // Financial assessment
@@ -271,8 +252,7 @@ export async function batchReflections(
     agents: Array<{ id: string; name: string; role: string; stats: { wealth: number; health: number; happiness: number } }>,
     currentIteration: number,
     provider: LLMProvider,
-    options?: LLMOptions,
-): Promise<Map<string, ReflectionResult>> {
+    options?: LLMOptions): Promise<Map<string, ReflectionResult>> {
     const results = new Map<string, ReflectionResult>();
 
     const reflectionPromises = agents.map(async (agent) => {
@@ -284,8 +264,7 @@ export async function batchReflections(
             currentIteration,
             agent.stats,
             provider,
-            options,
-        );
+            options);
         return { id: agent.id, result };
     });
 

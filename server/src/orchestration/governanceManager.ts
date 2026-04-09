@@ -68,8 +68,7 @@ async function selectPoliticians(
   agents: Agent[],
   societyContext: string,
   provider: LLMProvider,
-  model: string,
-): Promise<Agent[]> {
+  model: string): Promise<Agent[]> {
   if (agents.length === 0) return [];
 
   // Determine franchise size via Central Agent reasoning
@@ -77,16 +76,7 @@ async function selectPoliticians(
   try {
     const messages = buildFranchiseSizePrompt(agents.length, societyContext);
     const raw = await provider.chat(messages, {
-      model,
-      jsonSchema: {
-        name: 'franchise_size',
-        schema: {
-          type: 'object',
-          properties: { franchiseSize: { type: 'number' } },
-          required: ['franchiseSize'],
-          additionalProperties: false,
-        },
-      },
+      model
     });
     const parsed = JSON.parse(raw) as { franchiseSize?: number };
     if (typeof parsed?.franchiseSize === 'number' && isFinite(parsed.franchiseSize)) {
@@ -166,26 +156,7 @@ export async function runGovernanceCycle(params: {
     try {
       const messages = buildProposalPrompt(agent, currentPolicy, societyContext, iterNum);
       const raw = await citizenProv.chat(messages, {
-        model: citizenModel,
-        jsonSchema: {
-          name: 'policy_proposal',
-          schema: {
-            type: 'object',
-            properties: {
-              proposal: {
-                type: ['object', 'null'],
-                properties: {
-                  field: { type: 'string' },
-                  value: { type: 'number' },
-                  reasoning: { type: 'string' },
-                },
-                required: ['field', 'value', 'reasoning'],
-              },
-            },
-            required: ['proposal'],
-            additionalProperties: false,
-          },
-        },
+        model: citizenModel
       });
       const parsed = safeJson(raw) as { proposal?: GovernancePolicyProposal | null } | null;
       if (!parsed?.proposal) return;
@@ -214,31 +185,7 @@ export async function runGovernanceCycle(params: {
   try {
     const messages = buildBallotPrompt(rawProposals, currentPolicy, societyContext);
     const raw = await provider.chat(messages, {
-      model,
-      jsonSchema: {
-        name: 'governance_ballot',
-        schema: {
-          type: 'object',
-          properties: {
-            ballot: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  field: { type: 'string' },
-                  proposedValue: { type: 'number' },
-                  description: { type: 'string' },
-                  impactForecast: { type: 'string' },
-                },
-                required: ['field', 'proposedValue', 'description'],
-                additionalProperties: false,
-              },
-            },
-          },
-          required: ['ballot'],
-          additionalProperties: false,
-        },
-      },
+      model
     });
     const parsed = safeJson(raw) as { ballot?: GovernanceBallotItem[] } | null;
     if (Array.isArray(parsed?.ballot)) {
@@ -278,16 +225,7 @@ export async function runGovernanceCycle(params: {
       try {
         const messages = buildVotePrompt(agent, item, currentPolicy);
         const raw = await citizenProv.chat(messages, {
-          model: citizenModel,
-          jsonSchema: {
-            name: 'vote_decision',
-            schema: {
-              type: 'object',
-              properties: { vote: { type: 'string' } },
-              required: ['vote'],
-              additionalProperties: false,
-            },
-          },
+          model: citizenModel
         });
         const parsed = safeJson(raw) as { vote?: string } | null;
         if (parsed?.vote === 'YES') yesCount++;

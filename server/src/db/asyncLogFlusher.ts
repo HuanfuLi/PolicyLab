@@ -92,6 +92,39 @@ class AsyncLogFlusher {
       this.queue.splice(0, batch.length);
       this.consecutiveFailures = 0;
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+
+      // If the batch-level transaction failed due to a FK constraint, try inserting
+      // rows individually so only the offending rows are dropped (not the entire batch).
+      if (/FOREIGN KEY/i.test(errMsg)) {
+        console.warn(`[asyncLogFlusher] FK constraint in batch — falling back to per-row insert (${batch.length} rows)`);
+        let inserted = 0;
+        let dropped = 0;
+        for (const [key, group] of groups) {
+          let stmt = this.stmtCache.get(key);
+          if (!stmt) {
+            const placeholders = group.columns.map(() => '?').join(', ');
+            const sql = `INSERT INTO ${group.table} (${group.columns.join(', ')}) VALUES (${placeholders})`;
+            stmt = sqlite.prepare(sql);
+            this.stmtCache.set(key, stmt);
+          }
+          for (const row of group.rows) {
+            try {
+              (stmt.run as (...params: unknown[]) => void)(...row);
+              inserted++;
+            } catch {
+              dropped++;
+            }
+          }
+        }
+        if (dropped > 0) {
+          console.warn(`[asyncLogFlusher] Per-row fallback: ${inserted} inserted, ${dropped} dropped (FK violations)`);
+        }
+        this.queue.splice(0, batch.length);
+        this.consecutiveFailures = 0;
+        return;
+      }
+
       this.consecutiveFailures++;
       if (this.consecutiveFailures >= MAX_RETRY_ATTEMPTS) {
         console.error(`[asyncLogFlusher] Transaction failed ${this.consecutiveFailures} times, dropping ${batch.length} rows:`, err);
