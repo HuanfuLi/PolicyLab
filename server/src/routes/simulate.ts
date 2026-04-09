@@ -16,17 +16,23 @@ import {
   iterations, agentIntents, resolvedActions,
   agents, economySnapshots, agentEconomy, marketPrices, roleChanges, ammSnapshots,
   orderBook, depositAccounts, loanContracts, bankBalanceSheets, macroSnapshots,
-  equityPositions, bondHoldings, fiscalBudgets, publicGoodsState,
+  equityPositions, bondHoldings, fiscalBudgets, publicGoodsState, enterprises,
 } from '../db/schema.js';
 import { sessionRepo } from '../db/repos/sessionRepo.js';
 import { runSimulation, getSessionTelemetry } from '../orchestration/simulationRunner.js';
 import { simulationManager } from '../orchestration/simulationManager.js';
+import { asyncLogFlusher } from '../db/asyncLogFlusher.js';
 
 /**
  * Wipes all simulation artifacts for a session and resets agents to their
  * initial stats / alive status. Used by the abort-reset flow.
  */
 async function eraseSimulationData(sessionId: string): Promise<void> {
+  // Drain pending asyncLogFlusher writes BEFORE deleting — if the flusher has
+  // queued agent_intents or resolved_actions rows for this session, flushing
+  // them AFTER the delete would trigger FOREIGN KEY constraint failures.
+  asyncLogFlusher.flush();
+
   // Delete all iteration-generated data (FK cascades handle child rows where applicable,
   // but explicit deletes are safer and faster with the current schema).
   await db.delete(iterations).where(eq(iterations.sessionId, sessionId));
@@ -46,6 +52,7 @@ async function eraseSimulationData(sessionId: string): Promise<void> {
   await db.delete(bondHoldings).where(eq(bondHoldings.sessionId, sessionId));
   await db.delete(fiscalBudgets).where(eq(fiscalBudgets.sessionId, sessionId));
   await db.delete(publicGoodsState).where(eq(publicGoodsState.sessionId, sessionId));
+  await db.delete(enterprises).where(eq(enterprises.sessionId, sessionId));
 
   // Reset every agent's current_stats back to initial_stats, revive the dead,
   // and clear persisted allostatic physiology so the next run starts clean.

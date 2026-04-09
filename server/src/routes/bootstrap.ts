@@ -301,36 +301,16 @@ router.post('/:id/bootstrap', async (req, res) => {
     const baseFiat = Math.max(20, Math.min(500, Math.round(gdpPerCapita / 100)));
     const blueprints = generateAgentRoster(profile, clampedAgentCount, baseFiat);
 
-    // 5d: Generate agent backgrounds via LLM (structured output)
+    // 5d: Generate agent backgrounds via LLM
+    // NOTE: No jsonSchema here — this is a large creative generation (30+ agents with
+    // detailed backgrounds). Structured output enforcement makes local models (LM Studio)
+    // 10x+ slower, causing timeouts and fallback to placeholder names. The prompt already
+    // instructs JSON format and parseJSON handles edge cases robustly.
     try {
       const provider = getProvider();
       const rosterRaw = await withRetry(() =>
         provider.chat(
           buildLocationAgentRosterMessages(profile, blueprints, scenario),
-          {
-            jsonSchema: {
-              name: 'agent_roster',
-              schema: {
-                type: 'object',
-                properties: {
-                  agents: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        name: { type: 'string', description: 'Culturally appropriate full name' },
-                        background: { type: 'string', description: '5-8 sentence life story with economic instinct' },
-                      },
-                      required: ['name', 'background'],
-                      additionalProperties: false,
-                    },
-                  },
-                },
-                required: ['agents'],
-                additionalProperties: false,
-              },
-            },
-          },
         ),
       );
       const rosterData = parseJSON<{
@@ -354,6 +334,15 @@ router.post('/:id/bootstrap', async (req, res) => {
         message: 'Agent background generation failed — using role-based defaults',
       } as any);
       // Continue with stub backgrounds already set on blueprints
+    }
+
+    // Patch any agents still carrying placeholder names (Agent-I1, Agent-S1, etc.)
+    // with role-based fallback names so they are never visible to the user.
+    const PLACEHOLDER_RE = /^Agent-[A-Z]\d+$/;
+    for (const bp of blueprints) {
+      if (PLACEHOLDER_RE.test(bp.name)) {
+        bp.name = generateFallbackName(bp.role, blueprints.indexOf(bp));
+      }
     }
 
     // 5e: Generate law document via LLM
@@ -605,6 +594,32 @@ function createFallbackProfile(
     governance: { value: 'Unknown', source: 'llm', confidence: 'low' },
     infrastructure: { value: 'Unknown', source: 'llm', confidence: 'low' },
   };
+}
+
+/**
+ * Generate a deterministic fallback name for agents whose LLM-generated names
+ * were not produced (e.g., when the LLM returns fewer agents than requested).
+ * Uses role + index to create a unique, readable name.
+ */
+function generateFallbackName(role: string, index: number): string {
+  // Simple role-based name prefixes that avoid the ugly "Agent-XX" pattern
+  const ROLE_NAMES: Record<string, string[]> = {
+    farmer: ['Maria', 'Carlos', 'Elena', 'Pedro', 'Ana', 'Luis', 'Sofia', 'Diego'],
+    ranch_hand: ['Jorge', 'Rosa', 'Manuel', 'Carmen', 'Pablo', 'Lucia'],
+    agricultural_technician: ['Raul', 'Isabel', 'Andres', 'Clara'],
+    factory_worker: ['Viktor', 'Natalia', 'Sergei', 'Olga', 'Ivan', 'Tatiana'],
+    engineer: ['James', 'Sarah', 'Robert', 'Linda', 'Michael', 'Patricia'],
+    foreman: ['Franz', 'Heinrich', 'Otto', 'Klaus', 'Hans', 'Wilhelm'],
+    merchant: ['Ali', 'Fatima', 'Omar', 'Leila', 'Hassan', 'Amira'],
+    teacher: ['Margaret', 'Thomas', 'Catherine', 'William', 'Elizabeth', 'Henry'],
+    healthcare_worker: ['Grace', 'David', 'Ruth', 'Joseph', 'Martha', 'Samuel'],
+    clerk: ['Kenji', 'Yuki', 'Takeshi', 'Sakura', 'Hiroshi', 'Aiko'],
+  };
+  const names = ROLE_NAMES[role.toLowerCase()] ?? ['Alex', 'Jordan', 'Morgan', 'Taylor', 'Casey', 'Quinn'];
+  const firstName = names[index % names.length];
+  const suffix = Math.floor(index / names.length);
+  const roleTitle = role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return suffix > 0 ? `${firstName} (${roleTitle} ${suffix + 1})` : `${firstName} the ${roleTitle}`;
 }
 
 export default router;

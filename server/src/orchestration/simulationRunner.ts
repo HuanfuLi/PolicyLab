@@ -1742,7 +1742,33 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           const parsed = await retryWithHealing({
             provider: citizenProv,
             messages,
-            options: { model: settings.citizenAgentModel },
+            options: {
+              model: settings.citizenAgentModel,
+              jsonSchema: {
+                name: 'citizen_intent',
+                schema: {
+                  type: 'object',
+                  properties: {
+                    internal_monologue: { type: 'string' },
+                    public_narrative: { type: 'string' },
+                    actions: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          actionCode: { type: 'string' },
+                          parameters: { type: 'object', additionalProperties: {} },
+                        },
+                        required: ['actionCode', 'parameters'],
+                        additionalProperties: false,
+                      },
+                    },
+                  },
+                  required: ['internal_monologue', 'public_narrative', 'actions'],
+                  additionalProperties: false,
+                },
+              },
+            },
             parse: parseSinglePassIntent,
             fallback: {
               intent: '',
@@ -3296,23 +3322,39 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         // Apply all banking DB writes in a single synchronous transaction to avoid
         // SQLITE_BUSY and ensure atomicity. Banking runs once per iteration (not per-agent)
         // so the write volume is small and a direct transaction is safe here.
-        sqlite.transaction(() => {
-          for (const upd of bankingDelta.depositUpdates) {
-            bankingRepo.updateDepositBalance(upd.accountId, upd.newBalance, upd.iteration);
+        try {
+          sqlite.transaction(() => {
+            for (const upd of bankingDelta.depositUpdates) {
+              bankingRepo.updateDepositBalance(upd.accountId, upd.newBalance, upd.iteration);
+            }
+            for (const upd of bankingDelta.loanUpdates) {
+              bankingRepo.updateLoan(upd.loanId, upd.updates);
+            }
+            for (const loan of bankingDelta.newLoans) {
+              bankingRepo.insertLoan(loan);
+            }
+            for (const dep of bankingDelta.newDeposits) {
+              bankingRepo.upsertDeposit(dep);
+            }
+            for (const sheet of bankingDelta.balanceSheetSnapshots) {
+              bankingRepo.insertBalanceSheet(sheet);
+            }
+          })();
+        } catch (bankErr) {
+          const msg = bankErr instanceof Error ? bankErr.message : String(bankErr);
+          if (msg.includes('FOREIGN KEY')) {
+            console.error(`[FK_DEBUG] Banking transaction FK error at iter ${iterNum}:`,
+              `newLoans=${bankingDelta.newLoans.length}`,
+              `newDeposits=${bankingDelta.newDeposits.length}`,
+              `balanceSheets=${bankingDelta.balanceSheetSnapshots.length}`,
+              `depositUpdates=${bankingDelta.depositUpdates.length}`,
+              bankingDelta.newLoans.map(l => `loan:borrower=${l.borrowerAgentId},lender=${l.lenderAgentId}`),
+              bankingDelta.newDeposits.map(d => `dep:owner=${d.ownerAgentId},bank=${d.bankAgentId}`),
+              bankingDelta.balanceSheetSnapshots.map(s => `sheet:agent=${s.agentId}`),
+            );
           }
-          for (const upd of bankingDelta.loanUpdates) {
-            bankingRepo.updateLoan(upd.loanId, upd.updates);
-          }
-          for (const loan of bankingDelta.newLoans) {
-            bankingRepo.insertLoan(loan);
-          }
-          for (const dep of bankingDelta.newDeposits) {
-            bankingRepo.upsertDeposit(dep);
-          }
-          for (const sheet of bankingDelta.balanceSheetSnapshots) {
-            bankingRepo.insertBalanceSheet(sheet);
-          }
-        })();
+          throw bankErr;
+        }
         // Apply wealth deltas (interest income, collateral seizure) — in-memory only,
         // will be persisted with the rest of statUpdates below.
         for (const [agentId, delta] of bankingDelta.wealthDeltas) {
@@ -4198,49 +4240,59 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           })()
         : null;
 
-      sqlite.transaction(() => {
-        // 1. Iteration record
-        db.insert(iterationsTable).values({
-          id: iterationId,
-          sessionId,
-          iterationNumber: iterNum,
-          stateSummary: resolution.narrativeSummary,
-          statistics: JSON.stringify(statsWithTelemetry),
-          lifecycleEvents: JSON.stringify(resolution.lifecycleEvents),
-          timestamp: now,
-        }).run();
+      try {
+        sqlite.transaction(() => {
+          // 1. Iteration record
+          db.insert(iterationsTable).values({
+            id: iterationId,
+            sessionId,
+            iterationNumber: iterNum,
+            stateSummary: resolution.narrativeSummary,
+            statistics: JSON.stringify(statsWithTelemetry),
+            lifecycleEvents: JSON.stringify(resolution.lifecycleEvents),
+            timestamp: now,
+          }).run();
 
-        // 2. AMM + Treasury snapshot (co-committed with the iteration row)
-        if (ammSnapshotValues) {
-          db.insert(ammSnapshotsTable).values(ammSnapshotValues).run();
-        }
-
-        // 3. Persist role changes to roleChanges table (lifecycle events)
-        // Validate agentId against loaded agents — LLM may return names instead of UUIDs
-        const agentIdSet = new Set(agents.map(a => a.id));
-        const agentNameToIdMap = new Map(agents.map(a => [a.name, a.id]));
-        for (const evt of resolution.lifecycleEvents ?? []) {
-          const e = evt as { type: string; agentId?: string; detail?: string; fromRole?: string; toRole?: string };
-          if (e.type === 'role_change' && e.agentId) {
-            // Resolve: try UUID first, then name lookup, skip if neither matches
-            const resolvedId = agentIdSet.has(e.agentId) ? e.agentId : agentNameToIdMap.get(e.agentId);
-            if (!resolvedId) {
-              console.warn(`[ROLE_CHANGE] Skipping — agentId "${e.agentId}" not found in agents table`);
-              continue;
-            }
-            db.insert(roleChanges).values({
-              id: uuidv4(),
-              sessionId,
-              agentId: resolvedId,
-              fromRole: e.fromRole ?? '',
-              toRole: e.toRole ?? '',
-              reason: e.detail ?? null,
-              iterationNumber: iterNum,
-              timestamp: now,
-            }).run();
+          // 2. AMM + Treasury snapshot (co-committed with the iteration row)
+          if (ammSnapshotValues) {
+            db.insert(ammSnapshotsTable).values(ammSnapshotValues).run();
           }
+
+          // 3. Persist role changes to roleChanges table (lifecycle events)
+          // Validate agentId against loaded agents — LLM may return names instead of UUIDs
+          const agentIdSet = new Set(agents.map(a => a.id));
+          const agentNameToIdMap = new Map(agents.map(a => [a.name, a.id]));
+          for (const evt of resolution.lifecycleEvents ?? []) {
+            const e = evt as { type: string; agentId?: string; detail?: string; fromRole?: string; toRole?: string };
+            if (e.type === 'role_change' && e.agentId) {
+              // Resolve: try UUID first, then name lookup, skip if neither matches
+              const resolvedId = agentIdSet.has(e.agentId) ? e.agentId : agentNameToIdMap.get(e.agentId);
+              if (!resolvedId) {
+                console.warn(`[ROLE_CHANGE] Skipping — agentId "${e.agentId}" not found in agents table`);
+                continue;
+              }
+              db.insert(roleChanges).values({
+                id: uuidv4(),
+                sessionId,
+                agentId: resolvedId,
+                fromRole: e.fromRole ?? '',
+                toRole: e.toRole ?? '',
+                reason: e.detail ?? null,
+                iterationNumber: iterNum,
+                timestamp: now,
+              }).run();
+            }
+          }
+        })();
+      } catch (iterErr) {
+        const msg = iterErr instanceof Error ? iterErr.message : String(iterErr);
+        if (msg.includes('FOREIGN KEY')) {
+          console.error(`[FK_DEBUG] Iteration snapshot FK error at iter ${iterNum}:`,
+            `lifecycleEvents=${JSON.stringify(resolution.lifecycleEvents?.slice(0, 5))}`,
+          );
         }
-      })();
+        throw iterErr;
+      }
 
       summaries.push({ number: iterNum, summary: resolution.narrativeSummary });
       previousSummary = resolution.narrativeSummary;
