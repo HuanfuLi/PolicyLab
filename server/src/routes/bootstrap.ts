@@ -269,15 +269,25 @@ router.post('/:id/bootstrap', async (req, res) => {
     let rosterEnrichmentError: string | undefined;
 
     // Regex fallback: some models (e.g. Gemma-4) produce valid content but with
-    // structural JSON errors (unquoted keys, missing braces). Extract name+background
-    // pairs directly from raw text when parseJSON fails.
+    // structural JSON errors (unquoted keys, missing braces, _name": patterns).
+    // Extract name+background pairs directly from raw text when parseJSON fails.
     function extractAgentPairs(text: string): Array<{ name: string; background: string }> {
-      const names = [...text.matchAll(/"name"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
-      const bgs = [...text.matchAll(/"background"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
-      if (names.length > 0 && names.length === bgs.length) {
-        return names.map((name, i) => ({ name, background: bgs[i] }));
+      // Pre-process: fix _name": → "name": (opening quote replaced by underscore)
+      const processed = text.replace(/_([a-zA-Z]\w*)":/g, '"$1":');
+
+      const names = [...processed.matchAll(/"name"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
+      const bgs = [...processed.matchAll(/"background"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
+
+      // Use min count — one agent may have an unfixable name field (counts differ by 1-2)
+      const count = Math.min(names.length, bgs.length);
+      if (count === 0) {
+        console.warn('[bootstrap] extractAgentPairs: no matches found. names=%d bgs=%d. Raw (first 500):', names.length, bgs.length, text.slice(0, 500));
+        return [];
       }
-      return [];
+      if (Math.abs(names.length - bgs.length) > 3) {
+        console.warn('[bootstrap] extractAgentPairs: large count mismatch names=%d bgs=%d, proceeding with min=%d', names.length, bgs.length, count);
+      }
+      return Array.from({ length: count }, (_, i) => ({ name: names[i], background: bgs[i] }));
     }
 
     for (let batchStart = 0; batchStart < blueprints.length; batchStart += ROSTER_BATCH_SIZE) {
