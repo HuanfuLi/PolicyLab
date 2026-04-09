@@ -89,6 +89,9 @@ export class OpenAIProvider implements LLMProvider {
 /** Connection error patterns that warrant a client re-creation. */
 const CONN_ERROR_RE = /channel error|econnreset|econnrefused|socket hang up|network error|fetch failed|connection reset|etimedout|epipe/i;
 
+/** Error patterns indicating the server does not support json_schema response_format. */
+const JSON_SCHEMA_UNSUPPORTED_RE = /response_format|json_schema|structured.?output|unsupported.*format|unknown.*parameter|invalid.*response_format|not.*supported/i;
+
 /**
  * For local LM Studio, Ollama, and generic OpenAI-compatible APIs.
  * Uses max_tokens as max_completion_tokens is specific to recent OpenAI endpoints.
@@ -116,12 +119,24 @@ export class OpenAICompatibleProvider implements LLMProvider {
     this.client = new OpenAI({ apiKey: this.apiKey, baseURL: this.baseURL });
   }
 
+  /**
+   * Local/OpenAI-compatible servers: skip json_schema entirely, use json_object.
+   * json_schema causes extreme slowdowns on local models (LM Studio + gemma) —
+   * the server accepts the parameter but processes tokens 10x slower. Since the
+   * server doesn't reject it, error-based auto-degradation never triggers.
+   * json_object mode ensures valid JSON output without the schema overhead.
+   */
+  private jsonSchemaUnsupported = true;
+
   async chat(messages: LLMMessage[], options: LLMOptions = {}): Promise<string> {
     const MAX_CONN_RETRIES = 3;
     const mapped = messages.map(m => ({
       role: m.role as 'system' | 'user' | 'assistant',
       content: typeof m.content === 'string' ? m.content : m.content.map(b => b.text).join('\n'),
     }));
+
+    // If this server previously rejected json_schema, don't attempt it again.
+    const useJsonSchema = options.jsonSchema && !this.jsonSchemaUnsupported;
 
     for (let attempt = 0; attempt < MAX_CONN_RETRIES; attempt++) {
       try {
@@ -136,16 +151,21 @@ export class OpenAICompatibleProvider implements LLMProvider {
           params.max_tokens = options.maxTokens;
         }
 
-        // Structured output: many OpenAI-compatible servers (LM Studio, vLLM) support json_schema
-        if (options.jsonSchema) {
+        // Structured output: many OpenAI-compatible servers (LM Studio, vLLM) support json_schema.
+        // If the server previously rejected it, fall back to { type: 'json_object' } which has
+        // broader support and at least enforces valid JSON output (though not schema-strict).
+        if (useJsonSchema) {
           params.response_format = {
             type: 'json_schema',
             json_schema: {
-              name: options.jsonSchema.name,
+              name: options.jsonSchema!.name,
               strict: true,
-              schema: options.jsonSchema.schema,
+              schema: options.jsonSchema!.schema,
             },
           };
+        } else if (options.jsonSchema) {
+          // Server doesn't support json_schema — use basic json_object mode
+          params.response_format = { type: 'json_object' };
         }
 
         const response = await this.client.chat.completions.create(params as any);
@@ -160,6 +180,16 @@ export class OpenAICompatibleProvider implements LLMProvider {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         const isConnErr = CONN_ERROR_RE.test(msg);
+
+        // If json_schema was rejected, mark it as unsupported and retry immediately
+        // without it. This auto-degrades gracefully for servers that don't support
+        // strict structured output (e.g., older LM Studio versions).
+        if (useJsonSchema && JSON_SCHEMA_UNSUPPORTED_RE.test(msg) && !isConnErr) {
+          console.warn(`[OpenAICompatibleProvider] json_schema not supported, falling back to json_object: ${msg.slice(0, 120)}`);
+          this.jsonSchemaUnsupported = true;
+          // Retry immediately with the same attempt counter (don't burn a retry)
+          return this.chat(messages, options);
+        }
 
         if (isConnErr && attempt < MAX_CONN_RETRIES - 1) {
           console.warn(`[OpenAICompatibleProvider] Connection error on attempt ${attempt + 1}, recreating client: ${msg.slice(0, 100)}`);
