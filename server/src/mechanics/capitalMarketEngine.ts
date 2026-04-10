@@ -557,14 +557,15 @@ export function processIteration(params: {
 
   const delta = emptyDelta();
 
-  // Build running agent wealth map for intra-iteration updates
+  // Build running agent wealth map for intra-iteration updates (living agents only)
+  const livingAgents = allAgents.filter(a => a.isAlive);
   const agentWealth = new Map<string, number>(
-    allAgents.map(a => [a.id, a.currentStats.wealth]),
+    livingAgents.map(a => [a.id, a.currentStats.wealth]),
   );
 
   // Helper: get current agent (with running wealth)
   function getAgent(id: string): Agent | undefined {
-    const base = allAgents.find(a => a.id === id);
+    const base = livingAgents.find(a => a.id === id);
     if (!base) return undefined;
     return {
       ...base,
@@ -573,6 +574,8 @@ export function processIteration(params: {
   }
 
   function applyWealthDelta(agentId: string, amount: number): void {
+    // Skip dead agents — they should not receive dividends, coupons, or maturities
+    if (!agentWealth.has(agentId)) return;
     const prev = agentWealth.get(agentId) ?? 0;
     agentWealth.set(agentId, prev + amount);
     addWealth(delta, agentId, amount);
