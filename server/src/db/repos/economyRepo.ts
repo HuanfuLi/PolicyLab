@@ -52,7 +52,7 @@ export const economyRepo = {
     async getAgentEconomy(agentId: string, sessionId: string): Promise<AgentEconomyState> {
         const [row] = await db.select()
             .from(agentEconomy)
-            .where(eq(agentEconomy.agentId, agentId));
+            .where(and(eq(agentEconomy.agentId, agentId), eq(agentEconomy.sessionId, sessionId)));
 
         if (row) {
             return {
@@ -111,7 +111,7 @@ export const economyRepo = {
       INSERT OR REPLACE INTO agent_economy (id, agent_id, session_id, skills, inventory, last_updated)
       VALUES (
         COALESCE(
-          (SELECT id FROM agent_economy WHERE agent_id = ?),
+          (SELECT id FROM agent_economy WHERE agent_id = ? AND session_id = ?),
           ?
         ),
         ?, ?, ?, ?, ?
@@ -122,7 +122,7 @@ export const economyRepo = {
             for (const u of items) {
                 const newId = uuidv4();
                 stmt.run(
-                    u.agentId, newId,
+                    u.agentId, u.sessionId, newId,
                     u.agentId, u.sessionId,
                     JSON.stringify(u.skills),
                     JSON.stringify(u.inventory),

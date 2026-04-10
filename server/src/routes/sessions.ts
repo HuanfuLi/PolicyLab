@@ -8,6 +8,21 @@ import * as fiscalRepo from '../db/repos/fiscalRepo.js';
 
 const router = Router();
 
+const VALID_STAGES: string[] = [
+  'idea-input',
+  'brainstorming',
+  'designing',
+  'design-review',
+  'refining',
+  'simulating',
+  'simulation-paused',
+  'simulation-complete',
+  'reflecting',
+  'reflection-complete',
+  'reviewing',
+  'completed',
+];
+
 // GET /api/sessions — list all sessions with metadata
 router.get('/', async (_req, res) => {
   try {
@@ -356,7 +371,12 @@ router.put('/:id/config', async (req, res) => {
       config: JSON.stringify(updatedConfig),
       updatedAt: now,
     };
-    if (body.stage) updates.stage = body.stage;
+    if (body.stage) {
+      if (!VALID_STAGES.includes(body.stage)) {
+        return res.status(400).json({ error: `Invalid stage: ${body.stage}` });
+      }
+      updates.stage = body.stage;
+    }
 
     await db.update(sessions).set(updates).where(eq(sessions.id, id));
 
