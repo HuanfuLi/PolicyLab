@@ -41,7 +41,6 @@ function makeAgent(id: string, role = 'worker', wealth = 100): Agent {
 function makePhysicsInput(overrides: Partial<PhysicsInput> & { actionCode: PhysicsInput['actionCode'] }): PhysicsInput {
   return {
     agent: makeAgent('agent-1'),
-    actionCode: overrides.actionCode,
     allAgents: overrides.allAgents ?? [makeAgent('agent-1')],
     actionTarget: overrides.actionTarget,
     actionParameters: overrides.actionParameters,
@@ -161,10 +160,9 @@ describe('bankingEngine — SFC fiat conservation', () => {
 
     const result = processRepayment(loan, deposit, paymentAmount);
 
-    // depositDelta of -50 would overdraw a 30-balance account.
-    // The function itself returns -50 (the runner must guard the debit),
-    // but the new remaining balance must correctly reflect reduced principal.
-    expect(result.depositDelta).toBe(-paymentAmount);
+    // H7 fix: processRepayment caps payment at deposit balance (30),
+    // so depositDelta is -30, not -50. No overdraft possible.
+    expect(result.depositDelta).toBe(-deposit.balance);
     expect(result.loanUpdate.remainingBalance).toBeDefined();
     // Remaining balance should not go negative
     if (result.loanUpdate.remainingBalance !== undefined) {
