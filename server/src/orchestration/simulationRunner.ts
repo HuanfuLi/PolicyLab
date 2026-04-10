@@ -52,7 +52,7 @@ import {
 } from '../parsers/simulation.js';
 import { parseJSON } from '../parsers/json.js';
 import { runWithConcurrency } from './concurrencyPool.js';
-import { asyncLogFlusher } from '../db/asyncLogFlusher.js';
+import { asyncLogFlusher, type DataLossPayload } from '../db/asyncLogFlusher.js';
 import { resolveAction, clampHappinessByPhysiology } from '../mechanics/physicsEngine.js';
 import { physicsConfig } from '../mechanics/physicsConfig.js';
 import { type ActionCode, getAllowedActions, getRoleTier } from '../mechanics/actionCodes.js';
@@ -1067,6 +1067,18 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
   try {
     asyncLogFlusher.start();
+
+    // Broadcast a SSE warning to the frontend if the flusher drops rows due to
+    // repeated DB write failures. This surfaces storage issues that would otherwise
+    // be silent (only logged to stderr), allowing the user to take action.
+    const onDataLoss = ({ rowsLost }: DataLossPayload) => {
+      simulationManager.broadcast(sessionId, {
+        type: 'warning',
+        message: `[Storage] ${rowsLost} simulation log rows were dropped due to repeated DB write failures. Simulation data may be incomplete.`,
+      });
+    };
+    asyncLogFlusher.on('data-loss', onDataLoss);
+
     await sessionRepo.updateStage(sessionId, 'simulating');
 
     const session = await sessionRepo.getById(sessionId);
@@ -4508,6 +4520,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       }
     }
 
+    // Remove the data-loss SSE listener before stopping the flusher
+    asyncLogFlusher.off('data-loss', onDataLoss);
+
     // Drain all pending log writes before finishing
     asyncLogFlusher.stop();
 
@@ -4520,6 +4535,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     simulationManager.broadcast(sessionId, { type: 'simulation-complete', finalReport });
     simulationManager.finish(sessionId);
   } catch (err) {
+    // Remove the data-loss SSE listener before stopping the flusher
+    asyncLogFlusher.off('data-loss', onDataLoss);
     asyncLogFlusher.stop();
 
     if (err instanceof SimulationPausedError) {
