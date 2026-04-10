@@ -107,8 +107,10 @@ export function computeInflation(input: InflationInput): InflationOutput {
     );
   }
 
-  const cpi = weightedRatioSum * 100;
-  trace.push(`[INFL] CPI = ${weightedRatioSum.toFixed(4)} * 100 = ${cpi.toFixed(4)}`);
+  // Floor at 1.0: if all commodity prices collapse, CPI approaching 0 makes real goods
+  // infinitely expensive relative to fiat and breaks the AMM food loop.
+  const cpi = Math.max(1, weightedRatioSum * 100);
+  trace.push(`[INFL] CPI = max(1, ${weightedRatioSum.toFixed(4)} * 100) = ${cpi.toFixed(4)}`);
 
   const inflationRate = input.previousCpi === null || input.previousCpi === 0
     ? 0
