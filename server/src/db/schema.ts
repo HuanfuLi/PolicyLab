@@ -160,7 +160,7 @@ export const marketPrices = sqliteTable('market_prices', {
 export const orderBook = sqliteTable('order_book', {
   id: text('id').primaryKey(),
   sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
-  agentId: text('agent_id').notNull(),
+  agentId: text('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
   /** 'buy' or 'sell'. */
   side: text('side').notNull(),
   /** Item type: food, tools, luxury_goods, raw_materials. */

@@ -138,7 +138,7 @@ export async function runGovernanceCycle(params: {
   ].filter(Boolean).join('\n\n');
 
   // ── Step 1: Select politicians (emergent — LLM reads constitution) ───────
-  const politicians = await selectPoliticians(agents, societyContext, provider, model);
+  const politicians = await selectPoliticians(agents.filter(a => a.isAlive), societyContext, provider, model);
   if (politicians.length === 0) {
     return {
       policyChanged: false,

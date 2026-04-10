@@ -31,7 +31,8 @@ export function runMigrations() {
       died_at_iteration INTEGER
     );
 
-    CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id);
+    CREATE INDEX IF NOT EXISTS idx_agents_session_id ON agents(session_id);
+    CREATE INDEX IF NOT EXISTS idx_agents_session_status ON agents(session_id, status);
 
     CREATE TABLE IF NOT EXISTS agent_intents (
       id TEXT PRIMARY KEY,
@@ -222,7 +223,7 @@ export function runMigrations() {
     CREATE TABLE IF NOT EXISTS order_book (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      agent_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
       side TEXT NOT NULL,
       item_type TEXT NOT NULL,
       price REAL NOT NULL,

@@ -227,8 +227,8 @@ export function computeMetSatietyCost(input: MetInput): MetOutput {
   // Total kcal burned this tick
   const kcalBurned = bmrKcal * metMultiplier * ageModifier;
 
-  // Convert kcal to satiety points
-  const satietyCost = kcalBurned / physicsConfig.satietyKcalPerPoint;
+  // Convert kcal to satiety points — guard against zero/negative config values
+  const satietyCost = kcalBurned / Math.max(0.001, physicsConfig.satietyKcalPerPoint);
 
   return {
     satietyCost,

@@ -5,6 +5,7 @@ import { sessions, agents, iterations, chatMessages, agentIntents } from '../db/
 import { v4 as uuidv4 } from 'uuid';
 import type { SessionMetadata, SessionDetail, Agent, ChatMessage, Stage, BudgetAllocation } from '@policylab/shared';
 import * as fiscalRepo from '../db/repos/fiscalRepo.js';
+import { simulationManager } from '../orchestration/simulationManager.js';
 
 const router = Router();
 
@@ -590,6 +591,9 @@ router.delete('/:id', async (req, res) => {
 
   try {
     await db.delete(sessions).where(eq(sessions.id, id));
+    // Clean up in-memory simulation state (SSE clients, sequenceId, flags) to
+    // prevent memory leaks when a session is deleted while not simulating.
+    simulationManager.finish(id);
     res.status(204).send();
   } catch (err) {
     console.error('DELETE /sessions/:id error:', err);
