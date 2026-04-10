@@ -2501,6 +2501,17 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       for (const trade of trades) {
         const buyerState = weekStateMap.get(trade.buyerId);
         const sellerState = weekStateMap.get(trade.sellerId);
+
+        // Dead-agent order guard: if a non-NPC buyer has no weekState it means
+        // the agent is dead (or was removed) this iteration. Executing the trade
+        // would pay the seller without debiting any buyer — an SFC fiat leak.
+        // Skip the entire trade in that case; the order was already removed from
+        // the book by orderBook.removeAgentOrders() in the death handler above.
+        if (!buyerState && trade.buyerId !== 'SYSTEM_NPC') continue;
+        // Similarly, skip if the seller is dead — buyer would be charged but receive
+        // no goods, which is equally incorrect.
+        if (!sellerState && trade.sellerId !== 'SYSTEM_NPC') continue;
+
         if (buyerState) {
           buyerState.wealthDelta -= trade.executionPrice * trade.quantity;
           buyerState.inventory[trade.itemType].quantity += trade.quantity;
