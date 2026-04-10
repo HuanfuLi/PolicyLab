@@ -40,7 +40,7 @@ export interface BankingDelta {
  * respecting the reserve requirement ratio.
  *
  * Formula: bankReserves / (totalDeposits + requestedPrincipal) >= reserveRequirement
- * Edge case: if totalDeposits + requestedPrincipal === 0, return true (no deposits yet).
+ * Edge case: if totalDeposits + requestedPrincipal <= 0, return false (no deposit base to lend against).
  */
 export function canIssueLoan(
   bankReserves: number,
@@ -49,7 +49,7 @@ export function canIssueLoan(
   reserveRequirement: number,
 ): boolean {
   const denominator = totalDeposits + requestedPrincipal;
-  if (denominator === 0) return true;
+  if (denominator <= 0) return false;
   return bankReserves / denominator >= reserveRequirement;
 }
 
@@ -200,12 +200,15 @@ export function accrueInterest(
 
   // Borrower cannot pay interest — compound unpaid interest onto remaining balance
   // so fiat is never silently lost. The loan grows, preserving SFC accounting.
+  // Cap at 2× original principal to bound losses on long-running defaults and keep SFC manageable.
+  const unpaidInterest = interest;
+  const remainingBalance = Math.min(loan.principal * 2, loan.remainingBalance + unpaidInterest);
   return {
     depositDelta: 0,
     bankReservesDelta: 0,
     loanUpdate: {
       consecutiveMissed: loan.consecutiveMissed + 1,
-      remainingBalance: loan.remainingBalance + interest,
+      remainingBalance,
     },
   };
 }
