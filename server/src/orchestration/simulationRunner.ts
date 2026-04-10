@@ -2379,7 +2379,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         if (taxActions.length === 0) continue;
         const taxerState = weekStateMap.get(intent.agentId);
         const taxableAgents = aliveAgents.filter(a =>
-          !a.isCentralAgent && a.id !== intent.agentId && getRoleTier(a.role) !== 'elite'
+          !a.isCentralAgent && a.type !== 'bank' && a.id !== intent.agentId && getRoleTier(a.role) !== 'elite'
         );
         // SFC-safe: accumulate only what each agent can actually pay — no ghost minting.
         let actualTaxCollected = 0;
@@ -2793,14 +2793,16 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           }
         }
 
-        const lockedSnap = lockedEconomySnapshot.get(agent.id);
-        economyUpdates.push({
-          agentId: agent.id,
-          sessionId,
-          skills: lockedVariables.includes('skills') && lockedSnap ? lockedSnap.skills : weekState.skills,
-          inventory: lockedVariables.includes('inventory') && lockedSnap ? lockedSnap.inventory : weekState.inventory,
-          lastUpdated: iterNum,
-        });
+        if (!shouldDie) {
+          const lockedSnap = lockedEconomySnapshot.get(agent.id);
+          economyUpdates.push({
+            agentId: agent.id,
+            sessionId,
+            skills: lockedVariables.includes('skills') && lockedSnap ? lockedSnap.skills : weekState.skills,
+            inventory: lockedVariables.includes('inventory') && lockedSnap ? lockedSnap.inventory : weekState.inventory,
+            lastUpdated: iterNum,
+          });
+        }
 
         const actionRow = {
           id: uuidv4(),
@@ -2941,21 +2943,24 @@ export async function runSimulation(sessionId: string, totalIterations: number):
                 totalSharesOutstanding: totalShares,
               });
             } else if (action.actionCode === 'SELL_SHARES') {
-              // Seller sells to any willing buyer (we pick the first available non-owner agent)
+              // Seller sells only to an agent who explicitly issued a matching BUY_SHARES intent
               const enterpriseOwner = aliveAgents.find(
                 a => a.id === rawTarget || a.name.toLowerCase() === targetText,
               );
               if (!enterpriseOwner) continue;
               const sharesToSell = typeof action.parameters?.quantity === 'number' ? action.parameters.quantity : 10;
               const totalShares = sharesByEnterprise.get(enterpriseOwner.id) ?? 0;
-              // Buy side: pick the first alive agent that is not the seller and not the enterprise owner
-              const potentialBuyer = aliveAgents.find(
-                a => a.id !== intent.agentId && a.id !== enterpriseOwner.id,
+              // Buy side: require a matching BUY_SHARES intent targeting the same enterprise
+              const potentialBuyer = intents.find(bi =>
+                bi.agentId !== intent.agentId &&
+                bi.actions?.some(a => a.actionCode === 'BUY_SHARES' &&
+                  (String(a.parameters?.target ?? '').toLowerCase() === enterpriseOwner.name.toLowerCase() ||
+                   String(a.parameters?.target ?? '') === enterpriseOwner.id))
               );
               if (!potentialBuyer) continue;
               cmktPendingShareSales.push({
                 sellerId: intent.agentId,
-                buyerId: potentialBuyer.id,
+                buyerId: potentialBuyer.agentId,
                 enterpriseOwnerId: enterpriseOwner.id,
                 sharesToSell,
                 totalSharesOutstanding: totalShares,
@@ -2985,15 +2990,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
                 });
               }
             } else if (action.actionCode === 'ISSUE_GOV_BOND') {
-              // Elite only (already gated by action codes): issuer is the agent themselves
-              // The face value is in the target parameter
-              const faceValue = typeof action.parameters?.amount === 'number'
-                ? action.parameters.amount
-                : (typeof rawTarget === 'string' && !isNaN(Number(rawTarget)) ? Number(rawTarget) : 100);
-              cmktPendingGovBondPurchases.push({
-                buyerId: intent.agentId,
-                faceValue,
-              });
+              // ISSUE_GOV_BOND is supply-side: the government offers bonds for sale.
+              // Actual purchases happen via BUY_BOND with target='treasury'.
+              // Previously this incorrectly charged the issuer as if they were buying.
+              // Now it's a no-op — bond issuance is demand-driven via BUY_BOND.
             }
           }
         }
@@ -3590,10 +3590,17 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         sessionAMMRegistry.delete(sessionId);
         sessionMultiAMMRegistry.delete(sessionId);
         sessionAllostaticStates.delete(sessionId);
+        sessionLastActionResults.delete(sessionId);
         sessionIterationMetrics.delete(sessionId);
+        sessionTelemetryLogs.delete(sessionId);
+        sessionInflationState.delete(sessionId);
         sessionSFCTracking.delete(sessionId);
         sessionStateTreasury.delete(sessionId);
         sessionLastPhysicsTraces.delete(sessionId);
+        sessionFiscalMultipliers.delete(sessionId);
+        sessionEnterpriseRegistry.delete(sessionId);
+        sessionEmploymentRegistry.delete(sessionId);
+        sessionPriceHistory.delete(sessionId);
         if (simulationManager.isResetRequested(sessionId)) {
           simulationManager.broadcast(sessionId, { type: 'aborted-reset' });
         } else {
@@ -3835,12 +3842,12 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       );
       try { await sessionRepo.updateStage(sessionId, 'simulation-paused'); } catch { /* best-effort */ }
       simulationManager.broadcast(sessionId, { type: 'error', message: err.message });
+      simulationManager.setPaused(sessionId);
     } else {
       const message = err instanceof Error ? err.message : 'Simulation error';
       simulationManager.broadcast(sessionId, { type: 'error', message });
       console.error(`[SimulationRunner] Session ${sessionId}:`, err);
+      simulationManager.finish(sessionId);
     }
-
-    simulationManager.finish(sessionId);
   }
 }
