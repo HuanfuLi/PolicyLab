@@ -31,6 +31,7 @@ import {
   buildScenarioInterpretationMessages,
 } from '../llm/prompts/index.js';
 import { parseJSON } from '../parsers/json.js';
+import { createScope } from '../db/sessionScope.js';
 import type { BootstrapProgressEvent, LocationProfile, Stage } from '@policylab/shared';
 import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
 
@@ -525,7 +526,7 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
 
     // C1 fix: Seed fiscal_budgets table (simulationRunner reads from DB, not session.config)
     if (finalConfig.fiscalEnabled) {
-      fiscalRepo.createBudget(id, budget);
+      fiscalRepo.createBudget(createScope(id), budget);
     }
 
     // Generate and persist enterprise blueprints (Phase 10)

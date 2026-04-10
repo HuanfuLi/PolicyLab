@@ -8,6 +8,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../index.js';
+import type { SessionScope } from '../sessionScope.js';
 import { fiscalBudgets, publicGoodsState } from '../schema.js';
 import type { BudgetAllocation, PublicGoodsState } from '@policylab/shared';
 
@@ -92,7 +93,7 @@ export function upsertBudget(budget: {
  *
  * @param sessionId - The session to query.
  */
-export function getActiveBudget(sessionId: string): BudgetAllocation | null {
+export function getActiveBudget(sessionId: SessionScope): BudgetAllocation | null {
   const row = db
     .select()
     .from(fiscalBudgets)
@@ -149,7 +150,7 @@ export function upsertPublicGoodsState(state: PublicGoodsState): void {
  *
  * @param sessionId - The session to query.
  */
-export function getPublicGoodsState(sessionId: string): PublicGoodsState | null {
+export function getPublicGoodsState(sessionId: SessionScope): PublicGoodsState | null {
   const row = db
     .select()
     .from(publicGoodsState)
@@ -167,7 +168,7 @@ export function getPublicGoodsState(sessionId: string): PublicGoodsState | null 
  *
  * @param sessionId - The session to query.
  */
-export function getPublicGoodsStateBySession(sessionId: string): PublicGoodsState[] {
+export function getPublicGoodsStateBySession(sessionId: SessionScope): PublicGoodsState[] {
   const rows = db
     .select()
     .from(publicGoodsState)
@@ -184,7 +185,7 @@ export function getPublicGoodsStateBySession(sessionId: string): PublicGoodsStat
  *
  * @param sessionId - The session whose fiscal data should be cleared.
  */
-export function deleteBySession(sessionId: string): void {
+export function deleteBySession(sessionId: SessionScope): void {
   db.delete(fiscalBudgets).where(eq(fiscalBudgets.sessionId, sessionId)).run();
   db.delete(publicGoodsState).where(eq(publicGoodsState.sessionId, sessionId)).run();
 }
@@ -197,7 +198,7 @@ export function deleteBySession(sessionId: string): void {
  * @param allocation - The four fraction values.
  */
 export function createBudget(
-  sessionId: string,
+  sessionId: SessionScope,
   allocation: BudgetAllocation,
 ): string {
   const id = uuidv4();

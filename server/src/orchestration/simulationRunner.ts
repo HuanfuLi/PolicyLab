@@ -128,6 +128,7 @@ import {
   sessionFiscalMultipliers,
   getEnterpriseRegistry,
   getEmploymentRegistry,
+  appendTrace,
 } from './simulationState.js';
 
 /**
@@ -595,9 +596,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       const iterBondHoldings = iterEconomyConfig.capitalMarketsEnabled
         ? capitalMarketRepo.getActiveBondHoldingsBySession(scope) : [];
       const iterBudgetAllocation = iterEconomyConfig.fiscalEnabled
-        ? (fiscalRepo.getActiveBudget(sessionId) ?? DEFAULT_BUDGET_ALLOCATION) : null;
+        ? (fiscalRepo.getActiveBudget(scope) ?? DEFAULT_BUDGET_ALLOCATION) : null;
       const iterPublicGoods = iterEconomyConfig.fiscalEnabled
-        ? fiscalRepo.getPublicGoodsState(sessionId) : null;
+        ? fiscalRepo.getPublicGoodsState(scope) : null;
 
       // Single-pass structured intent collection (replaces two-step natural language → parser flow)
       const intentTasks = aliveAgents.map(agent => async (): Promise<AgentIntent> => {
@@ -1322,7 +1323,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           }
         }
         if (logLines.length > 0) {
-          sessionLastPhysicsTraces.set(sessionId, logLines.join('\n'));
+          appendTrace(sessionId, logLines.join('\n'));
         }
       }
 
@@ -2158,9 +2159,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
         // Append banking traces to physics trace log
         if (bankingDelta.trace.length > 0) {
-          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
-          sessionLastPhysicsTraces.set(sessionId,
-            existingTrace + '\n' + bankingDelta.trace.join('\n'));
+          appendTrace(sessionId, bankingDelta.trace.join('\n'));
         }
 
         // Get banking totals for SFC audit and telemetry
@@ -2247,9 +2246,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
         // Append capital market traces to physics trace log
         if (cmktDelta.trace.length > 0) {
-          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
-          sessionLastPhysicsTraces.set(sessionId,
-            existingTrace + '\n' + cmktDelta.trace.join('\n'));
+          appendTrace(sessionId, cmktDelta.trace.join('\n'));
         }
       }
 
@@ -2259,8 +2256,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // SFC: all spending flows from treasury to agents (direct transfers).
       let fiscalPublicGoodsQuality: { infrastructureQuality: number; educationQuality: number; defenseQuality: number; welfareQuality: number } | null = null;
       if (economyConfig.fiscalEnabled) {
-        const budgetAllocation = fiscalRepo.getActiveBudget(sessionId) ?? DEFAULT_BUDGET_ALLOCATION;
-        const currentPublicGoods = fiscalRepo.getPublicGoodsState(sessionId);
+        const budgetAllocation = fiscalRepo.getActiveBudget(scope) ?? DEFAULT_BUDGET_ALLOCATION;
+        const currentPublicGoods = fiscalRepo.getPublicGoodsState(scope);
         const treasuryBalance = sessionStateTreasury.get(sessionId) ?? 0;
 
         const fiscalDelta = fiscalEngine.executeBudget({
@@ -2308,9 +2305,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
         // Append fiscal traces to physics trace log
         if (fiscalDelta.trace.length > 0) {
-          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
-          sessionLastPhysicsTraces.set(sessionId,
-            existingTrace + '\n' + fiscalDelta.trace.join('\n'));
+          appendTrace(sessionId, fiscalDelta.trace.join('\n'));
         }
       }
 

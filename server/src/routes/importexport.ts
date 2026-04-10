@@ -183,11 +183,11 @@ router.get('/:id/export', async (req, res) => {
     })(),
     // Fiscal Policy tables (present only when session used fiscal policy)
     fiscalBudget: (() => {
-      const budget = fiscalRepo.getActiveBudget(id);
+      const budget = fiscalRepo.getActiveBudget(createScope(id));
       return budget ?? undefined;
     })(),
     publicGoodsState: (() => {
-      const states = fiscalRepo.getPublicGoodsStateBySession(id);
+      const states = fiscalRepo.getPublicGoodsStateBySession(createScope(id));
       return states.length > 0 ? states : undefined;
     })(),
     macroSnapshots: (() => {

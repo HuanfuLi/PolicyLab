@@ -5,6 +5,7 @@ import { sessions, agents, iterations, chatMessages, agentIntents } from '../db/
 import { v4 as uuidv4 } from 'uuid';
 import type { SessionMetadata, SessionDetail, Agent, ChatMessage, Stage, BudgetAllocation } from '@policylab/shared';
 import * as fiscalRepo from '../db/repos/fiscalRepo.js';
+import { createScope } from '../db/sessionScope.js';
 import { simulationManager } from '../orchestration/simulationManager.js';
 
 const router = Router();
@@ -395,7 +396,7 @@ router.put('/:id/config', async (req, res) => {
 
       // Budget persistence inside the same transaction
       if (body.budgetAllocation) {
-        fiscalRepo.createBudget(id, body.budgetAllocation);
+        fiscalRepo.createBudget(createScope(id), body.budgetAllocation);
       }
     })();
 
@@ -478,7 +479,7 @@ router.post('/:id/fork', async (req, res) => {
     // Clone fiscal budget if source had one
     const sourceBudget = sourceConfig.budgetAllocation as BudgetAllocation | undefined;
     if (sourceBudget) {
-      fiscalRepo.createBudget(newId, sourceBudget);
+      fiscalRepo.createBudget(createScope(newId), sourceBudget);
     }
 
     res.status(201).json({ id: newId });
@@ -569,7 +570,7 @@ router.post('/:id/fork-simulation', async (req, res) => {
     const sourceConfig = mergedConfig as Record<string, unknown>;
     const sourceBudget = sourceConfig.budgetAllocation as BudgetAllocation | undefined;
     if (sourceBudget) {
-      fiscalRepo.createBudget(newId, sourceBudget);
+      fiscalRepo.createBudget(createScope(newId), sourceBudget);
     }
 
     res.status(201).json({ id: newId });
