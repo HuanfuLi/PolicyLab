@@ -216,6 +216,8 @@ export class AutomatedMarketMaker {
 
     // Asymptotic floor: food reserve approaches but never reaches zero.
     // This allows astronomical prices during famines without crashing.
+    // When the clamp triggers, mirror executeBuy exactly: use clamped food reserve
+    // so quoted foodOut and spotPriceAfter match what execution will actually deliver.
     const effectiveNewFood = Math.max(0.01, newFood);
     const effectiveFoodDispensed = this.foodReserve - effectiveNewFood;
 
@@ -318,7 +320,11 @@ export class AutomatedMarketMaker {
     this.fiatReserve += fiatAmount;
     this.foodReserve = this.k / this.fiatReserve;
     // Asymptotic floor: prevent divide-by-zero at extreme depletion.
-    if (this.foodReserve < 0.01) this.foodReserve = 0.01;
+    // H3 fix: re-anchor k after clamping so the invariant holds exactly.
+    if (this.foodReserve < 0.01) {
+      this.foodReserve = 0.01;
+      this.k = this.fiatReserve * this.foodReserve;
+    }
     this.lastUpdatedTick = currentTick;
 
     // Invariant check (floating-point guard)
