@@ -1359,18 +1359,16 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           buyerState.inventory[trade.itemType].quantity += trade.quantity;
           buyerState.events.push(`Bought ${trade.quantity} ${trade.itemType} at ${trade.executionPrice}`);
         } else if (trade.buyerId === 'SYSTEM_NPC') {
-          // SFC fix: SYSTEM_NPC purchases are funded from the state treasury
-          // to prevent minting fiat from nothing when sellers are paid.
+          // SFC fix: SYSTEM_NPC purchases are funded from the state treasury.
           const cost = trade.executionPrice * trade.quantity;
           const treasury = sessionStateTreasury.get(sessionId) ?? 0;
           const fundedCost = Math.min(cost, treasury);
           sessionStateTreasury.set(sessionId, treasury - fundedCost);
-          if (sellerState && fundedCost < cost) {
-            // Treasury cannot cover full cost — cap seller payment to funded amount
+          if (sellerState) {
             sellerState.wealthDelta += fundedCost;
             sellerState.events.push(`Sold ${trade.quantity} ${trade.itemType} at ${trade.executionPrice} (treasury-backed)`);
-            continue; // skip the sellerState block below
           }
+          continue; // always skip the unconditional seller block below
         }
         if (sellerState) {
           sellerState.wealthDelta += trade.executionPrice * trade.quantity;

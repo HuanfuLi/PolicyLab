@@ -764,9 +764,14 @@ export function processIteration(params: {
   }
 
   // ── Step 6: Process coupon payments ────────────────────────────────────────
-  // SFC fix: exclude bonds held by dead agents — otherwise the issuer is debited
-  // but the holder credit is silently skipped by applyWealthDelta, destroying fiat.
-  const liveBondHoldings = bondHoldings.filter(h => agentWealth.has(h.ownerAgentId));
+  // SFC fix: exclude bonds where either the holder OR the corporate issuer is dead.
+  // Dead holder: issuer debited but holder credit silently skipped → fiat destroyed.
+  // Dead corp issuer: holder credited but issuer debit dropped (no statUpdates entry) → fiat created.
+  // Government bonds are exempt from the issuer check (treasury is always live).
+  const liveBondHoldings = bondHoldings.filter(h =>
+    agentWealth.has(h.ownerAgentId) &&
+    (h.bondType === 'government' || agentWealth.has(h.issuerId))
+  );
   const couponResult = processCoupons({ holdings: liveBondHoldings, currentIteration: iterationNumber });
   for (const [id, amount] of couponResult.wealthDeltas) {
     applyWealthDelta(id, amount);
