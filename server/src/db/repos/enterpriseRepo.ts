@@ -11,10 +11,11 @@ import { db } from '../index.js';
 import { enterprises } from '../schema.js';
 import { asyncLogFlusher } from '../asyncLogFlusher.js';
 import type { EnterpriseBlueprint, EnterpriseSector, EnterpriseCommodity } from '@policylab/shared';
+import type { SessionScope } from '../sessionScope.js';
 
 // ── One-time setup writes ───────────────────────────────────────────────────
 
-export function insertEnterprise(sessionId: string, blueprint: EnterpriseBlueprint): void {
+export function insertEnterprise(sessionId: SessionScope, blueprint: EnterpriseBlueprint): void {
   db.insert(enterprises).values({
     id: blueprint.id,
     sessionId,
@@ -30,7 +31,7 @@ export function insertEnterprise(sessionId: string, blueprint: EnterpriseBluepri
   }).run();
 }
 
-export function getEnterprises(sessionId: string): EnterpriseBlueprint[] {
+export function getEnterprises(sessionId: SessionScope): EnterpriseBlueprint[] {
   const rows = db.select().from(enterprises).where(eq(enterprises.sessionId, sessionId)).all();
   return rows.map(row => ({
     id: row.id,

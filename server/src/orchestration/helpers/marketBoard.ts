@@ -53,9 +53,13 @@ export function buildPersonalStatus(sessionId: string, agentId: string, enterpri
 }
 
 export function updatePriceHistory(sessionId: string, priceIndices: PriceIndex[]): void {
-  const history = new Map<ItemType, number>();
+  // Merge order-book prices into existing map (preserves AMM-set prices like food)
+  let history = sessionPriceHistory.get(sessionId);
+  if (!history) {
+    history = new Map<ItemType, number>();
+    sessionPriceHistory.set(sessionId, history);
+  }
   for (const idx of priceIndices) {
     history.set(idx.itemType, idx.vwap || idx.lastPrice || 0);
   }
-  sessionPriceHistory.set(sessionId, history);
 }

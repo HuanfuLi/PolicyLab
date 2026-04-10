@@ -540,7 +540,7 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
       agentNameToId,  // pass map so ownerId and employees are stored as UUIDs
     );
     for (const bp of enterpriseBlueprints) {
-      insertEnterprise(id, bp);
+      insertEnterprise(createScope(id), bp);
     }
 
     // Update session: config (partial merge), law, overview, stage

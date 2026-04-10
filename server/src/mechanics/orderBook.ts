@@ -19,6 +19,7 @@ import type {
 } from '@policylab/shared';
 import { ITEM_TYPES } from '@policylab/shared';
 import * as orderBookRepo from '../db/repos/orderBookRepo.js';
+import { createScope } from '../db/sessionScope.js';
 
 // ── Order Book Data Structure ────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ export class OrderBook {
      * Called once during simulation initialisation (after server restart).
      */
     loadFromDB(): void {
-        const rows = orderBookRepo.loadOpenOrders(this.sessionId);
+        const rows = orderBookRepo.loadOpenOrders(createScope(this.sessionId));
 
         this.buyOrders = [];
         this.sellOrders = [];

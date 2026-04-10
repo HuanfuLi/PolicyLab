@@ -16,7 +16,7 @@
  */
 import { v4 as uuidv4 } from 'uuid';
 import { db, sqlite } from '../db/index.js';
-import { agentIntents, resolvedActions, iterations as iterationsTable, ammSnapshots as ammSnapshotsTable } from '../db/schema.js';
+import { resolvedActions, iterations as iterationsTable, ammSnapshots as ammSnapshotsTable } from '../db/schema.js';
 import { asc, eq, sql } from 'drizzle-orm';
 import { agentRepo } from '../db/repos/agentRepo.js';
 import { sessionRepo } from '../db/repos/sessionRepo.js';
@@ -71,7 +71,7 @@ import { DEFAULT_BUDGET_ALLOCATION, DEFAULT_PUBLIC_GOODS_INITIAL } from '@policy
 import { computeInflation } from '../mechanics/inflationEngine.js';
 import * as macroSnapshotRepo from '../db/repos/macroSnapshotRepo.js';
 // Phase 1 Economy imports
-import { getOrderBook, clearOrderBook, restoreOrderBook, isOrderBookWarm } from '../mechanics/orderBook.js';
+import { getOrderBook, restoreOrderBook, isOrderBookWarm } from '../mechanics/orderBook.js';
 import { economyRepo, type AgentEconomyState } from '../db/repos/economyRepo.js';
 import { createScope, type SessionScope } from '../db/sessionScope.js';
 import type { Agent, Inventory, ItemType, SkillMatrix, TelemetryLog } from '@policylab/shared';
@@ -577,7 +577,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       const iterInflationState = sessionInflationState.get(sessionId);
       const iterInflationContext = buildInflationContext(iterInflationState);
       const iterEconomyConfig = getEconomyConfig(session.config as Record<string, unknown> | null);
-      const iterMacroSnapshots = macroSnapshotRepo.getRecentSnapshots(db, sessionId, 2);
+      const iterMacroSnapshots = macroSnapshotRepo.getRecentSnapshots(db, scope, 2);
       const iterLatestMacro = iterMacroSnapshots[0] ?? null;
       const iterPreviousMacro = iterMacroSnapshots[1] ?? null;
       const iterM1GrowthRate = iterLatestMacro && iterPreviousMacro && iterPreviousMacro.m1 !== 0
@@ -1093,7 +1093,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         for (const [enterpriseId, enterprise] of enterpriseRegistry) {
           if (aliveAgentIds.has(enterprise.ownerId)) continue; // owner alive — normal path
           // Owner is dead: dissolve enterprise and release all employees
-          for (const [employeeId] of enterprise.employees) {
+          for (const employeeId of enterprise.employees) {
             const empRecord = employmentRegistry.get(employeeId);
             if (!empRecord) continue;
             const empState = weekStateMap.get(employeeId);
@@ -2341,9 +2341,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           bankingTotalDeposits,
           bankingCollateralEscrow,
         );
-        const latestSnapshot = macroSnapshotRepo.getLatestSnapshot(db, sessionId);
+        const latestSnapshot = macroSnapshotRepo.getLatestSnapshot(db, scope);
         const smoothingWindow = persistedEconomyConfig.inflationSmoothingWindow ?? DEFAULT_ECONOMY_CONFIG.inflationSmoothingWindow ?? 3;
-        const recentSnapshots = macroSnapshotRepo.getRecentSnapshots(db, sessionId, smoothingWindow);
+        const recentSnapshots = macroSnapshotRepo.getRecentSnapshots(db, scope, smoothingWindow);
         const inflationOutput = computeInflation({
           iterationNumber: iterNum,
           currentPrices,
@@ -2389,19 +2389,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               applyInflationFeedback(pool, inflationOutput.ammFeedbackFactor);
             }
           }
-          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
-          sessionLastPhysicsTraces.set(
-            sessionId,
-            existingTrace + '\n' + `AMM feedback: scaled goods reserves for price factor ${inflationOutput.ammFeedbackFactor.toFixed(4)}`,
-          );
+          appendTrace(sessionId, `AMM feedback: scaled goods reserves for price factor ${inflationOutput.ammFeedbackFactor.toFixed(4)}`);
         }
 
         if (inflationOutput.trace.length > 0) {
-          const existingTrace = sessionLastPhysicsTraces.get(sessionId) ?? '';
-          sessionLastPhysicsTraces.set(
-            sessionId,
-            existingTrace + '\n' + inflationOutput.trace.join('\n'),
-          );
+          appendTrace(sessionId, inflationOutput.trace.join('\n'));
         }
       }
 

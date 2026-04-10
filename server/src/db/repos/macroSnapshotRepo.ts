@@ -2,6 +2,7 @@ import { desc, eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import type { MacroSnapshot } from '@policylab/shared';
 import { macroSnapshots } from '../schema.js';
+import type { SessionScope } from '../sessionScope.js';
 
 type MacroSnapshotRow = typeof macroSnapshots.$inferSelect;
 type MacroSnapshotInsert = typeof macroSnapshots.$inferInsert;
@@ -43,7 +44,7 @@ export function insertMacroSnapshot(
   }).run();
 }
 
-export function getLatestSnapshot(db: DbLike, sessionId: string): MacroSnapshot | null {
+export function getLatestSnapshot(db: DbLike, sessionId: SessionScope): MacroSnapshot | null {
   const row = db.select()
     .from(macroSnapshots)
     .where(eq(macroSnapshots.sessionId, sessionId))
@@ -54,7 +55,7 @@ export function getLatestSnapshot(db: DbLike, sessionId: string): MacroSnapshot 
   return row ? rowToMacroSnapshot(row) : null;
 }
 
-export function getRecentSnapshots(db: DbLike, sessionId: string, count: number): MacroSnapshot[] {
+export function getRecentSnapshots(db: DbLike, sessionId: SessionScope, count: number): MacroSnapshot[] {
   const rows = db.select()
     .from(macroSnapshots)
     .where(eq(macroSnapshots.sessionId, sessionId))
@@ -65,7 +66,7 @@ export function getRecentSnapshots(db: DbLike, sessionId: string, count: number)
   return rows.map(rowToMacroSnapshot);
 }
 
-export function getSnapshotsBySession(db: DbLike, sessionId: string): MacroSnapshot[] {
+export function getSnapshotsBySession(db: DbLike, sessionId: SessionScope): MacroSnapshot[] {
   const rows = db.select()
     .from(macroSnapshots)
     .where(eq(macroSnapshots.sessionId, sessionId))

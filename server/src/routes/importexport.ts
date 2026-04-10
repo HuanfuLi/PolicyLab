@@ -191,7 +191,7 @@ router.get('/:id/export', async (req, res) => {
       return states.length > 0 ? states : undefined;
     })(),
     macroSnapshots: (() => {
-      const rows = macroSnapshotRepo.getSnapshotsBySession(db, id);
+      const rows = macroSnapshotRepo.getSnapshotsBySession(db, createScope(id));
       return rows.length > 0 ? rows : undefined;
     })(),
     // C1 fix: export the 8 previously-missing economy tables

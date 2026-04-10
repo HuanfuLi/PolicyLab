@@ -7,7 +7,7 @@ import { db, sqlite } from '../index.js';
 import { agents } from '../schema.js';
 import type { Agent, AgentStats, PersonalityTrait } from '@policylab/shared';
 import { PERSONALITY_TRAITS } from '@policylab/shared';
-import type { SessionScope } from '../sessionScope.js';
+import { type SessionScope, createScope } from '../sessionScope.js';
 
 function parseStats(raw: string): AgentStats {
   try {
@@ -86,7 +86,8 @@ export const agentRepo = {
       }
     })();
 
-    const inserted = await this.listBySession((agentData[0]?.sessionId ?? '') as SessionScope);
+    if (agentData.length === 0) return [];
+    const inserted = await this.listBySession(createScope(agentData[0].sessionId));
     return inserted;
   },
 

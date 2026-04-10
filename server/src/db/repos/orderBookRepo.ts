@@ -8,6 +8,7 @@ import { eq, and } from 'drizzle-orm';
 import { db, sqlite } from '../index.js';
 import { orderBook as orderBookTable } from '../schema.js';
 import type { ItemType, MarketOrder } from '@policylab/shared';
+import type { SessionScope } from '../sessionScope.js';
 
 /** Row shape returned from DB queries */
 export interface OrderBookRow {
@@ -23,7 +24,7 @@ export interface OrderBookRow {
 }
 
 /** Load all open orders for a session from the DB. */
-export function loadOpenOrders(sessionId: string): OrderBookRow[] {
+export function loadOpenOrders(sessionId: SessionScope): OrderBookRow[] {
   const rows = db
     .select()
     .from(orderBookTable)
