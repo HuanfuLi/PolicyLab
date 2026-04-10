@@ -10,8 +10,8 @@
 import { Router } from 'express';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../db/index.js';
-import { sessions, agents } from '../db/schema.js';
+import { db, sqlite } from '../db/index.js';
+import { sessions, agents, enterprises } from '../db/schema.js';
 import * as fiscalRepo from '../db/repos/fiscalRepo.js';
 import { fetchLocationData } from '../data/locationDataService.js';
 import {
@@ -32,6 +32,7 @@ import {
 } from '../llm/prompts/index.js';
 import { parseJSON } from '../parsers/json.js';
 import type { BootstrapProgressEvent, LocationProfile, Stage } from '@policylab/shared';
+import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
 
 const router = Router({ mergeParams: true });
 
@@ -60,6 +61,9 @@ router.get('/locations/search', async (req, res) => {
     res.status(500).json({ error: 'Location search failed' });
   }
 });
+
+// R2 fix: Prevent concurrent bootstrap requests for the same session
+const bootstrappingSessionIds = new Set<string>();
 
 // ── POST /:id/bootstrap — SSE bootstrap pipeline ───────────────────────────
 router.post('/:id/bootstrap', async (req, res) => {
@@ -92,6 +96,12 @@ router.post('/:id/bootstrap', async (req, res) => {
     });
   }
 
+  // R2 fix: Reject concurrent bootstraps for the same session
+  if (bootstrappingSessionIds.has(id)) {
+    return res.status(409).json({ error: 'Bootstrap already in progress for this session' });
+  }
+  bootstrappingSessionIds.add(id);
+
   // Set SSE headers (mirror design.ts pattern)
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -109,10 +119,11 @@ router.post('/:id/bootstrap', async (req, res) => {
     if (!clientDisconnected) sendEvent({ type: 'heartbeat' });
   }, 10_000);
 
-  // Clean up heartbeat if client disconnects mid-bootstrap
+  // Clean up heartbeat and concurrency guard if client disconnects mid-bootstrap
   req.on('close', () => {
     clientDisconnected = true;
     clearInterval(heartbeatInterval);
+    bootstrappingSessionIds.delete(id);
   });
 
   const now = () => new Date().toISOString();
@@ -232,7 +243,8 @@ router.post('/:id/bootstrap', async (req, res) => {
     const { config: economyConfig, budget, confidence, sources: dataSources } = profileToEconomyConfig(profile);
 
     // 5b: Apply scenario parameter deltas if provided (D-12)
-    let finalConfig = { ...economyConfig };
+    // Merge with defaults so missing fields (cpiBasketWeights, fiscal multipliers, etc.) are populated
+    let finalConfig = { ...DEFAULT_ECONOMY_CONFIG, ...economyConfig };
     if (scenario) {
       try {
         const provider = getProvider();
@@ -244,8 +256,45 @@ router.post('/:id/bootstrap', async (req, res) => {
         console.log('[bootstrap] Scenario interpretation raw:', scenarioRaw.slice(0, 500));
         const overrides = parseJSON<{ parameterOverrides: Record<string, number | boolean> }>(scenarioRaw);
         if (overrides.parameterOverrides && Object.keys(overrides.parameterOverrides).length > 0) {
-          console.log('[bootstrap] Applying scenario overrides:', JSON.stringify(overrides.parameterOverrides));
-          finalConfig = { ...finalConfig, ...overrides.parameterOverrides };
+          // L1 fix: Validate overrides — only allow known EconomyConfig keys
+          // and reject values outside reasonable per-parameter ranges.
+          const ECONOMY_CONFIG_BOUNDS: Partial<Record<keyof import('@policylab/shared').EconomyConfig, [min: number, max: number]>> = {
+            reserveRequirement:        [0, 1],
+            baseLoanInterestRate:      [0.0001, 0.05],
+            depositInterestRate:       [0.0001, 0.04],
+            dividendPayoutRatio:       [0, 0.5],
+            budgetSpendingRate:        [0.01, 0.99],
+            inflationAmmThreshold:     [0, 0.5],
+            inflationAmmCap:           [0, 2],
+            m1InflationCoeff:          [0, 1],
+            govBondCouponRate:         [0.0001, 0.05],
+            productivityGrowthEstimate:[- 0.1, 0.2],
+          };
+          const validKeys = new Set(Object.keys(finalConfig));
+          const safeOverrides: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(overrides.parameterOverrides)) {
+            if (!validKeys.has(key)) {
+              console.warn(`[bootstrap] Rejected unknown override key: ${key}`);
+              continue;
+            }
+            if (typeof value === 'number') {
+              const bounds = ECONOMY_CONFIG_BOUNDS[key as keyof import('@policylab/shared').EconomyConfig];
+              if (bounds) {
+                const [min, max] = bounds;
+                if (value < min || value > max || !Number.isFinite(value)) {
+                  console.warn(`[bootstrap] Rejected out-of-bounds scenario override: ${key}=${value} (allowed: [${min}, ${max}])`);
+                  continue;
+                }
+              } else if (!Number.isFinite(value) || value < -1000 || value > 1000) {
+                // fallback for unmapped numeric keys
+                console.warn(`[bootstrap] Rejected non-finite/extreme scenario override: ${key}=${value}`);
+                continue;
+              }
+            }
+            safeOverrides[key] = value;
+          }
+          console.log('[bootstrap] Applying scenario overrides:', JSON.stringify(safeOverrides));
+          finalConfig = { ...finalConfig, ...safeOverrides };
         } else {
           console.warn('[bootstrap] Scenario interpretation returned no overrides');
         }
@@ -361,6 +410,9 @@ router.post('/:id/bootstrap', async (req, res) => {
         provider.chat(
           buildLocationLawMessages(profile, lawContext, scenario)));
       const lawData = parseJSON<{ law: string }>(lawRaw);
+      if (!lawData.law || lawData.law.trim().length < 50) {
+        throw new Error('Law generation returned empty or trivially short document');
+      }
       law = lawData.law;
     } catch (err) {
       console.warn('[bootstrap] Law generation failed:', err);
@@ -403,9 +455,6 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
     sendEvent({ type: 'step_done', step: 'generation', stepIndex: 5 });
 
     // --- Persist session artifacts ---
-
-    // Clear existing agents for this session
-    await db.delete(agents).where(eq(agents.sessionId, id));
 
     // Insert agent roster (citizens + bank agent)
     const citizenRows = blueprints.map(bp => ({
@@ -462,9 +511,17 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
       });
     }
 
-    for (let i = 0; i < citizenRows.length; i += 25) {
-      await db.insert(agents).values(citizenRows.slice(i, i + 25));
-    }
+    // Fix B: Wrap delete + batch insert in a single transaction so a partial
+    // batch failure never leaves the session with 0 agents.
+    // Fix A (enterprise delete) is included here so re-running bootstrap
+    // never duplicates enterprise rows.
+    sqlite.transaction(() => {
+      db.delete(agents).where(eq(agents.sessionId, id)).run();
+      db.delete(enterprises).where(eq(enterprises.sessionId, id)).run();
+      for (let i = 0; i < citizenRows.length; i += 25) {
+        db.insert(agents).values(citizenRows.slice(i, i + 25)).run();
+      }
+    })();
 
     // C1 fix: Seed fiscal_budgets table (simulationRunner reads from DB, not session.config)
     if (finalConfig.fiscalEnabled) {
@@ -519,9 +576,11 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
     sendEvent({ type: 'complete', message: `Bootstrap complete for ${location}` });
 
     clearInterval(heartbeatInterval);
+    bootstrappingSessionIds.delete(id);
     res.end();
   } catch (err) {
     clearInterval(heartbeatInterval);
+    bootstrappingSessionIds.delete(id);
     console.error('[bootstrap] Pipeline error:', err);
     const message = err instanceof Error ? err.message : String(err);
     sendEvent({ type: 'error', step: 'generation', message });
