@@ -33,9 +33,49 @@ export interface EmploymentRecord {
   startedAt: number;
 }
 
+export interface EnterpriseLedger {
+  totalRevenue: number;
+  totalWages: number;
+  workerCount: number;
+}
+
 export const sessionEnterpriseRegistry = new Map<string, Map<string, EnterpriseRecord>>();
 export const sessionEmploymentRegistry = new Map<string, Map<string, EmploymentRecord>>();
 export const sessionPriceHistory = new Map<string, Map<ItemType, number>>();
+export const sessionEnterpriseInsolvency = new Map<string, Map<string, number>>();
+export const sessionAgentIdleCounter = new Map<string, Map<string, number>>();
+export const sessionPreviousWageCosts = new Map<string, Map<string, number>>();
+
+export function getEnterpriseRegistry(sessionId: string): Map<string, EnterpriseRecord> {
+  let m = sessionEnterpriseRegistry.get(sessionId);
+  if (!m) { m = new Map(); sessionEnterpriseRegistry.set(sessionId, m); }
+  return m;
+}
+
+export function getEmploymentRegistry(sessionId: string): Map<string, EmploymentRecord> {
+  let m = sessionEmploymentRegistry.get(sessionId);
+  if (!m) { m = new Map(); sessionEmploymentRegistry.set(sessionId, m); }
+  return m;
+}
+
+export function getEnterpriseInsolvency(sessionId: string): Map<string, number> {
+  let m = sessionEnterpriseInsolvency.get(sessionId);
+  if (!m) { m = new Map(); sessionEnterpriseInsolvency.set(sessionId, m); }
+  return m;
+}
+
+export function getAgentIdleCounter(sessionId: string): Map<string, number> {
+  let m = sessionAgentIdleCounter.get(sessionId);
+  if (!m) { m = new Map(); sessionAgentIdleCounter.set(sessionId, m); }
+  return m;
+}
+
+/** Append to the physics trace log for a session, capping at 50KB. */
+export function appendTrace(sessionId: string, newContent: string): void {
+  const existing = sessionLastPhysicsTraces.get(sessionId) ?? '';
+  const combined = existing + '\n' + newContent;
+  sessionLastPhysicsTraces.set(sessionId, combined.length > 50_000 ? combined.slice(-50_000) : combined);
+}
 
 // ── AMM ───────────────────────────────────────────────────────────────────────
 export const sessionAMMRegistry = new Map<string, AutomatedMarketMaker>();
@@ -87,4 +127,10 @@ export function cleanupSessionState(sessionId: string): void {
   sessionStateTreasury.delete(sessionId);
   sessionLastPhysicsTraces.delete(sessionId);
   sessionFiscalMultipliers.delete(sessionId);
+  sessionEnterpriseRegistry.delete(sessionId);
+  sessionEmploymentRegistry.delete(sessionId);
+  sessionPriceHistory.delete(sessionId);
+  sessionEnterpriseInsolvency.delete(sessionId);
+  sessionAgentIdleCounter.delete(sessionId);
+  sessionPreviousWageCosts.delete(sessionId);
 }
