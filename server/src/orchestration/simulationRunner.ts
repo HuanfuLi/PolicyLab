@@ -1113,11 +1113,21 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     let latestMarketBoard: MarketBoardEntry[] = [];
 
     // ── Phase 1: Initialize economy state for all agents ──────────────────
+    //
+    // Resume/continuation safety: initializeForSession is idempotent — it only
+    // inserts rows for agents that do not yet have economy state. On a resume
+    // (startIter > 1) all rows already exist and are left untouched.
+    // listBySession then loads the full persisted state (skills + inventory) so
+    // agentEconomyMap is always seeded from DB, never left blank on resume.
+    // Agent wealth is NOT stored in agentEconomy; it lives in agent.currentStats.wealth
+    // which is persisted to the agents table and reloaded by agentRepo.listBySession above.
     const citizenAgents = agents.filter(a => a.isAlive && !a.isCentralAgent && a.type !== 'bank');
     await economyRepo.initializeForSession(
       sessionId,
       citizenAgents.map(a => ({ id: a.id, role: a.role }))
     );
+    // Seed agentEconomyMap from DB on every start/resume — preserves skills and
+    // inventory accumulated across prior iterations when resuming a paused simulation.
     let agentEconomyMap = new Map<string, AgentEconomyState>();
     const econStates = await economyRepo.listBySession(sessionId);
     for (const state of econStates) {
