@@ -7,8 +7,19 @@
  *
  * This prevents the main simulation loop from blocking on individual
  * INSERT statements for high-volume tables (agent_intents, resolved_actions).
+ *
+ * Events emitted:
+ *   'data-loss' — { rowsLost: number, table: string } — emitted when rows are
+ *   permanently dropped after exhausting all retry attempts.
  */
+import { EventEmitter } from 'events';
 import { sqlite } from './index.js';
+
+export interface DataLossPayload {
+  rowsLost: number;
+  /** The table name of the first dropped item in the batch, or 'unknown'. */
+  table: string;
+}
 
 interface QueuedInsert {
   table: string;
@@ -19,8 +30,9 @@ interface QueuedInsert {
 const FLUSH_INTERVAL_MS = 500;
 const BULK_THRESHOLD = 200;
 const MAX_RETRY_ATTEMPTS = 5;
+const MAX_QUEUE_SIZE = 10_000;
 
-class AsyncLogFlusher {
+class AsyncLogFlusher extends EventEmitter {
   private queue: QueuedInsert[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
   private consecutiveFailures = 0;
@@ -37,8 +49,18 @@ class AsyncLogFlusher {
       clearInterval(this.timer);
       this.timer = null;
     }
-    // Drain remaining items
-    this.flush();
+    // D2 fix: Retry flush up to MAX_RETRY_ATTEMPTS to avoid losing the
+    // final batch when the timer is already cleared.
+    for (let i = 0; i < MAX_RETRY_ATTEMPTS && this.queue.length > 0; i++) {
+      this.flush();
+    }
+    if (this.queue.length > 0) {
+      const rowsLost = this.queue.length;
+      const table = this.queue[0]?.table ?? 'unknown';
+      console.error(`[asyncLogFlusher] ${rowsLost} rows lost after ${MAX_RETRY_ATTEMPTS} drain attempts on stop()`);
+      this.emit('data-loss', { rowsLost, table } satisfies DataLossPayload);
+      this.queue.length = 0;
+    }
   }
 
   /**
@@ -48,6 +70,10 @@ class AsyncLogFlusher {
    * @param values  - corresponding values (same order as columns)
    */
   enqueue(table: string, columns: string[], values: unknown[]): void {
+    if (this.queue.length >= MAX_QUEUE_SIZE) {
+      console.error(`[asyncLogFlusher] Queue full (${MAX_QUEUE_SIZE} rows) — dropping oldest ${BULK_THRESHOLD} rows to prevent OOM`);
+      this.queue.splice(0, BULK_THRESHOLD);
+    }
     this.queue.push({ table, columns, values: [values] });
     if (this.queue.length >= BULK_THRESHOLD) {
       this.flush();
@@ -127,7 +153,10 @@ class AsyncLogFlusher {
 
       this.consecutiveFailures++;
       if (this.consecutiveFailures >= MAX_RETRY_ATTEMPTS) {
-        console.error(`[asyncLogFlusher] Transaction failed ${this.consecutiveFailures} times, dropping ${batch.length} rows:`, err);
+        const rowsLost = batch.length;
+        const table = batch[0]?.table ?? 'unknown';
+        console.error(`[asyncLogFlusher] Transaction failed ${this.consecutiveFailures} times, dropping ${rowsLost} rows:`, err);
+        this.emit('data-loss', { rowsLost, table } satisfies DataLossPayload);
         this.queue.splice(0, batch.length);
         this.consecutiveFailures = 0;
       } else {
