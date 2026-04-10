@@ -1682,6 +1682,19 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               simulationManager.isAbortRequested(sessionId),
           });
 
+          // Fix 1: Discard mid-loop results when pause fires after LLM call returns.
+          // Design intent (Grey Zone A = Option 1): restart full iteration on resume.
+          // Throw so runWithConcurrency's shouldContinue halts the remaining tasks.
+          if (simulationManager.isPauseRequested(sessionId) || simulationManager.isAbortRequested(sessionId)) {
+            throw new SimulationPausedError(
+              'pause-requested',
+              iterNum,
+              agent.id,
+              agent.name,
+              `Simulation paused mid-loop after "${agent.name}" returned intent at iteration ${iterNum}. Resume will retry this iteration.`,
+            );
+          }
+
           // Task 3: Validate actionCodes against the role-allowed set.
           // normalizeActionCode maps hallucinations to 'NONE', but some may still
           // slip through as 'NONE' when the agent intended something else.
@@ -1914,6 +1927,20 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             ...mergeResult.lifecycleEvents,
           ],
         };
+
+        // Fix 3: HMAS coverage gap — warn and skip agents with no outcome this iteration.
+        // Agents with failed intent parses get no entry in agentOutcomes; their wealth
+        // deltas would never be applied. Warn so operators can detect the issue.
+        const coveredAgentIds = new Set(resolution.agentOutcomes.map((o: { agentId: string }) => o.agentId));
+        const uncoveredAgents = aliveAgents.filter(a => !coveredAgentIds.has(a.id));
+        if (uncoveredAgents.length > 0) {
+          const names = uncoveredAgents.map(a => a.name).join(', ');
+          console.warn(`[HMAS] Coverage gap: ${uncoveredAgents.length} agents have no outcome this iteration: ${names}`);
+          simulationManager.broadcast(sessionId, {
+            type: 'warning',
+            message: `HMAS coverage gap: ${uncoveredAgents.length} agent(s) had no outcome this iteration (${names}). They idle this tick.`,
+          });
+        }
       } else {
         // ── Standard path ────────────────────────────────────────────────
         // Bug #1 fix: pass aliveAgents only — dead agents must never appear in resolution
@@ -2016,7 +2043,25 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       for (const agent of aliveAgents) {
         const weekState = weekStateMap.get(agent.id)!;
         const agentIntent = intentMap.get(agent.id);
-        const queue = (agentIntent?.actions?.slice(0, 3) ?? [{ actionCode: 'NONE', parameters: {} }]) as QueuedActionInstruction[];
+        // Fix 4: Multi-action queue dedup — prevent over-committing from repeated financial actions.
+        // STEAL: target-based dedup (one STEAL per victim, existing design).
+        // DEPOSIT/BORROW/REPAY_LOAN/WITHDRAW: type-based dedup (one per type per tick).
+        const rawQueue = (agentIntent?.actions?.slice(0, 3) ?? [{ actionCode: 'NONE', parameters: {} }]) as QueuedActionInstruction[];
+        const stealTargetsSeen = new Set<string>();
+        const financialActionsSeen = new Set<string>();
+        const queue = rawQueue.filter(action => {
+          if (action.actionCode === 'STEAL') {
+            const stealTarget = String(action.parameters?.target ?? action.parameters?.agent_id ?? '');
+            if (stealTargetsSeen.has(stealTarget)) return false;
+            stealTargetsSeen.add(stealTarget);
+          }
+          const isFinancialOnce = ['DEPOSIT', 'BORROW', 'REPAY_LOAN', 'WITHDRAW'].includes(action.actionCode);
+          if (isFinancialOnce) {
+            if (financialActionsSeen.has(action.actionCode)) return false;
+            financialActionsSeen.add(action.actionCode);
+          }
+          return true;
+        });
         let runningWealth = agent.currentStats.wealth;
         let runningHealth = agent.currentStats.health;
         let runningHappiness = agent.currentStats.happiness;
@@ -2703,6 +2748,43 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           // Fix B1: Redistribute dying agent's wealth into the seized pool (death tax / escheat)
           seizedWealthPool += Math.max(0, newWealth);
           newWealth = 0;
+
+          // Fix 5: Liquidate banking relationships on death (SFC: redistribute deposit, default loans).
+          if (iterEconomyConfig.bankingEnabled) {
+            const bankAgent = iterBankAgents[0]; // primary bank
+            if (bankAgent) {
+              const bankState = weekStateMap.get(bankAgent.id);
+
+              // 1. Liquidate deposit: transfer balance to seized pool (re-enters circulation).
+              //    Bank's reserves decrease because it is "paying out" the deposit to the estate.
+              const depositAcct = bankingRepo.getDeposit(agent.id, bankAgent.id);
+              if (depositAcct && depositAcct.balance > 0) {
+                seizedWealthPool += depositAcct.balance;
+                bankingRepo.updateDepositBalance(depositAcct.id, 0, iterNum);
+                if (bankState) {
+                  bankState.wealthDelta = (bankState.wealthDelta ?? 0) - depositAcct.balance;
+                }
+              }
+
+              // 2. Default all active loans for this agent.
+              //    Bank loses the loan asset so M1 contracts appropriately.
+              const activeLoans = bankingRepo.getActiveLoansByBorrower(agent.id, sessionId);
+              for (const loan of activeLoans) {
+                bankingRepo.updateLoan(loan.id, { status: 'defaulted' });
+                if (bankState) {
+                  bankState.wealthDelta = (bankState.wealthDelta ?? 0) - loan.remainingBalance;
+                }
+              }
+            }
+          }
+
+          // Fix 5: Zero equity positions for dead agent (capital markets — orphan prevention).
+          if (iterEconomyConfig.capitalMarketsEnabled ?? false) {
+            const agentPositions = iterEquityPositions.filter(p => p.ownerAgentId === agent.id && p.sharesHeld > 0);
+            for (const pos of agentPositions) {
+              capitalMarketRepo.upsertEquityPosition({ ...pos, sharesHeld: 0, lastUpdated: iterNum });
+            }
+          }
         } else if (shouldHumiliate) {
           humiliatedAgentIds.add(agent.id);
           // Fix B2: Redistribute humiliated agent's stripped wealth before zeroing
@@ -3578,32 +3660,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
       }
 
-      // ── Race guard: abort-reset may have fired mid-iteration ─────────────
-      // The route handler erases the DB as soon as the abort is signaled.
-      // If we reach here while abort is in flight, skip persisting the
-      // iteration row — otherwise one ghost row survives the erase and
-      // causes the next simulation to start at the wrong iteration number.
-      if (simulationManager.isAbortRequested(sessionId)) {
-        asyncLogFlusher.stop();
-        clearOrderBook(sessionId);
-        cleanupSessionCognition(sessionId);
-        sessionAMMRegistry.delete(sessionId);
-        sessionMultiAMMRegistry.delete(sessionId);
-        sessionAllostaticStates.delete(sessionId);
-        sessionIterationMetrics.delete(sessionId);
-        sessionSFCTracking.delete(sessionId);
-        sessionStateTreasury.delete(sessionId);
-        sessionLastPhysicsTraces.delete(sessionId);
-        if (simulationManager.isResetRequested(sessionId)) {
-          simulationManager.broadcast(sessionId, { type: 'aborted-reset' });
-        } else {
-          simulationManager.broadcast(sessionId, { type: 'error', message: 'Simulation aborted.' });
-          await sessionRepo.updateStage(sessionId, 'simulation-complete');
-        }
-        simulationManager.finish(sessionId);
-        return;
-      }
-
       // ── Atomic iteration snapshot: iterations row + AMM state (BUG-05 / REL-02) ──
       // Wrapping the iterationsTable insert and the AMM snapshot insert in a single
       // sqlite transaction ensures that a crash between the two writes cannot leave
@@ -3639,6 +3695,32 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             };
           })()
         : null;
+
+      // Guard: check abort BEFORE writing snapshot to avoid ghost rows after DB reset
+      // The route handler erases the DB as soon as the abort is signaled.
+      // If we reach here while abort is in flight, skip persisting the
+      // iteration row — otherwise one ghost row survives the erase and
+      // causes the next simulation to start at the wrong iteration number.
+      if (simulationManager.isAbortRequested(sessionId)) {
+        asyncLogFlusher.stop();
+        clearOrderBook(sessionId);
+        cleanupSessionCognition(sessionId);
+        sessionAMMRegistry.delete(sessionId);
+        sessionMultiAMMRegistry.delete(sessionId);
+        sessionAllostaticStates.delete(sessionId);
+        sessionIterationMetrics.delete(sessionId);
+        sessionSFCTracking.delete(sessionId);
+        sessionStateTreasury.delete(sessionId);
+        sessionLastPhysicsTraces.delete(sessionId);
+        if (simulationManager.isResetRequested(sessionId)) {
+          simulationManager.broadcast(sessionId, { type: 'aborted-reset' });
+        } else {
+          simulationManager.broadcast(sessionId, { type: 'error', message: 'Simulation aborted.' });
+          await sessionRepo.updateStage(sessionId, 'simulation-complete');
+        }
+        simulationManager.finish(sessionId);
+        return;
+      }
 
       sqlite.transaction(() => {
         // 1. Iteration record

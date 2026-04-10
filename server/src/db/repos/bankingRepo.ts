@@ -202,6 +202,26 @@ export function getLoansByBorrower(borrowerAgentId: string): LoanContract[] {
 }
 
 /**
+ * Get all active loans for a specific borrower in a session.
+ * Used during death liquidation to default phantom debt and keep M1 accurate.
+ */
+export function getActiveLoansByBorrower(borrowerAgentId: string, sessionId: string): LoanContract[] {
+  const rows = db
+    .select()
+    .from(loanContracts)
+    .where(
+      and(
+        eq(loanContracts.borrowerAgentId, borrowerAgentId),
+        eq(loanContracts.sessionId, sessionId),
+        eq(loanContracts.status, 'active'),
+      ),
+    )
+    .all();
+
+  return rows.map(rowToLoan);
+}
+
+/**
  * Get the total outstanding loan principal for a session.
  * SELECT COALESCE(SUM(remaining_balance), 0) FROM loan_contracts WHERE session_id = ? AND status = 'active'
  */
