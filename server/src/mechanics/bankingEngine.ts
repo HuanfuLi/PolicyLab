@@ -203,17 +203,17 @@ export function accrueInterest(
     };
   }
 
-  // Borrower cannot pay interest — compound unpaid interest onto remaining balance
-  // so fiat is never silently lost. The loan grows, preserving SFC accounting.
-  // Cap at 2× original principal to bound losses on long-running defaults and keep SFC manageable.
-  const unpaidInterest = interest;
-  const remainingBalance = Math.min(loan.principal * 2, loan.remainingBalance + unpaidInterest);
+  // SFC fix V4: Borrower cannot pay interest — do NOT compound unpaid interest
+  // onto remainingBalance. Adding unpaid interest to the loan asset inflates M1
+  // without a matching liability (no new deposit is created), which is phantom money.
+  // Only track missed payments via consecutiveMissed for default triggering.
+  // The actual principal owed stays constant until default or repayment.
   return {
     depositDelta: 0,
     bankReservesDelta: 0,
     loanUpdate: {
       consecutiveMissed: loan.consecutiveMissed + 1,
-      remainingBalance,
+      // remainingBalance intentionally unchanged — no phantom M1 creation
     },
   };
 }

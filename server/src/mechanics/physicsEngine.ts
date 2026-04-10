@@ -93,7 +93,9 @@ function roleTierLabel(role: string): string {
 /** Calculate steal wealth gain */
 function stealCalc(agent: Agent, allAgents: Agent[], targetId?: string): number {
   const target = targetId ? allAgents.find(a => a.id === targetId) : undefined;
-  if (!target || !target.isAlive) return physicsConfig.stealFallback;
+  // SFC fix V1: Without a live victim there is no wealth transfer — return 0 instead
+  // of stealFallback so no fiat is created from nothing.
+  if (!target || !target.isAlive) return 0;
   return Math.min(physicsConfig.stealMax, target.currentStats.wealth * physicsConfig.stealRatio);
 }
 
@@ -222,7 +224,7 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       if (target) {
         trace.push(`  Δwealth: min(stealMax=${physicsConfig.stealMax}, ${target.currentStats.wealth} × ratio=${physicsConfig.stealRatio}) = ${stolen.toFixed(3)}`);
       } else {
-        trace.push(`  Δwealth: no target → fallback=${physicsConfig.stealFallback}`);
+        trace.push(`  Δwealth: no target → 0 (SFC: no victim, no fiat created)`);
       }
       trace.push(`  Δhealth: -5 (physical risk)`);
       trace.push(`  Δhappiness: -3 (moral cost)`);

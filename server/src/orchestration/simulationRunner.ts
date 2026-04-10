@@ -2471,6 +2471,15 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             }
           }
 
+          // SFC fix V2: INVEST cost routes to treasury instead of being destroyed.
+          // Without this, the -10 wealthDelta destroys fiat with no counterparty.
+          // Routing to treasury mirrors the FOUND_ENTERPRISE pattern.
+          if (action.actionCode === 'INVEST' && physics.wealthDelta < 0) {
+            const investCost = Math.abs(physics.wealthDelta);
+            const prevTreasury = sessionStateTreasury.get(sessionId) ?? 0;
+            sessionStateTreasury.set(sessionId, prevTreasury + investCost);
+          }
+
           // D2: REST recovery scaling by dopamine (anhedonia impairs recovery).
           // High dopamine (≥70) → ×1.25 health recovery (motivated, well-rested).
           // Low dopamine (≤30) → ×0.75 health recovery (anhedonic, impaired recovery).
@@ -3567,7 +3576,28 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           }
         })();
 
-        // Apply wealth deltas in-memory (will be persisted with the rest of statUpdates)
+        // SFC fix V3: Pro-rate gov-bond payouts when treasury cannot cover obligations.
+        // Scale positive wealthDeltas (gov-bond coupon/maturity receipts) before applying
+        // them so no fiat is created from nothing when the treasury runs dry.
+        // This must run BEFORE the wealthDeltas loop so the scaled values are applied once.
+        const currentTreasury = sessionStateTreasury.get(sessionId) ?? 0;
+        const newTreasury = currentTreasury + cmktDelta.treasuryDelta;
+        if (newTreasury < 0 && cmktDelta.treasuryDelta < 0) {
+          // Treasury cannot cover full bond obligations — pro-rate positive payouts.
+          const scaleFactor = currentTreasury > 0
+            ? currentTreasury / Math.abs(cmktDelta.treasuryDelta)
+            : 0;
+          for (const [agentId, delta] of cmktDelta.wealthDeltas) {
+            if (delta > 0) {
+              cmktDelta.wealthDeltas.set(agentId, Math.floor(delta * scaleFactor));
+            }
+          }
+          sessionStateTreasury.set(sessionId, 0);
+        } else {
+          sessionStateTreasury.set(sessionId, Math.max(0, newTreasury));
+        }
+
+        // Apply (possibly scaled) wealth deltas in-memory (persisted with statUpdates)
         for (const [agentId, delta] of cmktDelta.wealthDeltas) {
           const agentUpdate = statUpdates.find(u => u.id === agentId);
           if (agentUpdate) agentUpdate.wealth += delta;
@@ -3579,12 +3609,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           const agentUpdate = statUpdates.find(u => u.id === enterpriseOwnerId);
           if (agentUpdate) agentUpdate.wealth += delta;
         }
-
-        // Apply treasury delta (gov bond purchases, gov coupon/maturity payments)
-        // R1 fix: Floor treasury at 0 to prevent negative balance from
-        // simultaneous bond maturities exceeding available funds.
-        const currentTreasury = sessionStateTreasury.get(sessionId) ?? 0;
-        sessionStateTreasury.set(sessionId, Math.max(0, currentTreasury + cmktDelta.treasuryDelta));
 
         // Append capital market traces to physics trace log
         if (cmktDelta.trace.length > 0) {
