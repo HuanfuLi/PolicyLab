@@ -148,8 +148,9 @@ export class SimulationLifecycle {
       // best-effort
     }
     const message = _err instanceof Error ? _err.message : 'Simulation paused.';
-    simulationManager.broadcast(this.sessionId, { type: 'error', message });
-    simulationManager.finish(this.sessionId);
+    try { simulationManager.broadcast(this.sessionId, { type: 'error', message }); } catch { /* best-effort */ }
+    // C1 fix: call setPaused, NOT finish — so resume() can detect status === 'paused'
+    simulationManager.setPaused(this.sessionId);
   }
 
   /**

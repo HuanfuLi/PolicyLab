@@ -100,6 +100,7 @@ import {
   type MultiAMMItemType,
 } from '../mechanics/automatedMarketMaker.js';
 import { simulationManager } from './simulationManager.js';
+import { SimulationLifecycle, SimulationAbortedError } from './simulationLifecycle.js';
 // ── Extracted helper modules ──────────────────────────────────────────────────
 import { gini, computeStats } from './helpers/statsUtils.js';
 import { computeSystemFiatTotal } from './helpers/sfcAudit.js';
@@ -204,8 +205,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
   const citizenProv = getCitizenProvider();
   const summaries: Array<{ number: number; summary: string }> = [];
 
+  const lifecycle = new SimulationLifecycle(sessionId);
+
   try {
-    asyncLogFlusher.start();
+    lifecycle.start();
     await sessionRepo.updateStage(sessionId, 'simulating');
 
     const session = await sessionRepo.getById(sessionId);
@@ -480,72 +483,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     const lockedEconomySnapshot = new Map(agentEconomyMap);
 
     for (let iterNum = startIter; iterNum <= endIter; iterNum++) {
-      // ── Abort check ──────────────────────────────────────────────────────
-      if (simulationManager.isAbortRequested(sessionId)) {
-        asyncLogFlusher.stop();
-        clearOrderBook(sessionId);
-        cleanupSessionCognition(sessionId);
-        sessionAMMRegistry.delete(sessionId);
-        sessionMultiAMMRegistry.delete(sessionId);
-        sessionAllostaticStates.delete(sessionId);
-        sessionIterationMetrics.delete(sessionId);
-        sessionInflationState.delete(sessionId);
-        sessionSFCTracking.delete(sessionId);
-        sessionStateTreasury.delete(sessionId);
-        sessionLastPhysicsTraces.delete(sessionId);
-        sessionFiscalMultipliers.delete(sessionId);
-        if (simulationManager.isResetRequested(sessionId)) {
-          // The abort-reset endpoint already cleaned the DB and set the stage.
-          // Just exit — do not overwrite the stage with 'simulation-complete'.
-          simulationManager.broadcast(sessionId, { type: 'aborted-reset' });
-        } else {
-          simulationManager.broadcast(sessionId, { type: 'error', message: 'Simulation aborted.' });
-          await sessionRepo.updateStage(sessionId, 'simulation-complete');
-        }
-        simulationManager.finish(sessionId);
-        return;
-      }
-
-      // ── Pause handling ───────────────────────────────────────────────────
-      if (simulationManager.isPauseRequested(sessionId)) {
-        simulationManager.setPaused(sessionId);
-        simulationManager.broadcast(sessionId, { type: 'paused', iteration: iterNum - 1 });
-        await sessionRepo.updateStage(sessionId, 'simulation-paused');
-
-        await new Promise<void>((resolve) => {
-          const check = setInterval(() => {
-            const status = simulationManager.getStatus(sessionId);
-            if (status === 'running' || simulationManager.isAbortRequested(sessionId)) {
-              clearInterval(check);
-              resolve();
-            }
-          }, 500);
-        });
-
-        if (simulationManager.isAbortRequested(sessionId)) {
-          asyncLogFlusher.stop();
-          clearOrderBook(sessionId);
-          cleanupSessionCognition(sessionId);
-          sessionAMMRegistry.delete(sessionId);
-          sessionMultiAMMRegistry.delete(sessionId);
-          sessionAllostaticStates.delete(sessionId);
-          sessionIterationMetrics.delete(sessionId);
-          sessionInflationState.delete(sessionId);
-          sessionSFCTracking.delete(sessionId);
-          sessionStateTreasury.delete(sessionId);
-          sessionLastPhysicsTraces.delete(sessionId);
-          sessionFiscalMultipliers.delete(sessionId);
-          if (simulationManager.isResetRequested(sessionId)) {
-            simulationManager.broadcast(sessionId, { type: 'aborted-reset' });
-          } else {
-            simulationManager.broadcast(sessionId, { type: 'error', message: 'Simulation aborted.' });
-            await sessionRepo.updateStage(sessionId, 'simulation-complete');
-          }
-          simulationManager.finish(sessionId);
-          return;
-        }
-        await sessionRepo.updateStage(sessionId, 'simulating');
-      }
+      // ── Abort/pause check (unified via lifecycle) ────────────────────────
+      await lifecycle.checkContinue(iterNum);
 
       // ── Iteration start ──────────────────────────────────────────────────
       simulationManager.broadcast(sessionId, {
@@ -2762,30 +2701,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       }
 
       // ── Race guard: abort-reset may have fired mid-iteration ─────────────
-      // The route handler erases the DB as soon as the abort is signaled.
-      // If we reach here while abort is in flight, skip persisting the
-      // iteration row — otherwise one ghost row survives the erase and
-      // causes the next simulation to start at the wrong iteration number.
-      if (simulationManager.isAbortRequested(sessionId)) {
-        asyncLogFlusher.stop();
-        clearOrderBook(sessionId);
-        cleanupSessionCognition(sessionId);
-        sessionAMMRegistry.delete(sessionId);
-        sessionMultiAMMRegistry.delete(sessionId);
-        sessionAllostaticStates.delete(sessionId);
-        sessionIterationMetrics.delete(sessionId);
-        sessionSFCTracking.delete(sessionId);
-        sessionStateTreasury.delete(sessionId);
-        sessionLastPhysicsTraces.delete(sessionId);
-        if (simulationManager.isResetRequested(sessionId)) {
-          simulationManager.broadcast(sessionId, { type: 'aborted-reset' });
-        } else {
-          simulationManager.broadcast(sessionId, { type: 'error', message: 'Simulation aborted.' });
-          await sessionRepo.updateStage(sessionId, 'simulation-complete');
-        }
-        simulationManager.finish(sessionId);
-        return;
-      }
+      if (await lifecycle.checkMidIterationAbort(iterNum)) return;
 
       // ── Atomic iteration snapshot: iterations row + AMM state (BUG-05 / REL-02) ──
       // Wrapping the iterationsTable insert and the AMM snapshot insert in a single
@@ -2971,59 +2887,17 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       }
     }
 
-    // Drain all pending log writes before finishing
-    asyncLogFlusher.stop();
-
-    // Phase 1: Clean up session economy state
-    clearOrderBook(sessionId);
-    // Phase 3: Clean up cognitive state
-    cleanupSessionCognition(sessionId);
-    // Tick-based engines cleanup
-    sessionAMMRegistry.delete(sessionId);
-    sessionMultiAMMRegistry.delete(sessionId);
-    sessionAllostaticStates.delete(sessionId);
-    sessionLastActionResults.delete(sessionId);
-    sessionIterationMetrics.delete(sessionId);
-    sessionTelemetryLogs.delete(sessionId);
-    sessionInflationState.delete(sessionId);
-    sessionSFCTracking.delete(sessionId);
-    sessionStateTreasury.delete(sessionId);
-    sessionLastPhysicsTraces.delete(sessionId);
-    sessionFiscalMultipliers.delete(sessionId);
-
-    await sessionRepo.updateStage(sessionId, 'simulation-complete');
-    simulationManager.broadcast(sessionId, { type: 'simulation-complete', finalReport });
-    simulationManager.finish(sessionId);
+    await lifecycle.complete(finalReport);
   } catch (err) {
-    asyncLogFlusher.stop();
-    clearOrderBook(sessionId);
-    cleanupSessionCognition(sessionId);
-    sessionAMMRegistry.delete(sessionId);
-    sessionMultiAMMRegistry.delete(sessionId);
-    sessionAllostaticStates.delete(sessionId);
-    sessionLastActionResults.delete(sessionId);
-    sessionIterationMetrics.delete(sessionId);
-    sessionTelemetryLogs.delete(sessionId);
-    sessionInflationState.delete(sessionId);
-    sessionSFCTracking.delete(sessionId);
-    sessionStateTreasury.delete(sessionId);
-    sessionLastPhysicsTraces.delete(sessionId);
-    sessionFiscalMultipliers.delete(sessionId);
-
-    if (err instanceof SimulationPausedError) {
-      // Structured pause: persist simulation-paused stage so the resume route can restart.
-      // The failing iteration was never committed, so resuming will retry it from scratch.
+    if (err instanceof SimulationAbortedError) {
+      // Already handled by lifecycle.checkContinue — just exit
+    } else if (err instanceof SimulationPausedError) {
       console.error(
         `[SimulationRunner] Session ${sessionId} paused — ${err.reason} for agent "${err.agentName}" at iteration ${err.iterationNumber}`,
       );
-      try { await sessionRepo.updateStage(sessionId, 'simulation-paused'); } catch { /* best-effort */ }
-      simulationManager.broadcast(sessionId, { type: 'error', message: err.message });
+      await lifecycle.handlePause(err);
     } else {
-      const message = err instanceof Error ? err.message : 'Simulation error';
-      simulationManager.broadcast(sessionId, { type: 'error', message });
-      console.error(`[SimulationRunner] Session ${sessionId}:`, err);
+      await lifecycle.handleError(err);
     }
-
-    simulationManager.finish(sessionId);
   }
 }
