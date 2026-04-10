@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import DataConfidenceBadge from './DataConfidenceBadge';
+import type { DataSource, ConfidenceLevel } from '@policylab/shared';
 import { ChevronDown, ChevronRight, Info } from 'lucide-react';
 import type { EconomyConfig, BudgetAllocation } from '@policylab/shared';
 import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
@@ -188,6 +190,24 @@ interface EconomyTabProps {
   budgetAllocation: BudgetAllocation;
   onConfigChange: (patch: Partial<EconomyConfig>) => void;
   onBudgetChange: (budget: BudgetAllocation) => void;
+  /** Confidence metadata from bootstrap — maps param key → 'high' | 'medium' | 'low' */
+  bootstrapConfidence?: Record<string, string>;
+  /** Data source metadata from bootstrap — maps param key → 'api' | 'web' | 'llm' */
+  bootstrapSources?: Record<string, string>;
+  /** When rendered inside ScenarioTabs, identifies the active tab for state reset */
+  tabId?: string;
+}
+
+/** Render a DataConfidenceBadge for a param if bootstrap data exists for it */
+function ParamBadge({ paramKey, confidence, sources }: {
+  paramKey: string;
+  confidence?: Record<string, string>;
+  sources?: Record<string, string>;
+}) {
+  const conf = confidence?.[paramKey] as ConfidenceLevel | undefined;
+  const src = sources?.[paramKey] as DataSource | undefined;
+  if (!conf || !src) return null;
+  return <DataConfidenceBadge source={src} confidence={conf} />;
 }
 
 // ── EconomyTab ───────────────────────────────────────────────────────────────
@@ -197,6 +217,9 @@ export default function EconomyTab({
   budgetAllocation,
   onConfigChange,
   onBudgetChange,
+  bootstrapConfidence,
+  bootstrapSources,
+  tabId,
 }: EconomyTabProps) {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     banking: true,
@@ -208,6 +231,12 @@ export default function EconomyTab({
   // Local pending values — changes are staged here until blur/mouseUp
   const [pendingValues, setPendingValues] = useState<Partial<Record<keyof EconomyConfig, number>>>({});
   const [pendingBudget, setPendingBudget] = useState<BudgetAllocation>({ ...budgetAllocation });
+
+  // H2 fix: Reset pending state when scenario tab changes (prevents value bleed between tabs)
+  useEffect(() => {
+    setPendingValues({});
+    setPendingBudget({ ...budgetAllocation });
+  }, [tabId, budgetAllocation]);
 
   // Soft-limit warning: only set in event handlers, never on mount
   const [softWarning, setSoftWarning] = useState<{
@@ -316,9 +345,13 @@ export default function EconomyTab({
     PARAM_META.filter(m => m.section === section).length > 0;
 
   const isSectionVisible = (section: Section): boolean => {
-    if (section === 'capitalMarkets') return !!economyConfig.capitalMarketsEnabled;
-    if (section === 'inflation') return !!economyConfig.inflationEnabled;
-    return true;
+    const flagMap: Record<Section, keyof EconomyConfig> = {
+      banking: 'bankingEnabled',
+      fiscal: 'fiscalEnabled',
+      capitalMarkets: 'capitalMarketsEnabled',
+      inflation: 'inflationEnabled',
+    };
+    return !!economyConfig[flagMap[section]];
   };
 
   return (
@@ -336,6 +369,15 @@ export default function EconomyTab({
           fontSize: '0.875rem',
         }}>
           Economy features were not configured for this session. These defaults will apply if you fork and re-simulate.
+        </div>
+      )}
+
+      {/* Data source legend (only shown for bootstrapped sessions) */}
+      {bootstrapConfidence && Object.keys(bootstrapConfidence).length > 0 && (
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', fontSize: '0.75rem', color: 'var(--text-dim)', alignItems: 'center', flexWrap: 'wrap' }}>
+          <DataConfidenceBadge source="api" confidence="high" /> From real data
+          <DataConfidenceBadge source="api" confidence="medium" /> Estimated from data
+          <span style={{ opacity: 0.7 }}>No badge = default value</span>
         </div>
       )}
 
@@ -481,6 +523,7 @@ export default function EconomyTab({
                   <div style={{ marginBottom: '0.5rem' }}>
                     <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                       Budget Allocation
+                      <ParamBadge paramKey="budgetAllocation" confidence={bootstrapConfidence} sources={bootstrapSources} />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.5rem' }}>
                       {BUDGET_CATEGORIES.map(cat => (
@@ -528,6 +571,7 @@ export default function EconomyTab({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', position: 'relative' }}>
                           <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                             {meta.label}
+                            <ParamBadge paramKey={String(meta.key)} confidence={bootstrapConfidence} sources={bootstrapSources} />
                           </label>
                           <span
                             style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'help' }}
@@ -565,8 +609,16 @@ export default function EconomyTab({
                             min={meta.min}
                             max={meta.max}
                             step={meta.step}
-                            onChange={e => handleParamChange(meta, Number(e.target.value))}
-                            onBlur={e => commitParam(meta, Number(e.target.value))}
+                            onChange={e => {
+                              const val = Number(e.target.value);
+                              if (!isNaN(val)) handleParamChange(meta, val);
+                            }}
+                            onBlur={e => {
+                              const val = Number(e.target.value);
+                              if (!isNaN(val) && val >= (meta.min ?? 0)) {
+                                commitParam(meta, val);
+                              }
+                            }}
                             style={{
                               width: '80px',
                               padding: '0.2rem 0.4rem',

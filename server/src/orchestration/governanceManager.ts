@@ -18,8 +18,8 @@ import {
   buildBallotPrompt,
   buildVotePrompt,
   buildFranchiseSizePrompt,
-} from '../llm/prompts.js';
-import type { GovernancePolicyProposal, GovernanceBallotItem } from '../llm/prompts.js';
+} from '../llm/prompts/index.js';
+import type { GovernancePolicyProposal, GovernanceBallotItem } from '../llm/prompts/index.js';
 import { sessionRepo } from '../db/repos/sessionRepo.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -68,17 +68,17 @@ async function selectPoliticians(
   agents: Agent[],
   societyContext: string,
   provider: LLMProvider,
-  model: string,
-): Promise<Agent[]> {
+  model: string): Promise<Agent[]> {
   if (agents.length === 0) return [];
 
   // Determine franchise size via Central Agent reasoning
   let franchiseSize = 1;
   try {
     const messages = buildFranchiseSizePrompt(agents.length, societyContext);
-    const raw = await provider.chat(messages, { model });
-    const clean = raw.replace(/^```json?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-    const parsed = JSON.parse(clean) as { franchiseSize?: number };
+    const raw = await provider.chat(messages, {
+      model
+    });
+    const parsed = JSON.parse(raw) as { franchiseSize?: number };
     if (typeof parsed?.franchiseSize === 'number' && isFinite(parsed.franchiseSize)) {
       franchiseSize = Math.min(agents.length, Math.max(1, Math.round(parsed.franchiseSize)));
     }
@@ -138,7 +138,7 @@ export async function runGovernanceCycle(params: {
   ].filter(Boolean).join('\n\n');
 
   // ── Step 1: Select politicians (emergent — LLM reads constitution) ───────
-  const politicians = await selectPoliticians(agents, societyContext, provider, model);
+  const politicians = await selectPoliticians(agents.filter(a => a.isAlive), societyContext, provider, model);
   if (politicians.length === 0) {
     return {
       policyChanged: false,
@@ -155,7 +155,9 @@ export async function runGovernanceCycle(params: {
   await Promise.allSettled(politicians.map(async (agent) => {
     try {
       const messages = buildProposalPrompt(agent, currentPolicy, societyContext, iterNum);
-      const raw = await citizenProv.chat(messages, { model: citizenModel });
+      const raw = await citizenProv.chat(messages, {
+        model: citizenModel
+      });
       const parsed = safeJson(raw) as { proposal?: GovernancePolicyProposal | null } | null;
       if (!parsed?.proposal) return;
       const { field, value, reasoning } = parsed.proposal;
@@ -182,7 +184,9 @@ export async function runGovernanceCycle(params: {
   let ballot: GovernanceBallotItem[] = [];
   try {
     const messages = buildBallotPrompt(rawProposals, currentPolicy, societyContext);
-    const raw = await provider.chat(messages, { model });
+    const raw = await provider.chat(messages, {
+      model
+    });
     const parsed = safeJson(raw) as { ballot?: GovernanceBallotItem[] } | null;
     if (Array.isArray(parsed?.ballot)) {
       ballot = parsed.ballot
@@ -220,7 +224,9 @@ export async function runGovernanceCycle(params: {
     await Promise.allSettled(politicians.map(async (agent) => {
       try {
         const messages = buildVotePrompt(agent, item, currentPolicy);
-        const raw = await citizenProv.chat(messages, { model: citizenModel });
+        const raw = await citizenProv.chat(messages, {
+          model: citizenModel
+        });
         const parsed = safeJson(raw) as { vote?: string } | null;
         if (parsed?.vote === 'YES') yesCount++;
         else if (parsed?.vote === 'NO') noCount++;
@@ -239,7 +245,7 @@ export async function runGovernanceCycle(params: {
   const newPolicy: SessionPolicy = { ...currentPolicy };
 
   for (const { item, yesCount, noCount } of voteResults) {
-    const passes = yesCount > noCount; // Simple majority (ties go to yes)
+    const passes = yesCount > noCount; // Strict majority required; ties and abstentions reject the item.
     if (passes) {
       newPolicy[item.field] = item.proposedValue;
       ratifiedItems.push(item);

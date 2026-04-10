@@ -9,6 +9,7 @@ type SSEEvent =
       agentId: string;
       agentName: string;
       intent: string;
+      reasoning: string;
       actionCode: string;
       actionTarget: string | null;
       actions?: ActionQueueRecord[];
@@ -39,6 +40,7 @@ export interface AgentIntentRecord {
   actionTarget: string | null;
   actions: ActionQueueRecord[];
   narrative: string;
+  reasoning: string;
 }
 
 export interface IterationFeed {
@@ -114,10 +116,19 @@ const initialState = {
   error: null as string | null,
 };
 
+/** Monotonic counter to prevent stale loadMacroHistory responses from overwriting fresh data */
+let macroHistoryGeneration = 0;
+
+/** Max telemetry entries to keep in memory (sliding window) */
+const MACRO_HISTORY_CAP = 1000;
+
 export const useSimulationStore = create<SimulationStore>((set, get) => ({
   ...initialState,
 
-  reset: () => set({ ...initialState, macroHistory: [] as TelemetryLog[] }),
+  reset: () => {
+    macroHistoryGeneration = 0;
+    set({ ...initialState, macroHistory: [] as TelemetryLog[] });
+  },
 
   loadAgents: async (sessionId: string) => {
     try {
@@ -156,11 +167,17 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
   },
 
   loadMacroHistory: async (sessionId: string) => {
+    const gen = ++macroHistoryGeneration;
     try {
       const res = await fetch(`/api/sessions/${sessionId}/simulate/telemetry`);
       if (!res.ok) return;
+      // Discard stale response if a newer request was issued while this one was in flight
+      if (gen !== macroHistoryGeneration) return;
       const data = await res.json() as TelemetryLog[];
-      set({ macroHistory: data ?? [] });
+      const capped = (data ?? []).length > MACRO_HISTORY_CAP
+        ? (data ?? []).slice(-MACRO_HISTORY_CAP)
+        : (data ?? []);
+      set({ macroHistory: capped });
     } catch { /* ignore */ }
   },
 
@@ -177,6 +194,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
             actionTarget: string | null;
             actions: ActionQueueRecord[];
             narrative: string;
+            reasoning: string;
           }>;
         }>;
       };
@@ -190,6 +208,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
           actionTarget: i.actionTarget,
           actions: i.actions ?? [],
           narrative: i.narrative,
+          reasoning: i.reasoning ?? '',
         }));
       }
       set({ agentIntentHistory: history });
@@ -218,7 +237,8 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
         let { isRunning, isPaused, isComplete, currentIteration, totalIterations,
           lastSeenId,
           pendingIntents, pendingActionCodes, agentIntentHistory,
-          feed, statsHistory, macroHistory, finalReport, error } = state;
+          feed, statsHistory, finalReport, error } = state;
+        const { macroHistory } = state;
 
         // Process as mutable copies to avoid intermediate object allocations
         feed = [...feed];
@@ -240,6 +260,11 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
               totalIterations = event.total;
               pendingIntents = {};
               pendingActionCodes = {};
+              // Reset lastSeenId on new simulation start to prevent stale
+              // sequence IDs from a previous run rejecting new events
+              if (event.iteration <= 1) {
+                lastSeenId = seqId;
+              }
               break;
 
             case 'agent-intent': {
@@ -256,7 +281,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
               const agentHistory = agentIntentHistory[event.agentId] ?? [];
               const alreadyRecorded = agentHistory.some(r => r.iterationNumber === currentIteration);
               if (!alreadyRecorded && currentIteration > 0) {
-                const newRecord = {
+                const newRecord: AgentIntentRecord = {
                   agentId: event.agentId,
                   agentName: event.agentName,
                   iterationNumber: currentIteration,
@@ -264,6 +289,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
                   actionTarget: event.actionTarget,
                   actions: event.actions ?? [],
                   narrative: event.intent,
+                  reasoning: event.reasoning ?? '',
                 };
                 // Append new record; if over cap, drop the oldest entry (shift)
                 const updated = [...agentHistory, newRecord];
@@ -390,6 +416,10 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
 
     es.onerror = () => {
       es.close();
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
     };
 
     return () => {
@@ -402,10 +432,17 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
 
   pause: async (sessionId: string) => {
     const res = await fetch(`/api/sessions/${sessionId}/simulate/pause`, { method: 'POST' });
-    if (res.ok) {
-      set({ isPaused: true, isRunning: false });
-    } else {
+    if (!res.ok) {
       set({ error: `Pause failed: ${res.status}` });
+      return;
+    }
+    const body = await res.json().catch(() => ({ ok: true }));
+    if (body.stale) {
+      // Simulation already stopped (error/completion) but we missed the SSE event.
+      // Reconcile frontend state so the user isn't stuck on a phantom "running" screen.
+      set({ isRunning: false, isPaused: false, error: 'Simulation has already stopped.' });
+    } else {
+      set({ isPaused: true, isRunning: false });
     }
   },
 
@@ -445,6 +482,10 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
 
   forkSimulation: async (sessionId: string) => {
     const res = await fetch(`/api/sessions/${sessionId}/fork-simulation`, { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error ?? `Fork failed: HTTP ${res.status}`);
+    }
     const data = await res.json() as { id: string };
     return data.id;
   },

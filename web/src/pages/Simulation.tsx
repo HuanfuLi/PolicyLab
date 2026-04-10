@@ -178,8 +178,12 @@ const Simulation = () => {
   const handleAbort = async () => {
     if (!id) return;
     sseCleanupRef.current?.();
+    try {
+      await abortAndReset(id);
+    } catch {
+      // Server abort failed — still navigate since user explicitly requested abort
+    }
     reset();
-    await abortAndReset(id);
     navigate(`/session/${id}/design`);
   };
 
@@ -780,7 +784,7 @@ interface AgentIntentPanelProps {
 }
 
 function AgentIntentPanel({ agents, agentIntentHistory, pendingActionCodes, currentIteration }: AgentIntentPanelProps) {
-  const citizenAgents = agents.filter(a => !(a as any).isCentralAgent);
+  const citizenAgents = agents.filter(a => !('isCentralAgent' in a && a.isCentralAgent));
   const sorted = [...citizenAgents].sort((a, b) => {
     if (a.isAlive !== b.isAlive) return a.isAlive ? -1 : 1;
     return a.name.localeCompare(b.name);
@@ -815,7 +819,7 @@ interface AgentIntentCardProps {
   currentIteration: number;
 }
 
-function AgentIntentCard({ agent, history, pending, currentIteration }: AgentIntentCardProps) {
+function AgentIntentCard({ agent, history, pending }: AgentIntentCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [expandedIntents, setExpandedIntents] = useState<Set<number>>(new Set());
 
@@ -896,14 +900,21 @@ function AgentIntentCard({ agent, history, pending, currentIteration }: AgentInt
                   </span>
                   {actionQueueBadges(record.actions, record.actionCode, record.actionTarget)}
                 </div>
-                {isOpen && record.narrative && (
+                {isOpen && (record.narrative || record.reasoning) && (
                   <div style={{
                     padding: '0.4rem 0.75rem 0.4rem 1.5rem',
                     fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5,
                     borderTop: '1px solid var(--glass-border)',
                     background: 'var(--panel-alpha-05)',
                   }}>
-                    {record.narrative}
+                    {record.reasoning && (
+                      <div style={{ marginBottom: record.narrative ? '0.3rem' : 0, fontStyle: 'italic', color: 'var(--text-dim)' }}>
+                        {record.reasoning}
+                      </div>
+                    )}
+                    {record.narrative && record.narrative !== record.reasoning && (
+                      <div>{record.narrative}</div>
+                    )}
                   </div>
                 )}
               </div>

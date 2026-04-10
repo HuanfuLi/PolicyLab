@@ -1,0 +1,276 @@
+import { create } from 'zustand';
+import type { EconomyConfig, BudgetAllocation, ScenarioTab } from '@policylab/shared';
+import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
+
+interface ScenarioState {
+  tabs: ScenarioTab[];
+  activeTabId: string;
+  baselineConfig: Partial<EconomyConfig> | null;
+  baselineBudget: BudgetAllocation | null;
+  runningScenarios: boolean;
+  scenarioSessionIds: Record<string, string>; // tab.id -> forked session ID
+
+  initFromSession: (config: Partial<EconomyConfig>, budget: BudgetAllocation) => void;
+  syncBaseline: (config: Partial<EconomyConfig>, budget: BudgetAllocation) => void;
+  addScenario: (name: string) => void;
+  removeScenario: (tabId: string) => void;
+  renameScenario: (tabId: string, name: string) => void;
+  setActiveTab: (tabId: string) => void;
+  updateScenarioConfig: (tabId: string, patch: Partial<EconomyConfig>) => void;
+  updateScenarioBudget: (tabId: string, budget: BudgetAllocation) => void;
+  runAllScenarios: (baseSessionId: string, iterations?: number) => Promise<string[]>;
+  reset: () => void;
+}
+
+/** Generate scenario letter name: A, B, C, ... */
+function scenarioLetter(index: number): string {
+  return String.fromCharCode(65 + index);
+}
+
+/** Compute deltas between a tab's config and the baseline config.
+ *  Both configs are merged with DEFAULT_ECONOMY_CONFIG first so that
+ *  params using defaults are still visible when changed. */
+function computeDeltas(
+  tabConfig: Partial<EconomyConfig>,
+  baselineConfig: Partial<EconomyConfig>,
+): Record<string, { from: number | boolean; to: number | boolean }> | undefined {
+  const defaults = DEFAULT_ECONOMY_CONFIG as unknown as Record<string, unknown>;
+  const fullBaseline = { ...defaults, ...baselineConfig } as Record<string, unknown>;
+  const fullTab = { ...defaults, ...tabConfig } as Record<string, unknown>;
+  const deltas: Record<string, { from: number | boolean; to: number | boolean }> = {};
+
+  for (const key of new Set([...Object.keys(fullBaseline), ...Object.keys(fullTab)])) {
+    const baseVal = fullBaseline[key];
+    const tabVal = fullTab[key];
+    // Normalize feature flag booleans: treat undefined as false to avoid
+    // undefined vs false asymmetry (e.g. capitalMarketsEnabled may be absent on older configs).
+    // Only coerce when the default for this key is a boolean; leave numbers untouched.
+    const defaultIsBoolean = typeof (DEFAULT_ECONOMY_CONFIG as Record<string, unknown>)[key] === 'boolean';
+    const normalizedBase = defaultIsBoolean && baseVal === undefined ? false : baseVal;
+    const normalizedTab = defaultIsBoolean && tabVal === undefined ? false : tabVal;
+    if (
+      normalizedBase !== normalizedTab &&
+      (typeof normalizedBase === 'number' || typeof normalizedBase === 'boolean') &&
+      (typeof normalizedTab === 'number' || typeof normalizedTab === 'boolean')
+    ) {
+      deltas[key] = {
+        from: normalizedBase as number | boolean,
+        to: normalizedTab as number | boolean,
+      };
+    }
+  }
+
+  return Object.keys(deltas).length > 0 ? deltas : undefined;
+}
+
+export const useScenarioStore = create<ScenarioState>((set, get) => ({
+  tabs: [],
+  activeTabId: '',
+  baselineConfig: null,
+  baselineBudget: null,
+  runningScenarios: false,
+  scenarioSessionIds: {},
+
+  initFromSession: (config: Partial<EconomyConfig>, budget: BudgetAllocation) => {
+    const { tabs } = get();
+    // Only initialize if tabs are empty
+    if (tabs.length > 0) return;
+
+    // Merge with defaults so ALL params are in the baseline (not just bootstrap-provided ones).
+    // This ensures computeDeltas can detect changes to any param, not just the ~13 from bootstrap.
+    const fullConfig: Partial<EconomyConfig> = { ...DEFAULT_ECONOMY_CONFIG, ...config };
+
+    const baselineId = crypto.randomUUID();
+    const baselineTab: ScenarioTab = {
+      id: baselineId,
+      name: 'Baseline',
+      isBaseline: true,
+      economyConfig: { ...fullConfig },
+      budgetAllocation: { ...budget },
+    };
+
+    set({
+      tabs: [baselineTab],
+      activeTabId: baselineId,
+      baselineConfig: { ...fullConfig },
+      baselineBudget: { ...budget },
+    });
+  },
+
+  // M23 fix: re-sync baseline if session config changes after init (e.g., refinement chat)
+  syncBaseline: (config: Partial<EconomyConfig>, budget: BudgetAllocation) => {
+    const { tabs } = get();
+    if (tabs.length === 0) return; // not initialized yet
+    const fullConfig: Partial<EconomyConfig> = { ...DEFAULT_ECONOMY_CONFIG, ...config };
+    set(state => ({
+      baselineConfig: { ...fullConfig },
+      baselineBudget: { ...budget },
+      tabs: state.tabs.map(t =>
+        t.isBaseline
+          ? { ...t, economyConfig: { ...fullConfig }, budgetAllocation: { ...budget } }
+          : t,
+      ),
+    }));
+  },
+
+  addScenario: (name: string) => {
+    const { tabs, baselineConfig, baselineBudget } = get();
+    if (!baselineConfig) return;
+
+    const nonBaselineCount = tabs.filter(t => !t.isBaseline).length;
+    const scenarioName = name || `Scenario ${scenarioLetter(nonBaselineCount)}`;
+    const newId = crypto.randomUUID();
+
+    const newTab: ScenarioTab = {
+      id: newId,
+      name: scenarioName,
+      isBaseline: false,
+      economyConfig: { ...baselineConfig },
+      budgetAllocation: baselineBudget ? { ...baselineBudget } : undefined,
+    };
+
+    set(state => ({
+      tabs: [...state.tabs, newTab],
+      activeTabId: newId,
+    }));
+  },
+
+  removeScenario: (tabId: string) => {
+    set(state => {
+      const tab = state.tabs.find(t => t.id === tabId);
+      if (!tab || tab.isBaseline) return state;
+
+      const newTabs = state.tabs.filter(t => t.id !== tabId);
+      const newActiveId = state.activeTabId === tabId
+        ? newTabs[0]?.id ?? ''
+        : state.activeTabId;
+
+      return { tabs: newTabs, activeTabId: newActiveId };
+    });
+  },
+
+  renameScenario: (tabId: string, name: string) => {
+    set(state => ({
+      tabs: state.tabs.map(t =>
+        t.id === tabId && !t.isBaseline ? { ...t, name } : t,
+      ),
+    }));
+  },
+
+  setActiveTab: (tabId: string) => {
+    set({ activeTabId: tabId });
+  },
+
+  updateScenarioConfig: (tabId: string, patch: Partial<EconomyConfig>) => {
+    const { baselineConfig } = get();
+    if (!baselineConfig) return;
+
+    set(state => ({
+      tabs: state.tabs.map(t => {
+        if (t.id !== tabId) return t;
+        const updatedConfig = { ...t.economyConfig, ...patch };
+        const deltas = t.isBaseline ? undefined : computeDeltas(updatedConfig, baselineConfig);
+        return { ...t, economyConfig: updatedConfig, deltas };
+      }),
+    }));
+  },
+
+  updateScenarioBudget: (tabId: string, budget: BudgetAllocation) => {
+    set(state => ({
+      tabs: state.tabs.map(t =>
+        t.id === tabId ? { ...t, budgetAllocation: { ...budget } } : t,
+      ),
+    }));
+  },
+
+  runAllScenarios: async (baseSessionId: string, iterations?: number): Promise<string[]> => {
+    const { tabs, runningScenarios } = get();
+    if (runningScenarios) return []; // Prevent concurrent calls
+    const nonBaseline = tabs.filter(t => !t.isBaseline);
+    if (nonBaseline.length === 0) return [];
+
+    set({ runningScenarios: true });
+    const sessionIds: Record<string, string> = {};
+    const allForkIds: string[] = [];
+
+    try {
+      // Step 1: Fork and configure each scenario sequentially
+      for (const tab of nonBaseline) {
+        // Fork the session
+        const forkRes = await fetch(`/api/sessions/${baseSessionId}/fork`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        if (!forkRes.ok) throw new Error(`Fork failed for scenario "${tab.name}"`);
+        const { id: forkId } = await forkRes.json();
+
+        // Patch the fork's config with the scenario overrides
+        const configRes = await fetch(`/api/sessions/${forkId}/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            economyConfig: tab.economyConfig,
+            ...(tab.budgetAllocation ? { budgetAllocation: tab.budgetAllocation } : {}),
+          }),
+        });
+        if (!configRes.ok) throw new Error(`Config patch failed for scenario "${tab.name}"`);
+
+        sessionIds[tab.id] = forkId;
+        allForkIds.push(forkId);
+      }
+
+      set({ scenarioSessionIds: sessionIds });
+
+      // Step 2: Start simulations sequentially (per Research open question 3)
+      const simBody = iterations ? { iterations } : {};
+
+      // Start baseline first
+      const baseSimRes = await fetch(`/api/sessions/${baseSessionId}/simulate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(simBody),
+      });
+      if (!baseSimRes.ok) throw new Error('Failed to start baseline simulation');
+
+      // Then each fork
+      for (const forkId of allForkIds) {
+        const forkSimRes = await fetch(`/api/sessions/${forkId}/simulate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(simBody),
+        });
+        if (!forkSimRes.ok) throw new Error(`Failed to start simulation for fork ${forkId}`);
+      }
+
+      set({ runningScenarios: false });
+      return allForkIds;
+    } catch (err) {
+      // Abort baseline simulation if it was started
+      fetch(`/api/sessions/${baseSessionId}/simulate/abort`, { method: 'POST' }).catch(() => {});
+      // Clean up any forks that were created but failed to start simulation —
+      // abort running simulations and delete orphaned forked sessions.
+      // Awaited in parallel so that a retry doesn't race with in-flight cleanup.
+      const cleanupPromises = allForkIds.map(forkId =>
+        Promise.all([
+          fetch(`/api/sessions/${forkId}/simulate/abort`, { method: 'POST' }).catch(() => {}),
+          fetch(`/api/sessions/${forkId}`, { method: 'DELETE' }).catch(() => {}),
+        ])
+      );
+      await Promise.all(cleanupPromises);
+      set({ runningScenarios: false, scenarioSessionIds: {} });
+      throw err;
+    }
+  },
+
+  reset: () => {
+    set({
+      tabs: [],
+      activeTabId: '',
+      baselineConfig: null,
+      baselineBudget: null,
+      runningScenarios: false,
+      scenarioSessionIds: {},
+    });
+  },
+}));
