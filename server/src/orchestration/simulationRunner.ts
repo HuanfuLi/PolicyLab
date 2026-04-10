@@ -805,10 +805,7 @@ function applyEnterpriseAction(params: {
             if (receipt.success) {
               fiatRevenue = 'fiatOut' in receipt.quote ? receipt.quote.fiatOut : 0;
               const effectivePrice = 'effectivePrice' in receipt.quote ? receipt.quote.effectivePrice.toFixed(2) : '?';
-              if (ownerState) {
-                ownerState.wealthDelta += fiatRevenue;
-                ownerState.events.push(`Enterprise ${enterpriseId}: ${producedQty} food sold to AMM at ${effectivePrice}/unit (+${fiatRevenue} fiat)`);
-              }
+              ownerState?.events.push(`Enterprise ${enterpriseId}: ${producedQty} food sold to AMM at ${effectivePrice}/unit (+${fiatRevenue} fiat)`);
             } else {
               // AMM saturated — fall back to inventory so production isn't lost
               if (ownerState) {
@@ -823,10 +820,7 @@ function applyEnterpriseAction(params: {
               if (receipt.success) {
                 fiatRevenue = 'fiatOut' in receipt.quote ? receipt.quote.fiatOut : 0;
                 const effectivePrice = 'effectivePrice' in receipt.quote ? receipt.quote.effectivePrice.toFixed(2) : '?';
-                if (ownerState) {
-                  ownerState.wealthDelta += fiatRevenue;
-                  ownerState.events.push(`Enterprise ${enterpriseId}: ${producedQty} ${itemType} sold to AMM at ${effectivePrice}/unit (+${fiatRevenue} fiat)`);
-                }
+                ownerState?.events.push(`Enterprise ${enterpriseId}: ${producedQty} ${itemType} sold to AMM at ${effectivePrice}/unit (+${fiatRevenue} fiat)`);
               } else if (ownerState) {
                 ownerState.inventory[itemType].quantity += producedQty;
                 ownerState.events.push(`Enterprise ${enterpriseId}: ${producedQty} ${itemType} kept in inventory (AMM saturated)`);
@@ -834,6 +828,21 @@ function applyEnterpriseAction(params: {
             } else if (ownerState) {
               ownerState.inventory[itemType].quantity += producedQty;
               ownerState.events.push(`Enterprise ${enterpriseId}: ${producedQty} ${itemType} added to inventory`);
+            }
+          }
+
+          // Fix #4: Route enterprise revenue to enterprise deposit account when one exists.
+          // When banking is enabled, revenue belongs to the enterprise (not the owner personally).
+          // Owner withdraws profits via dividends, not by receiving raw AMM proceeds.
+          if (fiatRevenue > 0) {
+            const entDepositId = `ent_${enterpriseId}`;
+            const entDeposit = bankingRepo.getDepositById(entDepositId);
+            if (entDeposit) {
+              bankingRepo.updateDepositBalance(entDeposit.id, entDeposit.balance + fiatRevenue, iterationNumber);
+              ownerState?.events.push(`Enterprise ${enterpriseId}: +${fiatRevenue} fiat revenue credited to enterprise deposit`);
+            } else if (ownerState) {
+              // No enterprise deposit account — fall back to owner's personal wealth
+              ownerState.wealthDelta += fiatRevenue;
             }
           }
 
@@ -1017,15 +1026,27 @@ function applyEnterpriseAction(params: {
             // AMM rejected — fall back to order book
             if (state.inventory[itemType as keyof typeof state.inventory].quantity >= quantity) {
               state.inventory[itemType as keyof typeof state.inventory].quantity -= quantity;
-              orderBook.submitOrder({ sessionId: params.sessionId, agentId: agent.id, side: 'sell', itemType, price, quantity, iterationPlaced: iterationNumber });
-              state.events.push(`Posted sell order for ${quantity} ${itemType} at ${price} (AMM insufficient liquidity)`);
+              // M6 fix: check submitOrder return and restore inventory on failure
+              const order = orderBook.submitOrder({ sessionId: params.sessionId, agentId: agent.id, side: 'sell', itemType, price, quantity, iterationPlaced: iterationNumber });
+              if (!order) {
+                state.inventory[itemType as keyof typeof state.inventory].quantity += quantity;
+                state.events.push(`Sell order rejected for ${quantity} ${itemType}`);
+              } else {
+                state.events.push(`Posted sell order for ${quantity} ${itemType} at ${price} (AMM insufficient liquidity)`);
+              }
             }
           }
         } else if (!commodityAMMSell) {
           if (state.inventory[itemType as keyof typeof state.inventory].quantity >= quantity) {
             state.inventory[itemType as keyof typeof state.inventory].quantity -= quantity;
-            orderBook.submitOrder({ sessionId: params.sessionId, agentId: agent.id, side: 'sell', itemType, price, quantity, iterationPlaced: iterationNumber });
-            state.events.push(`Posted sell order for ${quantity} ${itemType} at ${price}`);
+            // M6 fix: check submitOrder return and restore inventory on failure
+            const order = orderBook.submitOrder({ sessionId: params.sessionId, agentId: agent.id, side: 'sell', itemType, price, quantity, iterationPlaced: iterationNumber });
+            if (!order) {
+              state.inventory[itemType as keyof typeof state.inventory].quantity += quantity;
+              state.events.push(`Sell order rejected for ${quantity} ${itemType}`);
+            } else {
+              state.events.push(`Posted sell order for ${quantity} ${itemType} at ${price}`);
+            }
           }
         }
       }
@@ -1285,6 +1306,16 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               educationQuality: currentPublicGoods.educationQuality,
               defenseQuality: currentPublicGoods.defenseQuality,
               welfareQuality: currentPublicGoods.welfareQuality,
+            }, economyConfig));
+          } else {
+            // C2 fix: Initialize multipliers from default quality (50) on
+            // iteration 0 so agents get proper fiscal bonuses before the
+            // first fiscal tick writes publicGoodsState to DB.
+            sessionFiscalMultipliers.set(sessionId, fiscalEngine.getMultiplierEffectsFromQuality({
+              infrastructureQuality: 50,
+              educationQuality: 50,
+              defenseQuality: 50,
+              welfareQuality: 50,
             }, economyConfig));
           }
         }
@@ -2195,7 +2226,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         for (const [enterpriseId, enterprise] of enterpriseRegistry) {
           if (aliveAgentIds.has(enterprise.ownerId)) continue; // owner alive — normal path
           // Owner is dead: dissolve enterprise and release all employees
-          for (const [employeeId] of enterprise.employees) {
+          // Fix: was `[employeeId]` which destructures the string, extracting only the first char
+          for (const employeeId of enterprise.employees) {
             const empRecord = employmentRegistry.get(employeeId);
             if (!empRecord) continue;
             const empState = weekStateMap.get(employeeId);
@@ -2299,7 +2331,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           const illegalCodesForAgent = illegalActionMap.get(agent.id);
           if (illegalCodesForAgent?.has(action.actionCode)) {
             const detectionProb = Math.min(0.9, 0.2 * sessionPolicy.enforcement_level);
-            if (Math.random() < detectionProb) {
+            // D1 fix: Deterministic enforcement using agent/iteration hash instead
+            // of Math.random(). Produces the same arrest outcome for the same inputs.
+            const hashInput = `${agent.id}:${iterNum}:${actionIndex}`;
+            const deterministicRoll = (Array.from(hashInput).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0) >>> 0) / 0xFFFFFFFF;
+            if (deterministicRoll < detectionProb) {
               const seizureFromBalance = runningWealth * 0.25;
               const seizedActionGain = Math.max(0, physics.wealthDelta);
               const totalSeized = seizureFromBalance + seizedActionGain;
@@ -2473,10 +2509,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       }
 
       // ── Wage Settlement & Bankruptcy Check ───────────────────────────────
-      // Group employees by enterprise, check if the owner can cover all wages,
-      // then either pay in full or declare bankruptcy with proportional liquidation.
+      // Fix #1: When banking is enabled, wages are paid from enterprise deposit accounts
+      // in the deposit-based enterprise system (§ Enterprise Economics below).
+      // This block handles the non-banking path only, to prevent double wage payments.
       let bankruptciesThisIter = 0;
-      {
+      if (!iterEconomyConfig.bankingEnabled) {
         // Build per-enterprise wage obligation map: enterpriseId → [employmentRecords that worked]
         const enterpriseWorkers = new Map<string, EmploymentRecord[]>();
         for (const employment of employmentRegistry.values()) {
@@ -2602,8 +2639,13 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           taxedState.cortisolDelta += 5 * taxActions.length;
           taxedState.happinessDelta -= 3 * taxActions.length;
         }
-        // Taxer receives only what was actually collected
-        if (taxerState) taxerState.wealthDelta += actualTaxCollected;
+        // Fix #2: ADJUST_TAX revenue routes to state treasury (not taxer's personal wallet).
+        // Taxes are state revenue — personal enrichment via ADJUST_TAX was incorrect.
+        if (actualTaxCollected > 0) {
+          const prevTreasury = sessionStateTreasury.get(sessionId) ?? 0;
+          sessionStateTreasury.set(sessionId, prevTreasury + actualTaxCollected);
+          if (taxerState) taxerState.events.push(`Collected ${actualTaxCollected} fiat in taxes → state treasury`);
+        }
       }
 
       {
@@ -3274,6 +3316,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         // Apply all banking DB writes in a single synchronous transaction to avoid
         // SQLITE_BUSY and ensure atomicity. Banking runs once per iteration (not per-agent)
         // so the write volume is small and a direct transaction is safe here.
+        // H8 fix: Try batch transaction first; on FK failure, fall back to
+        // per-row inserts so only the offending rows are dropped (not the
+        // entire banking ledger for this iteration).
         try {
           sqlite.transaction(() => {
             for (const upd of bankingDelta.depositUpdates) {
@@ -3295,16 +3340,28 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         } catch (bankErr) {
           const msg = bankErr instanceof Error ? bankErr.message : String(bankErr);
           if (msg.includes('FOREIGN KEY')) {
-            console.error(`[FK_DEBUG] Banking transaction FK error at iter ${iterNum}:`,
-              `newLoans=${bankingDelta.newLoans.length}`,
-              `newDeposits=${bankingDelta.newDeposits.length}`,
-              `balanceSheets=${bankingDelta.balanceSheetSnapshots.length}`,
-              `depositUpdates=${bankingDelta.depositUpdates.length}`,
-              bankingDelta.newLoans.map(l => `loan:borrower=${l.borrowerAgentId},lender=${l.lenderAgentId}`),
-              bankingDelta.newDeposits.map(d => `dep:owner=${d.ownerAgentId},bank=${d.bankAgentId}`),
-              bankingDelta.balanceSheetSnapshots.map(s => `sheet:agent=${s.agentId}`));
+            console.warn(`[banking] FK error in batch — falling back to per-row insert at iter ${iterNum}`);
+            let inserted = 0, dropped = 0;
+            const tryRow = (label: string, fn: () => void) => {
+              try { fn(); inserted++; } catch (e) {
+                dropped++;
+                console.warn(`[banking] Dropped ${label}:`, e instanceof Error ? e.message : e);
+              }
+            };
+            for (const upd of bankingDelta.depositUpdates)
+              tryRow('depositUpdate', () => bankingRepo.updateDepositBalance(upd.accountId, upd.newBalance, upd.iteration));
+            for (const upd of bankingDelta.loanUpdates)
+              tryRow('loanUpdate', () => bankingRepo.updateLoan(upd.loanId, upd.updates));
+            for (const loan of bankingDelta.newLoans)
+              tryRow('newLoan', () => bankingRepo.insertLoan(loan));
+            for (const dep of bankingDelta.newDeposits)
+              tryRow('newDeposit', () => bankingRepo.upsertDeposit(dep));
+            for (const sheet of bankingDelta.balanceSheetSnapshots)
+              tryRow('balanceSheet', () => bankingRepo.insertBalanceSheet(sheet));
+            console.warn(`[banking] Per-row fallback: ${inserted} inserted, ${dropped} dropped`);
+          } else {
+            throw bankErr;
           }
-          throw bankErr;
         }
         // Apply wealth deltas (interest income, collateral seizure) — in-memory only,
         // will be persisted with the rest of statUpdates below.
@@ -3381,9 +3438,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
 
         // Apply treasury delta (gov bond purchases, gov coupon/maturity payments)
-        sessionStateTreasury.set(
-          sessionId,
-          (sessionStateTreasury.get(sessionId) ?? 0) + cmktDelta.treasuryDelta);
+        // R1 fix: Floor treasury at 0 to prevent negative balance from
+        // simultaneous bond maturities exceeding available funds.
+        const currentTreasury = sessionStateTreasury.get(sessionId) ?? 0;
+        sessionStateTreasury.set(sessionId, Math.max(0, currentTreasury + cmktDelta.treasuryDelta));
 
         // Append capital market traces to physics trace log
         if (cmktDelta.trace.length > 0) {
@@ -3580,10 +3638,26 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             config: economyConfig,
           });
           // Remove bankrupt enterprises from registry, update DB
+          // Fix #1C: release all employees when deposit-based enterprise goes bankrupt.
           for (const update of insolvencyDelta.insolvencyUpdates) {
             if (update.isBankrupt) {
               entRegistry.delete(update.enterpriseId);
               enterpriseRepo.updateEnterpriseInsolvencyAsync(update.enterpriseId, update.consecutiveDeficits, true);
+              bankruptciesThisIter++;
+              // Release all employees of the bankrupt enterprise
+              const bankruptInput = enterpriseInputs.find(e => e.id === update.enterpriseId);
+              if (bankruptInput) {
+                for (const employeeId of bankruptInput.employees) {
+                  employmentRegistry.delete(employeeId);
+                  const empWeekState = weekStateMap.get(employeeId);
+                  if (empWeekState) {
+                    empWeekState.employer_id = null;
+                    empWeekState.cortisolDelta += 20;
+                    empWeekState.happinessDelta -= 15;
+                    empWeekState.events.push(`Your employer enterprise ${update.enterpriseId} went bankrupt — you are now unemployed.`);
+                  }
+                }
+              }
             } else {
               enterpriseRepo.updateEnterpriseInsolvencyAsync(update.enterpriseId, update.consecutiveDeficits, false);
             }
@@ -3973,13 +4047,18 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           crimeRate,
           averageCortisol,
           averageDopamine,
-          // Banking M0/M1 telemetry (zero when bankingEnabled is false)
-          m0: totalFiatSupply,  // base money — constant under SFC (includes depositBalances + collateral)
-          m1: totalFiatSupply + bankingLoansOutstanding,  // M1 = M0 + outstanding loan principals
+          // Banking M0/M1/M2 telemetry (zero when bankingEnabled is false)
+          // M0 = base money (constant under SFC). Includes deposit fiat held by bank + collateral.
+          m0: totalFiatSupply,
+          // M1 = M0 + credit money created by outstanding loans.
+          m1: totalFiatSupply + bankingLoansOutstanding,
           loansOutstanding: bankingLoansOutstanding,
           ...inflationTelemetry,
-          // M2 = M1 + time deposits (deposit accounts act as savings deposits in this model)
-          m2: totalFiatSupply + bankingLoansOutstanding + bankingTotalDeposits,
+          // M2 = M1. Deposits are already counted in M0 (via computeSystemFiatTotal's
+          // depositBalances parameter), so adding them again would double-count.
+          // bankingDeposits is tracked separately for chart visualisation.
+          m2: totalFiatSupply + bankingLoansOutstanding,
+          bankingDeposits: bankingTotalDeposits,
           // Fiscal public goods quality telemetry (absent when fiscalEnabled is false)
           ...(fiscalPublicGoodsQuality ? {
             infrastructureQuality: Math.round(fiscalPublicGoodsQuality.infrastructureQuality * 100) / 100,
@@ -4206,8 +4285,15 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             db.insert(ammSnapshotsTable).values(ammSnapshotValues).run();
           }
 
-          // 3. Persist role changes to roleChanges table (lifecycle events)
-          // Validate agentId against loaded agents — LLM may return names instead of UUIDs
+          // 3. Persist role changes to roleChanges table (lifecycle events — audit only)
+          //
+          // IMPORTANT: role_change lifecycle events emitted by the Central Agent LLM are
+          // recorded here for historical reference and post-mortem analysis ONLY.
+          // We deliberately do NOT update agent.role or any in-memory role field from
+          // these events. Mechanical role enforcement (e.g. permission gates, wage tiers)
+          // requires a future gated-transition system that validates eligibility before
+          // committing the new role. Silently re-assigning roles from LLM output would
+          // allow the narrative layer to bypass game-balance constraints.
           const agentIdSet = new Set(agents.map(a => a.id));
           const agentNameToIdMap = new Map(agents.map(a => [a.name, a.id]));
           for (const evt of resolution.lifecycleEvents ?? []) {
@@ -4219,6 +4305,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
                 console.warn(`[ROLE_CHANGE] Skipping — agentId "${e.agentId}" not found in agents table`);
                 continue;
               }
+              // Write audit record only — agent.role is intentionally NOT updated here.
               db.insert(roleChanges).values({
                 id: uuidv4(),
                 sessionId,
@@ -4396,11 +4483,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     simulationManager.finish(sessionId);
   } catch (err) {
     asyncLogFlusher.stop();
-    clearOrderBook(sessionId);
-    cleanupSessionCognition(sessionId);
-    cleanupSessionState(sessionId);
 
     if (err instanceof SimulationPausedError) {
+      // R2 fix: Do NOT clean up session state on pause — preserve insolvency
+      // counters, idle counters, wage costs, and other in-memory state so
+      // resume continues seamlessly. Only clean up on abort/completion.
       // Structured pause: persist simulation-paused stage so the resume route can restart.
       // The failing iteration was never committed, so resuming will retry it from scratch.
       console.error(
@@ -4408,6 +4495,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       try { await sessionRepo.updateStage(sessionId, 'simulation-paused'); } catch { /* best-effort */ }
       try { simulationManager.broadcast(sessionId, { type: 'error', message: err.message }); } catch { /* best-effort */ }
     } else {
+      // Non-recoverable error — full cleanup
+      clearOrderBook(sessionId);
+      cleanupSessionCognition(sessionId);
+      cleanupSessionState(sessionId);
       const message = err instanceof Error ? err.message : 'Simulation error';
       const stack = err instanceof Error ? err.stack?.split('\n').slice(0, 8).join('\n') : '';
       try { simulationManager.broadcast(sessionId, { type: 'error', message }); } catch { /* best-effort */ }
