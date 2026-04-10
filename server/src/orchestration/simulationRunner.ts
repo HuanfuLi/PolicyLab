@@ -1192,6 +1192,12 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           }
 
           // ── Phase Sheriff C: enforcement check ────────────────────────────
+          // Save the original physics wealthDelta BEFORE enforcement modifies it.
+          // Action-specific routing (WORK/INVEST/HELP) must use the original value
+          // to avoid double-counting the seizure in both the seized pool and the
+          // treasury/beneficiary routing.
+          const originalWealthDelta = physics.wealthDelta;
+
           // If the Central Agent flagged this action as illegal, roll detection.
           // On catch: seizure penalty replaces normal physics wealth gain.
           const illegalCodesForAgent = illegalActionMap.get(agent.id);
@@ -1201,11 +1207,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               const seizureFromBalance = runningWealth * 0.25;
               const seizedActionGain = Math.max(0, physics.wealthDelta);
               const totalSeized = seizureFromBalance + seizedActionGain;
-              // Route both confiscated base wealth and any illegal action gain back into
-              // the redistribution pool so arrests remain SFC-neutral.
               seizedWealthPool += totalSeized;
               physics.wealthDelta -= totalSeized;
-              // Arrest trauma: +30 cortisol, nullify happiness gain
               physics.cortisolDelta += 30;
               physics.happinessDelta = Math.min(physics.happinessDelta, -5);
               weekState.events.push(
@@ -1221,24 +1224,22 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           weekState.wealthDelta += physics.wealthDelta;
 
           // D1: Deduct standalone WORK income from the state treasury (SFC-compliant).
-          // The treasury prevents WORK from creating fiat from nothing — income is
-          // a transfer from treasury to agent, keeping total fiat supply constant.
-          if (action.actionCode === 'WORK' && physics.wealthDelta > 0) {
+          // Use originalWealthDelta (pre-enforcement) so enforcement seizure doesn't
+          // prevent the treasury debit — the seized gain is already in seizedWealthPool.
+          if (action.actionCode === 'WORK' && originalWealthDelta > 0) {
             const treasury = sessionStateTreasury.get(sessionId) ?? 0;
-            if (treasury < physics.wealthDelta) {
-              // Treasury exhausted — cap income at remaining balance
-              weekState.wealthDelta -= (physics.wealthDelta - treasury);
+            if (treasury < originalWealthDelta) {
+              weekState.wealthDelta -= (originalWealthDelta - treasury);
               sessionStateTreasury.set(sessionId, 0);
             } else {
-              sessionStateTreasury.set(sessionId, treasury - physics.wealthDelta);
+              sessionStateTreasury.set(sessionId, treasury - originalWealthDelta);
             }
           }
 
-          // SFC fix V2: INVEST cost routes to treasury instead of being destroyed.
-          // Without this, the -10 wealthDelta destroys fiat with no counterparty.
-          // Routing to treasury mirrors the FOUND_ENTERPRISE pattern.
-          if (action.actionCode === 'INVEST' && physics.wealthDelta < 0) {
-            const investCost = Math.abs(physics.wealthDelta);
+          // SFC fix V2: INVEST cost routes to treasury. Use originalWealthDelta
+          // so enforcement seizure isn't double-counted in both pool and treasury.
+          if (action.actionCode === 'INVEST' && originalWealthDelta < 0) {
+            const investCost = Math.abs(originalWealthDelta);
             const prevTreasury = sessionStateTreasury.get(sessionId) ?? 0;
             sessionStateTreasury.set(sessionId, prevTreasury + investCost);
           }
@@ -1276,14 +1277,15 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           // in-action-loop position BEFORE this action's physics.wealthDelta is applied).
           // If the helper has less than the full help_amount, only transfer what is available
           // and clawback the uncovered portion from weekState.wealthDelta so no fiat is destroyed.
-          // SFC fix: HELP with no valid target — reverse the wealth cost to prevent fiat destruction.
-          if (action.actionCode === 'HELP' && !targetAgent && physics.wealthDelta < 0) {
-            weekState.wealthDelta -= physics.wealthDelta; // undo the -5
+          // SFC fix: HELP with no valid target — reverse only the original HELP cost
+          // (not the enforcement penalty, which is already in seizedWealthPool).
+          if (action.actionCode === 'HELP' && !targetAgent && originalWealthDelta < 0) {
+            weekState.wealthDelta -= originalWealthDelta; // undo the original -5
           }
-          if (action.actionCode === 'HELP' && targetAgent && physics.wealthDelta < 0) {
+          if (action.actionCode === 'HELP' && targetAgent && originalWealthDelta < 0) {
             const beneficiaryState = weekStateMap.get(targetAgent.id);
             if (beneficiaryState) {
-              const helpAmount = Math.abs(physics.wealthDelta);
+              const helpAmount = Math.abs(originalWealthDelta);
               // actualGift is capped at runningWealth — the helper cannot give what they don't have
               const actualGift = Math.min(helpAmount, runningWealth);
               beneficiaryState.wealthDelta += actualGift;
@@ -1476,6 +1478,17 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             ownerState.events.push(`CRITICAL: Your enterprise ${enterpriseId} went bankrupt! You failed to pay your workers and lost your business.`);
             ownerState.cortisolDelta += 40;
             ownerState.happinessDelta -= 30;
+
+            // Release ALL employees registered at the bankrupt enterprise
+            // (not just those who worked this turn — non-working employees would
+            // otherwise remain permanently stuck in employmentRegistry).
+            for (const empId of enterprise.employees) {
+              if (employmentRegistry.has(empId)) {
+                employmentRegistry.delete(empId);
+                const empState = weekStateMap.get(empId);
+                if (empState) empState.employer_id = null;
+              }
+            }
 
             // Dissolve enterprise
             enterpriseRegistry.delete(enterpriseId);
