@@ -189,9 +189,16 @@ export function processShareSale(params: {
   addWealth(delta, buyer.id, -proceeds);
 
   // Update seller position
+  const rawSellerShares = sellerPosition.sharesHeld - sharesToSell;
+  if (rawSellerShares < 0) {
+    console.warn(
+      `[CMKT] processShareSale: sharesHeld would go negative for agent ${seller.id} ` +
+      `(had ${sellerPosition.sharesHeld}, selling ${sharesToSell}). Clamping to 0.`,
+    );
+  }
   const updatedSellerPosition: EquityPosition = {
     ...sellerPosition,
-    sharesHeld: sellerPosition.sharesHeld - sharesToSell,
+    sharesHeld: Math.max(0, rawSellerShares),
     lastUpdated: iterationNumber,
   };
   delta.upsertEquityPositions.push(updatedSellerPosition);
@@ -726,14 +733,17 @@ export function processIteration(params: {
   }
 
   // ── Step 5: Distribute dividends for each enterprise owner ─────────────────
-  const enterpriseOwnerIds = [...new Set(equityPositions.map(p => p.enterpriseOwnerId))];
+  // S3 fix: Use positionMap (updated by Steps 1-2) instead of the original
+  // equityPositions array so dividends reflect same-iteration trades.
+  const currentPositions = [...positionMap.values()];
+  const enterpriseOwnerIds = [...new Set(currentPositions.map(p => p.enterpriseOwnerId))];
   for (const ownerId of enterpriseOwnerIds) {
     const owner = getAgent(ownerId);
     if (!owner) continue;
 
     // Filter out owner's own shares — dividend represents profit redistribution
     // to OTHER shareholders, not a self-payment loop.
-    const externalPositions = equityPositions.filter(
+    const externalPositions = currentPositions.filter(
       p => p.enterpriseOwnerId === ownerId && p.ownerAgentId !== ownerId,
     );
     if (externalPositions.length === 0) continue;
