@@ -216,7 +216,12 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
   },
 
   connectSSE: (sessionId: string) => {
-    const es = new EventSource(`/api/sessions/${sessionId}/simulate/stream`);
+    let es = new EventSource(`/api/sessions/${sessionId}/simulate/stream`);
+    let retryCount = 0;
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 2000;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let closed = false; // set by cleanup to prevent reconnection after unmount
 
     // ── Double-buffering: push events into a mutable buffer and flush
     // via requestAnimationFrame to avoid per-event React re-renders. ────
@@ -386,46 +391,61 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
       }
     };
 
-    es.onmessage = (e) => {
-      try {
-        // Parse the SSE sequence id (the `id:` line) provided by the browser's EventSource API.
-        // e.lastEventId is a string; parse to int. Empty string means no id was set.
-        const rawId = e.lastEventId !== '' ? parseInt(e.lastEventId, 10) : null;
-        const seqId = rawId !== null && !isNaN(rawId) ? rawId : null;
+    const attachHandlers = (source: EventSource) => {
+      source.onmessage = (e) => {
+        try {
+          const rawId = e.lastEventId !== '' ? parseInt(e.lastEventId, 10) : null;
+          const seqId = rawId !== null && !isNaN(rawId) ? rawId : null;
 
-        // Duplicate filtering: skip events we've already processed (can arrive on reconnect).
-        const currentLastSeen = get().lastSeenId;
-        if (seqId !== null && currentLastSeen !== null && seqId <= currentLastSeen) {
-          // This event was already processed before the reconnect; skip it.
+          const currentLastSeen = get().lastSeenId;
+          if (seqId !== null && currentLastSeen !== null && seqId <= currentLastSeen) {
+            return;
+          }
+
+          if (seqId !== null && currentLastSeen !== null && seqId > currentLastSeen + 1) {
+            console.warn(
+              `[SSE] Sequence gap detected: expected ${currentLastSeen + 1}, got ${seqId}. ` +
+              `${seqId - currentLastSeen - 1} event(s) may have been missed.`
+            );
+          }
+
+          retryCount = 0; // successful message resets retry counter
+          const event = JSON.parse(e.data) as SSEEvent;
+          buffer.push({ seqId, event });
+          scheduleFlush();
+        } catch { /* ignore parse errors */ }
+      };
+
+      source.onerror = () => {
+        source.close();
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        // F1 fix: Reconnect with backoff instead of dying permanently
+        if (closed || retryCount >= MAX_RETRIES) {
+          if (!closed) {
+            console.error(`[SSE] Connection lost after ${MAX_RETRIES} retries`);
+          }
           return;
         }
-
-        // Gap detection: warn if events may have been missed.
-        if (seqId !== null && currentLastSeen !== null && seqId > currentLastSeen + 1) {
-          console.warn(
-            `[SSE] Sequence gap detected: expected ${currentLastSeen + 1}, got ${seqId}. ` +
-            `${seqId - currentLastSeen - 1} event(s) may have been missed.`
-          );
-        }
-
-        const event = JSON.parse(e.data) as SSEEvent;
-        buffer.push({ seqId, event });
-        scheduleFlush();
-      } catch { /* ignore parse errors */ }
+        retryCount++;
+        console.warn(`[SSE] Connection lost, reconnecting (attempt ${retryCount}/${MAX_RETRIES})...`);
+        retryTimer = setTimeout(() => {
+          if (closed) return;
+          es = new EventSource(`/api/sessions/${sessionId}/simulate/stream`);
+          attachHandlers(es);
+        }, RETRY_DELAY_MS * retryCount);
+      };
     };
 
-    es.onerror = () => {
-      es.close();
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-    };
+    attachHandlers(es);
 
     return () => {
+      closed = true;
       es.close();
+      if (retryTimer !== null) clearTimeout(retryTimer);
       if (rafId !== null) cancelAnimationFrame(rafId);
-      // Flush any remaining events synchronously
       flushBuffer();
     };
   },
@@ -449,14 +469,16 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
   resume: async (sessionId: string) => {
     const res = await fetch(`/api/sessions/${sessionId}/simulate/resume`, { method: 'POST' });
     if (res.ok) {
-      set({ isPaused: false, isRunning: true });
+      set({ isPaused: false, isRunning: true, error: null });
+    } else {
+      set({ error: `Resume failed: ${res.status}` });
     }
   },
 
   abort: async (sessionId: string) => {
     const res = await fetch(`/api/sessions/${sessionId}/simulate/abort`, { method: 'POST' });
     if (res.ok) {
-      set({ isRunning: false, isPaused: false, isComplete: true });
+      set({ isRunning: false, isPaused: false, isComplete: true, error: null });
     } else {
       set({ error: `Abort failed: ${res.status}` });
     }

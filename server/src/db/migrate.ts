@@ -260,6 +260,8 @@ export function runMigrations() {
 
     CREATE INDEX IF NOT EXISTS idx_deposit_accounts_session ON deposit_accounts(session_id);
     CREATE INDEX IF NOT EXISTS idx_deposit_accounts_owner ON deposit_accounts(owner_agent_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_deposit_unique
+      ON deposit_accounts(owner_agent_id, bank_agent_id, session_id);
 
     CREATE TABLE IF NOT EXISTS loan_contracts (
       id TEXT PRIMARY KEY,
@@ -390,6 +392,7 @@ export function runMigrations() {
       is_service_enterprise INTEGER NOT NULL DEFAULT 0,
       consecutive_insolvency_iterations INTEGER NOT NULL DEFAULT 0,
       is_bankrupt INTEGER NOT NULL DEFAULT 0,
+      employees TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL
     );
 

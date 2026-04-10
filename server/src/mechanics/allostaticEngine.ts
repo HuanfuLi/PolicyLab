@@ -356,6 +356,10 @@ export class AllostaticEngine {
     // than they can be restored, leaving permanent structural damage.
     if (strainOverElasticityLimit) {
       this.load += (this.strain - physicsConfig.strainElasticityLimit) * physicsConfig.loadAccumulationRate;
+      // H4 fix: Cap load at 2× disease threshold to prevent runaway health
+      // decay. Design intent is "months not weeks" — uncapped load reaches
+      // lethal levels in ~500 ticks instead of allowing gradual decline.
+      this.load = Math.min(this.load, physicsConfig.loadDiseaseThreshold * 2);
     }
 
     const loadOverDiseaseThreshold = this.load > physicsConfig.loadDiseaseThreshold;

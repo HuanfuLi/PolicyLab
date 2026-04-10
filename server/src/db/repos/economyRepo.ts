@@ -106,28 +106,29 @@ export const economyRepo = {
     ): Promise<void> {
         if (updates.length === 0) return;
 
-        // Use raw SQL for upsert (INSERT OR REPLACE)
-        const stmt = sqlite.prepare(`
-      INSERT OR REPLACE INTO agent_economy (id, agent_id, session_id, skills, inventory, last_updated)
-      VALUES (
-        COALESCE(
-          (SELECT id FROM agent_economy WHERE agent_id = ? AND session_id = ?),
-          ?
-        ),
-        ?, ?, ?, ?, ?
-      )
-    `);
+        // Two-step lookup+insert/update within a transaction to
+        // prevent duplicate rows and correctly scope by session_id.
+        const selectStmt = sqlite.prepare(
+          `SELECT id FROM agent_economy WHERE agent_id = ? AND session_id = ? LIMIT 1`
+        );
+        const updateStmt = sqlite.prepare(
+          `UPDATE agent_economy SET skills = ?, inventory = ?, last_updated = ? WHERE id = ?`
+        );
+        const insertStmt = sqlite.prepare(
+          `INSERT INTO agent_economy (id, agent_id, session_id, skills, inventory, last_updated)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        );
 
         const run = sqlite.transaction((items: typeof updates) => {
             for (const u of items) {
-                const newId = uuidv4();
-                stmt.run(
-                    u.agentId, u.sessionId, newId,
-                    u.agentId, u.sessionId,
-                    JSON.stringify(u.skills),
-                    JSON.stringify(u.inventory),
-                    u.lastUpdated,
-                );
+                const skillsJson = JSON.stringify(u.skills);
+                const inventoryJson = JSON.stringify(u.inventory);
+                const existing = selectStmt.get(u.agentId, u.sessionId) as { id: string } | undefined;
+                if (existing) {
+                    updateStmt.run(skillsJson, inventoryJson, u.lastUpdated, existing.id);
+                } else {
+                    insertStmt.run(uuidv4(), u.agentId, u.sessionId, skillsJson, inventoryJson, u.lastUpdated);
+                }
             }
         });
 

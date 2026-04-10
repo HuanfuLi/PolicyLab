@@ -323,7 +323,14 @@ export default function EconomyTab({
 
   const commitBudget = () => {
     const sum = BUDGET_CATEGORIES.reduce((s, c) => s + pendingBudget[c], 0);
-    if (Math.abs(sum - 1.0) > 0.01) {
+    if (sum === 0) {
+      // All categories zero — distribute equally to avoid NaN from division by zero
+      const equal = 1 / BUDGET_CATEGORIES.length;
+      const normalized = {} as BudgetAllocation;
+      for (const c of BUDGET_CATEGORIES) normalized[c] = equal;
+      onBudgetChange(normalized);
+      setPendingBudget(normalized);
+    } else if (Math.abs(sum - 1.0) > 0.01) {
       // Normalize
       const normalized = { ...pendingBudget } as BudgetAllocation;
       for (const c of BUDGET_CATEGORIES) normalized[c] = pendingBudget[c] / sum;

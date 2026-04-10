@@ -114,12 +114,14 @@ export function profileToEconomyConfig(profile: LocationProfile): {
   const education = pickAndTrack('_budgetEducation', profile.fiscal.educationExpPctGdp, 5.0);
   const infrastructure = (military + health + education) * 0.3; // estimated remainder
   const rawTotal = military + health + education + infrastructure;
-  const budget: BudgetAllocation = {
-    defense: military / rawTotal,
-    welfare: health / rawTotal,
-    education: education / rawTotal,
-    infrastructure: infrastructure / rawTotal,
-  };
+  const budget: BudgetAllocation = rawTotal > 0
+    ? {
+        defense: military / rawTotal,
+        welfare: health / rawTotal,
+        education: education / rawTotal,
+        infrastructure: infrastructure / rawTotal,
+      }
+    : { defense: 0.25, welfare: 0.25, education: 0.25, infrastructure: 0.25 };
   const fiscalConfidences: ConfidenceLevel[] = [
     profile.fiscal.militaryExpPctGdp?.confidence ?? 'low',
     profile.fiscal.healthExpPctGdp?.confidence ?? 'low',

@@ -19,6 +19,14 @@ import {
   depositAccounts,
   loanContracts,
   bankBalanceSheets,
+  agentIntents,
+  resolvedActions,
+  agentEconomy,
+  economySnapshots,
+  ammSnapshots,
+  marketPrices,
+  orderBook,
+  enterprises,
 } from '../db/schema.js';
 import * as capitalMarketRepo from '../db/repos/capitalMarketRepo.js';
 import * as fiscalRepo from '../db/repos/fiscalRepo.js';
@@ -37,7 +45,10 @@ router.get('/:id/export', async (req, res) => {
   const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
-  const [agentRows, iterRows, reflRows, msgRows, rcRows, depositRows, loanRows, balanceSheetRows] = await Promise.all([
+  const [
+    agentRows, iterRows, reflRows, msgRows, rcRows, depositRows, loanRows, balanceSheetRows,
+    intentRows, actionRows, agentEconRows, econSnapRows, ammSnapRows, mktPriceRows, orderRows, enterpriseRows,
+  ] = await Promise.all([
     db.select().from(agents).where(eq(agents.sessionId, id)),
     db.select().from(iterations).where(eq(iterations.sessionId, id)).orderBy(asc(iterations.iterationNumber)),
     db.select().from(reflections).where(eq(reflections.sessionId, id)),
@@ -46,6 +57,14 @@ router.get('/:id/export', async (req, res) => {
     db.select().from(depositAccounts).where(eq(depositAccounts.sessionId, id)),
     db.select().from(loanContracts).where(eq(loanContracts.sessionId, id)),
     db.select().from(bankBalanceSheets).where(eq(bankBalanceSheets.sessionId, id)),
+    db.select().from(agentIntents).where(eq(agentIntents.sessionId, id)),
+    db.select().from(resolvedActions).where(eq(resolvedActions.sessionId, id)),
+    db.select().from(agentEconomy).where(eq(agentEconomy.sessionId, id)),
+    db.select().from(economySnapshots).where(eq(economySnapshots.sessionId, id)).orderBy(asc(economySnapshots.iterationNumber)),
+    db.select().from(ammSnapshots).where(eq(ammSnapshots.sessionId, id)).orderBy(asc(ammSnapshots.iterationNumber)),
+    db.select().from(marketPrices).where(eq(marketPrices.sessionId, id)),
+    db.select().from(orderBook).where(eq(orderBook.sessionId, id)),
+    db.select().from(enterprises).where(eq(enterprises.sessionId, id)),
   ]);
 
   const exportData: SessionExport = {
@@ -174,6 +193,88 @@ router.get('/:id/export', async (req, res) => {
       const rows = macroSnapshotRepo.getSnapshotsBySession(db, id);
       return rows.length > 0 ? rows : undefined;
     })(),
+    // C1 fix: export the 8 previously-missing economy tables
+    agentIntents: intentRows.length > 0 ? intentRows.map(i => ({
+      id: i.id,
+      sessionId: i.sessionId,
+      agentId: i.agentId,
+      iterationId: i.iterationId ?? null,
+      intent: i.intent,
+      reasoning: i.reasoning ?? null,
+      actionCode: i.actionCode,
+      actionTarget: i.actionTarget ?? null,
+      actionQueue: i.actionQueue ?? null,
+      createdAt: i.createdAt,
+    })) : undefined,
+    resolvedActions: actionRows.length > 0 ? actionRows.map(a => ({
+      id: a.id,
+      sessionId: a.sessionId,
+      agentId: a.agentId,
+      iterationId: a.iterationId ?? null,
+      action: a.action,
+      outcome: a.outcome ?? null,
+      resolvedAt: a.resolvedAt,
+    })) : undefined,
+    agentEconomy: agentEconRows.length > 0 ? agentEconRows.map(ae => ({
+      id: ae.id,
+      agentId: ae.agentId,
+      sessionId: ae.sessionId,
+      skills: ae.skills,
+      inventory: ae.inventory,
+      lastUpdated: ae.lastUpdated,
+    })) : undefined,
+    economySnapshots: econSnapRows.length > 0 ? econSnapRows.map(es => ({
+      id: es.id,
+      sessionId: es.sessionId,
+      iterationNumber: es.iterationNumber,
+      snapshotData: es.snapshotData,
+      timestamp: es.timestamp,
+    })) : undefined,
+    ammSnapshots: ammSnapRows.length > 0 ? ammSnapRows.map(as => ({
+      id: as.id,
+      sessionId: as.sessionId,
+      iterationNumber: as.iterationNumber,
+      snapshotData: as.snapshotData,
+      timestamp: as.timestamp,
+    })) : undefined,
+    marketPrices: mktPriceRows.length > 0 ? mktPriceRows.map(mp => ({
+      id: mp.id,
+      sessionId: mp.sessionId,
+      iterationNumber: mp.iterationNumber,
+      itemType: mp.itemType,
+      lastPrice: mp.lastPrice,
+      vwap: mp.vwap,
+      volume: mp.volume,
+    })) : undefined,
+    orderBook: orderRows.length > 0 ? orderRows.map(o => ({
+      id: o.id,
+      sessionId: o.sessionId,
+      agentId: o.agentId,
+      side: o.side,
+      itemType: o.itemType,
+      price: o.price,
+      quantity: o.quantity,
+      filledQuantity: o.filledQuantity,
+      iterationPlaced: o.iterationPlaced,
+      status: o.status,
+      createdAt: o.createdAt,
+    })) : undefined,
+    enterprises: enterpriseRows.length > 0 ? enterpriseRows.map(e => ({
+      id: e.id,
+      sessionId: e.sessionId,
+      name: e.name,
+      ownerId: e.ownerId,
+      sector: e.sector,
+      industry: e.industry,
+      commodityOutput: e.commodityOutput,
+      initialCapital: e.initialCapital,
+      wage: e.wage,
+      isServiceEnterprise: e.isServiceEnterprise,
+      consecutiveInsolvencyIterations: e.consecutiveInsolvencyIterations,
+      isBankrupt: e.isBankrupt,
+      employees: e.employees,
+      createdAt: e.createdAt,
+    })) : undefined,
   };
 
   const safeTitle = session.title.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 40);
@@ -441,8 +542,149 @@ router.post('/import', async (req, res) => {
       }
     }
 
+    // C1 fix: import the 8 previously-missing economy tables
+    if (body.agentIntents && body.agentIntents.length > 0) {
+      for (let i = 0; i < body.agentIntents.length; i += 25) {
+        const batch = body.agentIntents.slice(i, i + 25).map(ai => ({
+          id: uuidv4(),
+          sessionId: newSessionId,
+          agentId: agentIdMap.get(ai.agentId) ?? ai.agentId,
+          iterationId: ai.iterationId ?? null,
+          intent: ai.intent,
+          reasoning: ai.reasoning ?? null,
+          actionCode: ai.actionCode,
+          actionTarget: ai.actionTarget ?? null,
+          actionQueue: ai.actionQueue ?? null,
+          createdAt: ai.createdAt,
+        }));
+        if (batch.length > 0) await db.insert(agentIntents).values(batch);
+      }
+    }
+
+    if (body.resolvedActions && body.resolvedActions.length > 0) {
+      for (let i = 0; i < body.resolvedActions.length; i += 25) {
+        const batch = body.resolvedActions.slice(i, i + 25).map(ra => ({
+          id: uuidv4(),
+          sessionId: newSessionId,
+          agentId: agentIdMap.get(ra.agentId) ?? ra.agentId,
+          iterationId: ra.iterationId ?? null,
+          action: ra.action,
+          outcome: ra.outcome ?? null,
+          resolvedAt: ra.resolvedAt,
+        }));
+        if (batch.length > 0) await db.insert(resolvedActions).values(batch);
+      }
+    }
+
+    if (body.agentEconomy && body.agentEconomy.length > 0) {
+      for (const ae of body.agentEconomy) {
+        const newAgentId = agentIdMap.get(ae.agentId) ?? ae.agentId;
+        await db.insert(agentEconomy).values({
+          id: uuidv4(),
+          agentId: newAgentId,
+          sessionId: newSessionId,
+          skills: ae.skills,
+          inventory: ae.inventory,
+          lastUpdated: ae.lastUpdated,
+        });
+      }
+    }
+
+    if (body.economySnapshots && body.economySnapshots.length > 0) {
+      for (const es of body.economySnapshots) {
+        await db.insert(economySnapshots).values({
+          id: uuidv4(),
+          sessionId: newSessionId,
+          iterationNumber: es.iterationNumber,
+          snapshotData: es.snapshotData,
+          timestamp: es.timestamp,
+        });
+      }
+    }
+
+    if (body.ammSnapshots && body.ammSnapshots.length > 0) {
+      for (const as_ of body.ammSnapshots) {
+        await db.insert(ammSnapshots).values({
+          id: uuidv4(),
+          sessionId: newSessionId,
+          iterationNumber: as_.iterationNumber,
+          snapshotData: as_.snapshotData,
+          timestamp: as_.timestamp,
+        });
+      }
+    }
+
+    if (body.marketPrices && body.marketPrices.length > 0) {
+      for (let i = 0; i < body.marketPrices.length; i += 25) {
+        const batch = body.marketPrices.slice(i, i + 25).map(mp => ({
+          id: uuidv4(),
+          sessionId: newSessionId,
+          iterationNumber: mp.iterationNumber,
+          itemType: mp.itemType,
+          lastPrice: mp.lastPrice,
+          vwap: mp.vwap,
+          volume: mp.volume,
+        }));
+        if (batch.length > 0) await db.insert(marketPrices).values(batch);
+      }
+    }
+
+    if (body.orderBook && body.orderBook.length > 0) {
+      for (const o of body.orderBook) {
+        const newAgentId = agentIdMap.get(o.agentId) ?? o.agentId;
+        await db.insert(orderBook).values({
+          id: uuidv4(),
+          sessionId: newSessionId,
+          agentId: newAgentId,
+          side: o.side,
+          itemType: o.itemType,
+          price: o.price,
+          quantity: o.quantity,
+          filledQuantity: o.filledQuantity,
+          iterationPlaced: o.iterationPlaced,
+          status: o.status,
+          createdAt: o.createdAt,
+        });
+      }
+    }
+
+    if (body.enterprises && body.enterprises.length > 0) {
+      for (const e of body.enterprises) {
+        const newOwnerId = agentIdMap.get(e.ownerId) ?? e.ownerId;
+        // Remap employee IDs in the JSON array
+        let employees = e.employees;
+        try {
+          const empIds = JSON.parse(e.employees) as string[];
+          employees = JSON.stringify(empIds.map(id => agentIdMap.get(id) ?? id));
+        } catch { /* keep original if not valid JSON */ }
+        await db.insert(enterprises).values({
+          id: uuidv4(),
+          sessionId: newSessionId,
+          name: e.name,
+          ownerId: newOwnerId,
+          sector: e.sector,
+          industry: e.industry,
+          commodityOutput: e.commodityOutput,
+          initialCapital: e.initialCapital,
+          wage: e.wage,
+          isServiceEnterprise: e.isServiceEnterprise,
+          consecutiveInsolvencyIterations: e.consecutiveInsolvencyIterations,
+          isBankrupt: e.isBankrupt,
+          employees,
+          createdAt: e.createdAt,
+        });
+      }
+    }
+
     return res.status(201).json({ id: newSessionId });
   } catch (err) {
+    // R3 fix: Clean up the partially-imported session on failure.
+    // FK CASCADE deletes all child rows when the session is deleted.
+    try {
+      await db.delete(sessions).where(eq(sessions.id, newSessionId));
+    } catch (cleanupErr) {
+      console.error('POST /api/sessions/import cleanup error:', cleanupErr);
+    }
     console.error('POST /api/sessions/import error:', err);
     const detail = err instanceof Error ? err.message : String(err);
     return res.status(500).json({ error: 'Import failed', detail });

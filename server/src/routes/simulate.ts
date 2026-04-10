@@ -33,38 +33,40 @@ async function eraseSimulationData(sessionId: string): Promise<void> {
   // them AFTER the delete would trigger FOREIGN KEY constraint failures.
   asyncLogFlusher.flush();
 
-  // Delete all iteration-generated data (FK cascades handle child rows where applicable,
-  // but explicit deletes are safer and faster with the current schema).
-  await db.delete(iterations).where(eq(iterations.sessionId, sessionId));
-  await db.delete(agentIntents).where(eq(agentIntents.sessionId, sessionId));
-  await db.delete(resolvedActions).where(eq(resolvedActions.sessionId, sessionId));
-  await db.delete(economySnapshots).where(eq(economySnapshots.sessionId, sessionId));
-  await db.delete(agentEconomy).where(eq(agentEconomy.sessionId, sessionId));
-  await db.delete(marketPrices).where(eq(marketPrices.sessionId, sessionId));
-  await db.delete(roleChanges).where(eq(roleChanges.sessionId, sessionId));
-  await db.delete(ammSnapshots).where(eq(ammSnapshots.sessionId, sessionId));
-  await db.delete(orderBook).where(eq(orderBook.sessionId, sessionId));
-  await db.delete(depositAccounts).where(eq(depositAccounts.sessionId, sessionId));
-  await db.delete(loanContracts).where(eq(loanContracts.sessionId, sessionId));
-  await db.delete(bankBalanceSheets).where(eq(bankBalanceSheets.sessionId, sessionId));
-  await db.delete(macroSnapshots).where(eq(macroSnapshots.sessionId, sessionId));
-  await db.delete(equityPositions).where(eq(equityPositions.sessionId, sessionId));
-  await db.delete(bondHoldings).where(eq(bondHoldings.sessionId, sessionId));
-  await db.delete(fiscalBudgets).where(eq(fiscalBudgets.sessionId, sessionId));
-  await db.delete(publicGoodsState).where(eq(publicGoodsState.sessionId, sessionId));
-  await db.delete(enterprises).where(eq(enterprises.sessionId, sessionId));
+  // R4 fix: Wrap all deletes + agent reset in a single transaction for atomicity.
+  // Prevents partial cleanup if the server crashes or a query fails mid-way.
+  sqlite.transaction(() => {
+    db.delete(iterations).where(eq(iterations.sessionId, sessionId)).run();
+    db.delete(agentIntents).where(eq(agentIntents.sessionId, sessionId)).run();
+    db.delete(resolvedActions).where(eq(resolvedActions.sessionId, sessionId)).run();
+    db.delete(economySnapshots).where(eq(economySnapshots.sessionId, sessionId)).run();
+    db.delete(agentEconomy).where(eq(agentEconomy.sessionId, sessionId)).run();
+    db.delete(marketPrices).where(eq(marketPrices.sessionId, sessionId)).run();
+    db.delete(roleChanges).where(eq(roleChanges.sessionId, sessionId)).run();
+    db.delete(ammSnapshots).where(eq(ammSnapshots.sessionId, sessionId)).run();
+    db.delete(orderBook).where(eq(orderBook.sessionId, sessionId)).run();
+    db.delete(depositAccounts).where(eq(depositAccounts.sessionId, sessionId)).run();
+    db.delete(loanContracts).where(eq(loanContracts.sessionId, sessionId)).run();
+    db.delete(bankBalanceSheets).where(eq(bankBalanceSheets.sessionId, sessionId)).run();
+    db.delete(macroSnapshots).where(eq(macroSnapshots.sessionId, sessionId)).run();
+    db.delete(equityPositions).where(eq(equityPositions.sessionId, sessionId)).run();
+    db.delete(bondHoldings).where(eq(bondHoldings.sessionId, sessionId)).run();
+    db.delete(fiscalBudgets).where(eq(fiscalBudgets.sessionId, sessionId)).run();
+    db.delete(publicGoodsState).where(eq(publicGoodsState.sessionId, sessionId)).run();
+    db.delete(enterprises).where(eq(enterprises.sessionId, sessionId)).run();
 
-  // Reset every agent's current_stats back to initial_stats, revive the dead,
-  // and clear persisted allostatic physiology so the next run starts clean.
-  sqlite.prepare(
-    `UPDATE agents
-     SET current_stats = initial_stats,
-         status = 'alive',
-         died_at_iteration = NULL,
-         allostatic_strain = 0,
-         allostatic_load = 0
-     WHERE session_id = ?`
-  ).run(sessionId);
+    // Reset every agent's current_stats back to initial_stats, revive the dead,
+    // and clear persisted allostatic physiology so the next run starts clean.
+    sqlite.prepare(
+      `UPDATE agents
+       SET current_stats = initial_stats,
+           status = 'alive',
+           died_at_iteration = NULL,
+           allostatic_strain = 0,
+           allostatic_load = 0
+       WHERE session_id = ?`
+    ).run(sessionId);
+  })();
 }
 
 const router = Router({ mergeParams: true });

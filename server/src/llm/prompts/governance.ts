@@ -188,9 +188,11 @@ export function buildLegalityCheckPrompt(
   law: string | null,
   societyOverview: string | null,
 ): LLMMessage[] {
+  // Fix: Use full agent IDs so the LLM can return them for enforcement matching.
+  // Truncated IDs caused legality enforcement to silently fail.
   const agentList = agentIntents
     .map(a =>
-      `- ${a.agentName} [id:${a.agentId.slice(0, 8)}]: actions=[${a.actionCodes.join(', ')}] intent="${a.intent.slice(0, 120)}"`
+      `- ${a.agentName} [id:${a.agentId}]: actions=[${a.actionCodes.join(', ')}] intent="${a.intent.slice(0, 120)}"`
     )
     .join('\n');
 

@@ -76,7 +76,7 @@ function CpiChart({ data }: { data: TelemetryLog[] }) {
     return (
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>CPI — Laspeyres Price Index</div>
-        <div style={emptyStateStyle}>No CPI data — inflation tracking is not enabled for this session</div>
+        <div style={emptyStateStyle}>No CPI data — enable Inflation in Design Review to track price indices</div>
       </div>
     );
   }
@@ -117,18 +117,18 @@ function MoneySupplyChart({ data }: { data: TelemetryLog[] }) {
     return (
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Money Supply — M0 / M1 / M2</div>
-        <div style={emptyStateStyle}>No banking data — banking is not enabled for this session</div>
+        <div style={emptyStateStyle}>No banking data — enable Banking in Design Review to track money supply</div>
       </div>
     );
   }
 
-  const hasM2 = filtered.some(d => d.m2 != null);
+  const hasDeposits = filtered.some(d => (d.bankingDeposits ?? 0) > 0);
 
   const chartData = filtered.map(d => ({
     iterationNumber: d.iterationNumber,
     m0: d.m0 ?? 0,
     loanExpansion: Math.max(0, (d.m1 ?? d.m0 ?? 0) - (d.m0 ?? 0)),
-    m2Delta: Math.max(0, (d.m2 ?? d.m1 ?? d.m0 ?? 0) - (d.m1 ?? d.m0 ?? 0)),
+    deposits: d.bankingDeposits ?? 0,
   }));
 
   return (
@@ -143,8 +143,8 @@ function MoneySupplyChart({ data }: { data: TelemetryLog[] }) {
           <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} />
           <Area type="monotone" dataKey="m0" stackId="money" stroke={CHART_BLUE} fill={CHART_BLUE} fillOpacity={0.25} name="M0 (Base Money)" />
           <Area type="monotone" dataKey="loanExpansion" stackId="money" stroke={CHART_GREEN} fill={CHART_GREEN} fillOpacity={0.4} name="Loan Expansion (M1-M0)" />
-          {hasM2 && (
-            <Area type="monotone" dataKey="m2Delta" stackId="money" stroke={CHART_VIOLET} fill={CHART_VIOLET} fillOpacity={0.3} name="M2 Layer" />
+          {hasDeposits && (
+            <Area type="monotone" dataKey="deposits" stackId="money" stroke={CHART_VIOLET} fill={CHART_VIOLET} fillOpacity={0.3} name="Deposits" />
           )}
         </AreaChart>
       </ResponsiveContainer>
@@ -161,7 +161,7 @@ function FiscalChart({ data }: { data: TelemetryLog[] }) {
     return (
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Fiscal Budget — Spending & Public Goods Quality</div>
-        <div style={emptyStateStyle}>No fiscal data — fiscal policy is not enabled for this session</div>
+        <div style={emptyStateStyle}>No fiscal data — enable Fiscal Policy in Design Review to track government spending</div>
       </div>
     );
   }
@@ -224,7 +224,7 @@ function BondYieldChart({ data }: { data: TelemetryLog[] }) {
     return (
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Bond Yields — Government & Corporate</div>
-        <div style={emptyStateStyle}>No bond data — capital markets are not enabled or no bonds have been issued</div>
+        <div style={emptyStateStyle}>No bond data — enable Capital Markets in Design Review, or no bonds have been issued yet</div>
       </div>
     );
   }

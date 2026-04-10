@@ -10,6 +10,7 @@ import { resolveAction, clampHappinessByPhysiology } from '../mechanics/physicsE
 import { getPhysicsConfig, updatePhysicsConfig, resetPhysicsConfig } from '../mechanics/physicsConfig.js';
 import { normalizeActionCode } from '../mechanics/actionCodes.js';
 import { clearCache, getCacheStats } from '../data/locationCache.js';
+import { simulationManager } from '../orchestration/simulationManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -306,8 +307,15 @@ router.get('/physics-config', (_req, res) => {
 // ── Physics Lab: PUT /api/settings/physics-config ────────────────────────────
 // Hot-swaps one or more physics constants at runtime. Changes take effect
 // immediately on the next resolveAction / allostatic tick call.
+// S2 fix: Reject mutation while any simulation is running to prevent
+// cross-session contamination via the global singleton.
 router.put('/physics-config', (req, res) => {
   try {
+    if (simulationManager.hasRunning()) {
+      return res.status(409).json({
+        error: 'Cannot modify physics config while simulations are running. Pause or stop all simulations first.',
+      });
+    }
     const updated = updatePhysicsConfig(req.body ?? {});
     res.json(updated);
   } catch (err) {

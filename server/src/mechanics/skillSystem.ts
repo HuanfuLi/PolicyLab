@@ -220,9 +220,15 @@ export function getActionMultiplier(skills: SkillMatrix, action: ActionCode): nu
     const mapping = ACTION_SKILL_MAP[action];
     if (!mapping) return 1.0;
 
-    const primaryMult = getSkillMultiplier(skills[mapping.primary].level);
+    // M8 fix: Guard against missing skill categories (corrupted/incomplete SkillMatrix)
+    const primarySkill = skills[mapping.primary];
+    if (!primarySkill) return 1.0;
+
+    const primaryMult = getSkillMultiplier(primarySkill.level);
     if (mapping.secondary) {
-        const secondaryMult = getSkillMultiplier(skills[mapping.secondary].level);
+        const secondarySkill = skills[mapping.secondary];
+        if (!secondarySkill) return primaryMult;
+        const secondaryMult = getSkillMultiplier(secondarySkill.level);
         // Primary skill contributes 70%, secondary 30%
         return primaryMult * 0.7 + secondaryMult * 0.3;
     }

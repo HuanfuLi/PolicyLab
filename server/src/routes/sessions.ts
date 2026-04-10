@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { eq, asc, sql } from 'drizzle-orm';
-import { db } from '../db/index.js';
+import { db, sqlite } from '../db/index.js';
 import { sessions, agents, iterations, chatMessages, agentIntents } from '../db/schema.js';
 import { v4 as uuidv4 } from 'uuid';
 import type { SessionMetadata, SessionDetail, Agent, ChatMessage, Stage, BudgetAllocation } from '@policylab/shared';
@@ -149,10 +149,10 @@ router.get('/:id/agents', async (req, res) => {
       role: a.role,
       background: a.background,
       initialStats: (() => {
-        try { return JSON.parse(a.initialStats); } catch { return { wealth: 50, health: 70, happiness: 60 }; }
+        try { return JSON.parse(a.initialStats); } catch { return { wealth: 50, health: 70, happiness: 60, cortisol: 0, dopamine: 50 }; }
       })(),
       currentStats: (() => {
-        try { return JSON.parse(a.currentStats); } catch { return { wealth: 50, health: 70, happiness: 60 }; }
+        try { return JSON.parse(a.currentStats); } catch { return { wealth: 50, health: 70, happiness: 60, cortisol: 0, dopamine: 50 }; }
       })(),
       isAlive: a.status === 'alive',
       isCentralAgent: a.type === 'central' || undefined,
@@ -283,12 +283,17 @@ router.get('/:id/messages', async (req, res) => {
 });
 
 // PATCH /api/sessions/:id/stage — update stage only (spec §5.2)
+
 router.patch('/:id/stage', async (req, res) => {
   const { id } = req.params;
   const { stage } = req.body as { stage?: string };
 
   if (!stage) {
     return res.status(400).json({ error: 'stage is required' });
+  }
+
+  if (!VALID_STAGES.includes(stage)) {
+    return res.status(400).json({ error: `Invalid stage: '${stage}'`, validStages: VALID_STAGES });
   }
 
   try {
@@ -350,48 +355,49 @@ router.put('/:id/config', async (req, res) => {
   }
 
   try {
-    const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
+    // Wrap read-modify-write + budget persistence in a transaction to prevent
+    // concurrent config updates from losing writes (H2) and ensure budget is
+    // persisted before the response (H3).
+    let updatedConfig: Record<string, unknown> = {};
 
-    let currentConfig: Record<string, unknown> = {};
-    if (session.config) {
-      try { currentConfig = JSON.parse(session.config); } catch { /* ignore */ }
-    }
+    sqlite.transaction(() => {
+      const row = sqlite.prepare('SELECT config, stage FROM sessions WHERE id = ?').get(id) as
+        { config: string | null; stage: string } | undefined;
+      if (!row) throw Object.assign(new Error('Session not found'), { status: 404 });
 
-    const updatedConfig = { ...currentConfig };
-    if (body.totalIterations !== undefined) updatedConfig.totalIterations = body.totalIterations;
-    if (body.checklist !== undefined) updatedConfig.checklist = body.checklist;
-    if (body.readyForDesign !== undefined) updatedConfig.readyForDesign = body.readyForDesign;
-    if (body.lockedVariables !== undefined) updatedConfig.lockedVariables = body.lockedVariables;
-    if (body.economyConfig !== undefined) {
-      const existingEconomy = (currentConfig.economyConfig ?? {}) as Record<string, unknown>;
-      updatedConfig.economyConfig = { ...existingEconomy, ...body.economyConfig };
-    }
-
-    const now = new Date().toISOString();
-    const updates: Record<string, unknown> = {
-      config: JSON.stringify(updatedConfig),
-      updatedAt: now,
-    };
-    if (body.stage) {
-      if (!VALID_STAGES.includes(body.stage)) {
-        return res.status(400).json({ error: `Invalid stage: ${body.stage}` });
+      let currentConfig: Record<string, unknown> = {};
+      if (row.config) {
+        try { currentConfig = JSON.parse(row.config); } catch { /* ignore */ }
       }
-      updates.stage = body.stage;
-    }
 
-    await db.update(sessions).set(updates).where(eq(sessions.id, id));
+      updatedConfig = { ...currentConfig };
+      if (body.totalIterations !== undefined) updatedConfig.totalIterations = body.totalIterations;
+      if (body.checklist !== undefined) updatedConfig.checklist = body.checklist;
+      if (body.readyForDesign !== undefined) updatedConfig.readyForDesign = body.readyForDesign;
+      if (body.lockedVariables !== undefined) updatedConfig.lockedVariables = body.lockedVariables;
+      if (body.economyConfig !== undefined) {
+        const existingEconomy = (currentConfig.economyConfig ?? {}) as Record<string, unknown>;
+        updatedConfig.economyConfig = { ...existingEconomy, ...body.economyConfig };
+      }
 
-    // Budget persistence — only after db.update succeeds
-    if (body.budgetAllocation) {
-      try {
+      const now = new Date().toISOString();
+      const setClauses = [`config = ?`, `updated_at = ?`];
+      const params: unknown[] = [JSON.stringify(updatedConfig), now];
+      if (body.stage) {
+        if (!VALID_STAGES.includes(body.stage)) {
+          throw Object.assign(new Error(`Invalid stage: ${body.stage}`), { status: 400 });
+        }
+        setClauses.push(`stage = ?`);
+        params.push(body.stage);
+      }
+      params.push(id);
+      sqlite.prepare(`UPDATE sessions SET ${setClauses.join(', ')} WHERE id = ?`).run(...params);
+
+      // Budget persistence inside the same transaction
+      if (body.budgetAllocation) {
         fiscalRepo.createBudget(id, body.budgetAllocation);
-      } catch (budgetErr) {
-        console.error(`[sessions] Failed to persist budget for ${id}:`, budgetErr);
       }
-    }
+    })();
 
     const [updated] = await db.select().from(sessions).where(eq(sessions.id, id));
     res.json({
@@ -400,7 +406,9 @@ router.put('/:id/config', async (req, res) => {
       config: updatedConfig,
       updatedAt: updated.updatedAt,
     });
-  } catch (err) {
+  } catch (err: unknown) {
+    const status = (err as { status?: number }).status;
+    if (status === 404) return res.status(404).json({ error: 'Session not found' });
     console.error('PUT /sessions/:id/config error:', err);
     res.status(500).json({ error: 'Failed to update config' });
   }
@@ -608,6 +616,14 @@ router.patch('/:id/agents/:agentId', async (req, res) => {
 // DELETE /api/sessions/:id
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
+
+  // R5 fix: Prevent deletion of sessions with active simulations
+  const simStatus = simulationManager.getStatus(id);
+  if (simStatus === 'running' || simStatus === 'paused') {
+    return res.status(409).json({
+      error: `Cannot delete session with ${simStatus} simulation. Stop or abort the simulation first.`,
+    });
+  }
 
   try {
     await db.delete(sessions).where(eq(sessions.id, id));

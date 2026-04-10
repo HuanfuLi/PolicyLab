@@ -385,18 +385,6 @@ export class AutomatedMarketMaker {
   }
 
   /**
-   * Withdraw goods directly from the reserve.
-   * Updates the invariant k so the nominal price level can rise without minting fiat.
-   *
-   * @param amount  Number of goods units to remove (must be > 0 and < foodReserve).
-   */
-  withdrawGoodsReserve(amount: number): void {
-    if (amount <= 0) return;
-    this.foodReserve = Math.max(0.01, this.foodReserve - amount);
-    this.k = this.fiatReserve * this.foodReserve;
-  }
-
-  /**
    * Inject fiat directly into the reserve (e.g. enterprise registration fees).
    * Updates the invariant k — fiat re-enters the circular economy rather than disappearing.
    *

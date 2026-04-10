@@ -3100,7 +3100,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
               // 1. Liquidate deposit: transfer balance to seized pool (re-enters circulation).
               //    Bank's reserves decrease because it is "paying out" the deposit to the estate.
-              const depositAcct = bankingRepo.getDeposit(agent.id, bankAgent.id);
+              const depositAcct = bankingRepo.getDeposit(agent.id, bankAgent.id, sessionId);
               if (depositAcct && depositAcct.balance > 0) {
                 seizedWealthPool += depositAcct.balance;
                 bankingRepo.updateDepositBalance(depositAcct.id, 0, iterNum);
@@ -3759,7 +3759,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
                 bankingRepo.updateDepositBalance(entDeposit.id, entDeposit.balance - payment.amount, iterNum);
               }
               // Credit employee deposit (or wealth if no deposit)
-              const empDeposit = bankingRepo.getDeposit(payment.toAgentId, bankAgent.id);
+              const empDeposit = bankingRepo.getDeposit(payment.toAgentId, bankAgent.id, sessionId);
               if (empDeposit) {
                 bankingRepo.updateDepositBalance(empDeposit.id, empDeposit.balance + payment.amount, iterNum);
               } else {

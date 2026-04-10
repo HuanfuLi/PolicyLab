@@ -304,8 +304,10 @@ export interface TelemetryLog {
   defenseQuality?: number;
   /** Welfare public goods quality score 0–100 (undefined when fiscal disabled) */
   welfareQuality?: number;
-  /** M2 = M1 + time deposits / savings deposits */
+  /** M2 = M1 (deposits already counted in M0; no separate M2 layer in this model) */
   m2?: number;
+  /** Total deposit account balances (for chart visualisation; not a monetary aggregate) */
+  bankingDeposits?: number;
   /** Per-category fiscal spending amounts for current iteration */
   fiscalSpending?: Partial<Record<FiscalCategory, number>>;
   /** Current public goods quality score per category (0-1 normalized) */
@@ -364,6 +366,95 @@ export interface SessionExport {
   publicGoodsState?: PublicGoodsState[];
   /** Inflation Loop: macro snapshots (optional for backward compat) */
   macroSnapshots?: MacroSnapshot[];
+  /** Agent intents per iteration (optional for backward compat) */
+  agentIntents?: Array<{
+    id: string;
+    sessionId: string;
+    agentId: string;
+    iterationId: string | null;
+    intent: string;
+    reasoning: string | null;
+    actionCode: string;
+    actionTarget: string | null;
+    actionQueue: string | null;
+    createdAt: string;
+  }>;
+  /** Resolved actions per iteration (optional for backward compat) */
+  resolvedActions?: Array<{
+    id: string;
+    sessionId: string;
+    agentId: string;
+    iterationId: string | null;
+    action: string;
+    outcome: string | null;
+    resolvedAt: string;
+  }>;
+  /** Per-agent economy state: skills + inventory (optional for backward compat) */
+  agentEconomy?: Array<{
+    id: string;
+    agentId: string;
+    sessionId: string;
+    skills: string;
+    inventory: string;
+    lastUpdated: number;
+  }>;
+  /** Per-iteration economy snapshots (optional for backward compat) */
+  economySnapshots?: Array<{
+    id: string;
+    sessionId: string;
+    iterationNumber: number;
+    snapshotData: string;
+    timestamp: string;
+  }>;
+  /** AMM reserve snapshots per iteration (optional for backward compat) */
+  ammSnapshots?: Array<{
+    id: string;
+    sessionId: string;
+    iterationNumber: number;
+    snapshotData: string;
+    timestamp: string;
+  }>;
+  /** Market price history (optional for backward compat) */
+  marketPrices?: Array<{
+    id: string;
+    sessionId: string;
+    iterationNumber: number;
+    itemType: string;
+    lastPrice: number;
+    vwap: number;
+    volume: number;
+  }>;
+  /** Open order book entries (optional for backward compat) */
+  orderBook?: Array<{
+    id: string;
+    sessionId: string;
+    agentId: string;
+    side: string;
+    itemType: string;
+    price: number;
+    quantity: number;
+    filledQuantity: number;
+    iterationPlaced: number;
+    status: string;
+    createdAt: string;
+  }>;
+  /** Enterprise definitions (optional for backward compat) */
+  enterprises?: Array<{
+    id: string;
+    sessionId: string;
+    name: string;
+    ownerId: string;
+    sector: string;
+    industry: string;
+    commodityOutput: string;
+    initialCapital: number;
+    wage: number;
+    isServiceEnterprise: boolean;
+    consecutiveInsolvencyIterations: number;
+    isBankrupt: boolean;
+    employees: string;
+    createdAt: string;
+  }>;
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────
@@ -536,15 +627,15 @@ export interface EconomyConfig {
   // ── Phase 10: Enterprise & Realism ────────────────────────────────────────
   /** Per-iteration minimum wage floor. Enterprises must pay at least this. Default: 5. */
   minimumWage?: number;
-  /** Taylor Rule: neutral real interest rate per iteration. Default: 0.00167 (2% annual / 12). */
+  /** Taylor Rule: neutral real interest rate per iteration. Default: 0.01 (1% per iteration). */
   taylorNeutralRate?: number;
-  /** Taylor Rule: target CPI inflation rate per iteration. Default: 0.00167 (2% annual / 12). */
+  /** Taylor Rule: target CPI inflation rate per iteration. Default: 0.02 (2% per iteration). */
   taylorInflationTarget?: number;
   /** Taylor Rule: response coefficient to inflation gap. Default: 0.5. */
   taylorInflationCoeff?: number;
   /** Taylor Rule: response coefficient to output gap. Default: 0.5. */
   taylorOutputCoeff?: number;
-  /** Maximum base rate before central bank switches to quantity restrictions. Default: 0.0125 (15% annual / 12). */
+  /** Maximum base rate before central bank switches to quantity restrictions. Default: 0.05 (5% per iteration). */
   centralBankRateCeiling?: number;
   /** Rate discount for business loans vs personal loans (multiplied by base rate). Default: 0.3. */
   businessLoanRateDiscount?: number;
@@ -576,10 +667,13 @@ export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   fiscalEnabled: false,
   inflationEnabled: false,
   reserveRequirement: 0.10,
-  baseLoanInterestRate: 0.005,
+  // E3 fix: Per-iteration rates recalibrated to realistic annualized equivalents.
+  // Old: 0.005/iter ≈ 29.5% annual (payday-lender). New: 0.001/iter ≈ 5.3% annual.
+  // Old: 0.002/iter ≈ 10.9% annual. New: 0.0004/iter ≈ 2.1% annual.
+  baseLoanInterestRate: 0.001,
   defaultLoanTermIterations: 20,
   defaultThresholdIterations: 3,
-  depositInterestRate: 0.002,
+  depositInterestRate: 0.0004,
   cpiBasketWeights: {
     food: 0.40,
     tools: 0.25,
@@ -607,11 +701,14 @@ export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   publicGoodsGainDiminishing: 0.7,
   // Phase 10: Enterprise & Realism defaults
   minimumWage: 5,
-  taylorNeutralRate: 0.00167,
-  taylorInflationTarget: 0.00167,
+  // S1 fix: Recalibrated from annualized (0.00167) to per-iteration scale.
+  // Typical simulation CPI change is 1-3%/iteration (0.01-0.03 decimal).
+  // Old values caused Taylor Rule to permanently hit ceiling, seizing banking.
+  taylorNeutralRate: 0.01,
+  taylorInflationTarget: 0.02,
   taylorInflationCoeff: 0.5,
   taylorOutputCoeff: 0.5,
-  centralBankRateCeiling: 0.0125,
+  centralBankRateCeiling: 0.05,
   businessLoanRateDiscount: 0.3,
   businessLoanTermMultiplier: 1.5,
   liquidityInjectionThreshold: 0.05,

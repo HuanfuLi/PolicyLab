@@ -119,14 +119,16 @@ const Simulation = () => {
           });
         }
       } catch { /* ignore fetch errors */ }
+
+      // Connect SSE AFTER stage hydration to prevent race where SSE delivers
+      // simulation-complete before sessionStage is set, causing auto-proceed
+      // to check against stale empty sessionStage.
+      const disconnect = connectSSE(id);
+      sseCleanupRef.current = disconnect;
     };
 
     init();
-
-    // Connect SSE for live updates; will close gracefully if simulation already done
-    const disconnect = connectSSE(id);
-    sseCleanupRef.current = disconnect;
-    return disconnect;
+    return () => { sseCleanupRef.current?.(); };
   }, [id]);
 
 

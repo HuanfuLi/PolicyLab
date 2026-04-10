@@ -420,9 +420,15 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
 
         {/* Body */}
         {activeTab === 'economic' ? (
-          <div style={{ padding: '16px 24px' }}>
-            <EconomicDashboard data={macroHistory ?? []} />
-          </div>
+          loading ? (
+            <div style={{ padding: '48px 28px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
+              Loading economic data...
+            </div>
+          ) : (
+            <div style={{ padding: '16px 24px' }}>
+              <EconomicDashboard data={logs.length > 0 ? logs : (macroHistory ?? [])} />
+            </div>
+          )
         ) : loading ? (
           <div style={{ padding: '48px 28px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
             ⏳ Loading telemetry data...

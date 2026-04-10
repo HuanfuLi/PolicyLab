@@ -230,9 +230,9 @@ export async function runGovernanceCycle(params: {
         const parsed = safeJson(raw) as { vote?: string } | null;
         if (parsed?.vote === 'YES') yesCount++;
         else if (parsed?.vote === 'NO') noCount++;
-        else yesCount++; // Default: abstention counts as YES to avoid deadlock
+        // else: true abstention — neither counter incremented, vote has no effect on outcome
       } catch {
-        yesCount++; // Default on failure
+        // abstain on LLM failure — don't bias the vote either direction
       }
     }));
 

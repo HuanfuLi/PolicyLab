@@ -277,12 +277,14 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       trace.push(`  Δdopamine: +1 (market interaction)`);
       break;
     case 'FOUND_ENTERPRISE':
-      w = -8;
+      // Fix: Founding cost is handled entirely by the economy engine (40 fiat → treasury).
+      // The extra -8 here was an SFC violation — 8 fiat destroyed per founding.
+      w = 0;
       h = -1;
       hap = 3;
       cor = 5;
       dop = 4;
-      trace.push(`  Δwealth: -8 (setup costs — main founding cost via economy engine)`);
+      trace.push(`  Δwealth: 0 (founding cost handled by economy engine)`);
       trace.push(`  Δhappiness: +3 (entrepreneurial ambition)`);
       trace.push(`  Δcortisol: +5 (business risk)`);
       trace.push(`  Δdopamine: +4 (ownership excitement)`);

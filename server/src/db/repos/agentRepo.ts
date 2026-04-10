@@ -1,7 +1,7 @@
 /**
  * C1: AgentRepo — CRUD for agents (spec §5.5).
  */
-import { eq } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db, sqlite } from '../index.js';
 import { agents } from '../schema.js';
@@ -77,20 +77,26 @@ export const agentRepo = {
       personalityTraits: JSON.stringify(a.personalityTraits ?? []),
     }));
 
-    // Insert in batches of 25
-    for (let i = 0; i < rows.length; i += 25) {
-      await db.insert(agents).values(rows.slice(i, i + 25));
-    }
+    // D1 fix: Insert in batches of 25 within a transaction to prevent
+    // partial writes if a batch fails mid-loop.
+    sqlite.transaction(() => {
+      for (let i = 0; i < rows.length; i += 25) {
+        db.insert(agents).values(rows.slice(i, i + 25)).run();
+      }
+    })();
 
     const inserted = await this.listBySession(agentData[0]?.sessionId ?? '');
     return inserted;
   },
 
   async listBySession(sessionId: string): Promise<Agent[]> {
+    // D2 fix: Deterministic ordering by agent ID ensures reproducible
+    // processing order across iterations and server restarts.
     const rows = await db
       .select()
       .from(agents)
-      .where(eq(agents.sessionId, sessionId));
+      .where(eq(agents.sessionId, sessionId))
+      .orderBy(asc(agents.id));
     return rows.map(rowToAgent);
   },
 
