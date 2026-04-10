@@ -73,6 +73,7 @@ import * as macroSnapshotRepo from '../db/repos/macroSnapshotRepo.js';
 // Phase 1 Economy imports
 import { getOrderBook, clearOrderBook, restoreOrderBook, isOrderBookWarm } from '../mechanics/orderBook.js';
 import { economyRepo, type AgentEconomyState } from '../db/repos/economyRepo.js';
+import { createScope, type SessionScope } from '../db/sessionScope.js';
 import type { Agent, Inventory, ItemType, SkillMatrix, TelemetryLog } from '@policylab/shared';
 import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
 import { processSkills } from '../mechanics/skillSystem.js';
@@ -196,6 +197,8 @@ export function getSessionTelemetry(sessionId: string): TelemetryLog[] {
 
 
 export async function runSimulation(sessionId: string, totalIterations: number): Promise<void> {
+  // Create a SessionScope at the boundary — all repo calls within use this typed value.
+  const scope: SessionScope = createScope(sessionId);
   const settings = readSettings();
   const provider = getProvider();
   const citizenProv = getCitizenProvider();
@@ -219,7 +222,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     /** SFC tracker — tracks total fiat supply between iterations to detect drift. */
     let sfcPrevTotalFiat: number | null = null;
 
-    let agents = await agentRepo.listBySession(sessionId);
+    let agents = await agentRepo.listBySession(scope);
     let previousSummary: string | null = null;
 
     // Seed allostatic states from DB so pause/resume preserves physiological history.
@@ -251,11 +254,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     // ── Phase 1: Initialize economy state for all agents ──────────────────
     const citizenAgents = agents.filter(a => a.isAlive && !a.isCentralAgent);
     await economyRepo.initializeForSession(
-      sessionId,
+      scope,
       citizenAgents.map(a => ({ id: a.id, role: a.role }))
     );
     let agentEconomyMap = new Map<string, AgentEconomyState>();
-    const econStates = await economyRepo.listBySession(sessionId);
+    const econStates = await economyRepo.listBySession(scope);
     for (const state of econStates) {
       agentEconomyMap.set(state.agentId, state);
     }
@@ -272,7 +275,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     // no agents get topped up. Seed it here using the restored snapshot value
     // or the default formula so the floor can draw from it on iteration 1.
     if (!sessionStateTreasury.has(sessionId)) {
-      const savedAMMForTreasury = await economyRepo.getLatestAMMSnapshot(sessionId);
+      const savedAMMForTreasury = await economyRepo.getLatestAMMSnapshot(scope);
       const restoredTreasury = savedAMMForTreasury?.treasury;
       sessionStateTreasury.set(
         sessionId,
@@ -360,7 +363,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           }));
           sessionStateTreasury.set(sessionId, treasury - fundable);
           sqlite.transaction(() => { agentRepo.bulkUpdateStats(wealthFloorUpdates); })();
-          agents = await agentRepo.listBySession(sessionId);
+          agents = await agentRepo.listBySession(scope);
         }
       }
     }
@@ -375,7 +378,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
     if (primaryMissing || multiMissing) {
       // One DB round-trip covers both registries if both are missing.
-      const savedAMM = await economyRepo.getLatestAMMSnapshot(sessionId);
+      const savedAMM = await economyRepo.getLatestAMMSnapshot(scope);
       const avgWealth = citizenAgents.length > 0
         ? Math.round(citizenAgents.reduce((s, a) => s + a.currentStats.wealth, 0) / citizenAgents.length)
         : 50;
@@ -455,10 +458,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // For new sessions these are 0; for resumed sessions they may be non-zero.
       const baselineEconomyConfig = getEconomyConfig(session.config as Record<string, unknown> | null);
       const baselineDeposits = baselineEconomyConfig.bankingEnabled
-        ? bankingRepo.getTotalDeposits(sessionId)
+        ? bankingRepo.getTotalDeposits(scope)
         : 0;
       const baselineCollateral = baselineEconomyConfig.bankingEnabled
-        ? bankingRepo.getTotalCollateral(sessionId)
+        ? bankingRepo.getTotalCollateral(scope)
         : 0;
       sessionSFCTracking.set(sessionId, {
         initialFiat: computeSystemFiatTotal(
@@ -643,15 +646,15 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
       // Pre-compute banking/capital/fiscal context once per iteration (not per agent)
       const iterBankingDeposits = iterEconomyConfig.bankingEnabled
-        ? bankingRepo.getDepositsBySession(sessionId) : [];
+        ? bankingRepo.getDepositsBySession(scope) : [];
       const iterBankingLoans = iterEconomyConfig.bankingEnabled
-        ? bankingRepo.getActiveLoans(sessionId) : [];
+        ? bankingRepo.getActiveLoans(scope) : [];
       const iterBankAgents = iterEconomyConfig.bankingEnabled
         ? agents.filter(a => a.type === 'bank' && a.isAlive) : [];
       const iterEquityPositions = iterEconomyConfig.capitalMarketsEnabled
-        ? capitalMarketRepo.getEquityPositionsBySession(sessionId) : [];
+        ? capitalMarketRepo.getEquityPositionsBySession(scope) : [];
       const iterBondHoldings = iterEconomyConfig.capitalMarketsEnabled
-        ? capitalMarketRepo.getActiveBondHoldingsBySession(sessionId) : [];
+        ? capitalMarketRepo.getActiveBondHoldingsBySession(scope) : [];
       const iterBudgetAllocation = iterEconomyConfig.fiscalEnabled
         ? (fiscalRepo.getActiveBudget(sessionId) ?? DEFAULT_BUDGET_ALLOCATION) : null;
       const iterPublicGoods = iterEconomyConfig.fiscalEnabled
@@ -2078,7 +2081,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       const cmktEconomyConfig = getEconomyConfig(session.config as Record<string, unknown> | null);
       if (cmktEconomyConfig.capitalMarketsEnabled) {
         // Load equity positions to compute totalSharesOutstanding per enterprise
-        const allEquityPositions = capitalMarketRepo.getEquityPositionsBySession(sessionId);
+        const allEquityPositions = capitalMarketRepo.getEquityPositionsBySession(scope);
         const sharesByEnterprise = new Map<string, number>();
         for (const pos of allEquityPositions) {
           const prev = sharesByEnterprise.get(pos.enterpriseOwnerId) ?? 0;
@@ -2175,8 +2178,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
       if (economyConfig.bankingEnabled) {
         const bankAgents = agents.filter(a => a.type === 'bank' && a.isAlive);
-        const loans = bankingRepo.getActiveLoans(sessionId);
-        const deposits = bankingRepo.getDepositsBySession(sessionId);
+        const loans = bankingRepo.getActiveLoans(scope);
+        const deposits = bankingRepo.getDepositsBySession(scope);
 
         const bankingDelta = bankingEngine.processIteration({
           sessionId,
@@ -2222,9 +2225,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
 
         // Get banking totals for SFC audit and telemetry
-        bankingTotalDeposits = bankingRepo.getTotalDeposits(sessionId);
-        bankingCollateralEscrow = bankingRepo.getTotalCollateral(sessionId);
-        bankingLoansOutstanding = bankingRepo.getTotalLoansOutstanding(sessionId);
+        bankingTotalDeposits = bankingRepo.getTotalDeposits(scope);
+        bankingCollateralEscrow = bankingRepo.getTotalCollateral(scope);
+        bankingLoansOutstanding = bankingRepo.getTotalLoansOutstanding(scope);
       }
 
       // ── Capital market tick ───────────────────────────────────────────────
@@ -2233,8 +2236,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // SFC: bond/equity transactions are SFC-neutral transfers within the perimeter —
       // no escrow term needed; computeSystemFiatTotal is unchanged.
       if (cmktEconomyConfig.capitalMarketsEnabled) {
-        const equityPositions = capitalMarketRepo.getEquityPositionsBySession(sessionId);
-        const bondHoldings = capitalMarketRepo.getActiveBondHoldingsBySession(sessionId);
+        const equityPositions = capitalMarketRepo.getEquityPositionsBySession(scope);
+        const bondHoldings = capitalMarketRepo.getActiveBondHoldingsBySession(scope);
 
         // Build agent snapshots with current running wealth (post-banking deltas applied)
         const agentsWithRunningWealth = aliveAgents.map(a => {
@@ -2703,14 +2706,14 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           activeContracts: employmentRegistry.size,
         },
       };
-      await economyRepo.saveSnapshot(sessionId, iterNum, snapshot);
+      await economyRepo.saveSnapshot(scope, iterNum, snapshot);
       if (marketState.priceIndices.length > 0) {
-        await economyRepo.savePriceIndices(sessionId, iterNum, marketState.priceIndices);
+        await economyRepo.savePriceIndices(scope, iterNum, marketState.priceIndices);
       }
 
       // AMM snapshot is now committed atomically above with the iteration record.
       // Vacuum old snapshots every 10 iterations to reduce WAL write amplification.
-      if (iterNum % 10 === 0) economyRepo.vacuumAMMSnapshots(sessionId);
+      if (iterNum % 10 === 0) economyRepo.vacuumAMMSnapshots(scope);
 
       // Resolved-action rows are log data → enqueue for async flush
       const actionCols = ['id', 'session_id', 'agent_id', 'iteration_id', 'action', 'outcome', 'resolved_at'];
@@ -2722,7 +2725,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       }
 
       // Reload agents after updates
-      agents = await agentRepo.listBySession(sessionId);
+      agents = await agentRepo.listBySession(scope);
 
       // ── SFC assertion: detect unexpected fiat creation or destruction ─────
       // The economy is fully closed-loop. Every transfer must be zero-sum.

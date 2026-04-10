@@ -34,6 +34,7 @@ import * as macroSnapshotRepo from '../db/repos/macroSnapshotRepo.js';
 import { v4 as uuidv4 } from 'uuid';
 import type { SessionExport } from '@policylab/shared';
 import { getSessionTelemetry } from '../orchestration/simulationRunner.js';
+import { createScope } from '../db/sessionScope.js';
 
 const router = Router();
 
@@ -173,11 +174,11 @@ router.get('/:id/export', async (req, res) => {
     })) : undefined,
     // Capital Markets tables (present only when session used capital markets)
     equityPositions: (() => {
-      const rows = capitalMarketRepo.getEquityPositionsBySession(id);
+      const rows = capitalMarketRepo.getEquityPositionsBySession(createScope(id));
       return rows.length > 0 ? rows : undefined;
     })(),
     bondHoldings: (() => {
-      const rows = capitalMarketRepo.getBondHoldingsBySession(id);
+      const rows = capitalMarketRepo.getBondHoldingsBySession(createScope(id));
       return rows.length > 0 ? rows : undefined;
     })(),
     // Fiscal Policy tables (present only when session used fiscal policy)

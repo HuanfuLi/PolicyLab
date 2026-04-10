@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../index.js';
 import { depositAccounts, loanContracts, bankBalanceSheets } from '../schema.js';
 import type { DepositAccount, LoanContract, BankBalanceSheet } from '@policylab/shared';
+import type { SessionScope } from '../sessionScope.js';
 
 // ── Deposit Account helpers ──────────────────────────────────────────────────
 
@@ -36,7 +37,7 @@ function rowToDeposit(row: typeof depositAccounts.$inferSelect): DepositAccount 
 export function upsertDeposit(
   deposit: Omit<DepositAccount, 'id'> & { id?: string },
 ): DepositAccount {
-  const existing = getDeposit(deposit.ownerAgentId, deposit.bankAgentId, deposit.sessionId);
+  const existing = getDeposit(deposit.ownerAgentId, deposit.bankAgentId, deposit.sessionId as SessionScope);
   const id = deposit.id ?? existing?.id ?? uuidv4();
 
   if (existing) {
@@ -71,7 +72,7 @@ export function upsertDeposit(
 export function getDeposit(
   ownerAgentId: string,
   bankAgentId: string,
-  sessionId: string,
+  sessionId: SessionScope,
 ): DepositAccount | undefined {
   const rows = db
     .select()
@@ -103,7 +104,7 @@ export function getDepositById(id: string): DepositAccount | undefined {
 /**
  * Get all deposit accounts for a session.
  */
-export function getDepositsBySession(sessionId: string): DepositAccount[] {
+export function getDepositsBySession(sessionId: SessionScope): DepositAccount[] {
   const rows = db
     .select()
     .from(depositAccounts)
@@ -117,7 +118,7 @@ export function getDepositsBySession(sessionId: string): DepositAccount[] {
  * Get the total deposits balance for a session.
  * SELECT COALESCE(SUM(balance), 0) FROM deposit_accounts WHERE session_id = ?
  */
-export function getTotalDeposits(sessionId: string): number {
+export function getTotalDeposits(sessionId: SessionScope): number {
   const result = db
     .select({ total: sql<number>`COALESCE(SUM(${depositAccounts.balance}), 0)` })
     .from(depositAccounts)
@@ -187,7 +188,7 @@ export function insertLoan(loan: LoanContract): void {
 /**
  * Get all active loans for a session.
  */
-export function getActiveLoans(sessionId: string): LoanContract[] {
+export function getActiveLoans(sessionId: SessionScope): LoanContract[] {
   const rows = db
     .select()
     .from(loanContracts)
@@ -203,13 +204,18 @@ export function getActiveLoans(sessionId: string): LoanContract[] {
 }
 
 /**
- * Get all loans for a given borrower agent.
+ * Get all loans for a given borrower agent within a session.
  */
-export function getLoansByBorrower(borrowerAgentId: string): LoanContract[] {
+export function getLoansByBorrower(borrowerAgentId: string, sessionId: SessionScope): LoanContract[] {
   const rows = db
     .select()
     .from(loanContracts)
-    .where(eq(loanContracts.borrowerAgentId, borrowerAgentId))
+    .where(
+      and(
+        eq(loanContracts.borrowerAgentId, borrowerAgentId),
+        eq(loanContracts.sessionId, sessionId),
+      ),
+    )
     .all();
 
   return rows.map(rowToLoan);
@@ -219,7 +225,7 @@ export function getLoansByBorrower(borrowerAgentId: string): LoanContract[] {
  * Get all active loans for a specific borrower in a session.
  * Used during death liquidation to default phantom debt and keep M1 accurate.
  */
-export function getActiveLoansByBorrower(borrowerAgentId: string, sessionId: string): LoanContract[] {
+export function getActiveLoansByBorrower(borrowerAgentId: string, sessionId: SessionScope): LoanContract[] {
   const rows = db
     .select()
     .from(loanContracts)
@@ -239,7 +245,7 @@ export function getActiveLoansByBorrower(borrowerAgentId: string, sessionId: str
  * Get the total outstanding loan principal for a session.
  * SELECT COALESCE(SUM(remaining_balance), 0) FROM loan_contracts WHERE session_id = ? AND status = 'active'
  */
-export function getTotalLoansOutstanding(sessionId: string): number {
+export function getTotalLoansOutstanding(sessionId: SessionScope): number {
   const result = db
     .select({ total: sql<number>`COALESCE(SUM(${loanContracts.remainingBalance}), 0)` })
     .from(loanContracts)
@@ -258,7 +264,7 @@ export function getTotalLoansOutstanding(sessionId: string): number {
  * Get the total collateral held against active loans for a session.
  * SELECT COALESCE(SUM(collateral_amount), 0) FROM loan_contracts WHERE session_id = ? AND status = 'active'
  */
-export function getTotalCollateral(sessionId: string): number {
+export function getTotalCollateral(sessionId: SessionScope): number {
   const result = db
     .select({ total: sql<number>`COALESCE(SUM(${loanContracts.collateralAmount}), 0)` })
     .from(loanContracts)
@@ -333,7 +339,7 @@ export function insertBalanceSheet(sheet: BankBalanceSheet): void {
  */
 export function getLatestBalanceSheet(
   agentId: string,
-  sessionId: string,
+  sessionId: SessionScope,
 ): BankBalanceSheet | undefined {
   const rows = db
     .select()

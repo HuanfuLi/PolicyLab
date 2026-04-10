@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../index.js';
 import { equityPositions, bondHoldings } from '../schema.js';
 import type { EquityPosition, BondHolding } from '@policylab/shared';
+import type { SessionScope } from '../sessionScope.js';
 
 // ── Row converters ────────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ function rowToBondHolding(row: typeof bondHoldings.$inferSelect): BondHolding {
 /**
  * Get all equity positions for a session.
  */
-export function getEquityPositionsBySession(sessionId: string): EquityPosition[] {
+export function getEquityPositionsBySession(sessionId: SessionScope): EquityPosition[] {
   const rows = db
     .select()
     .from(equityPositions)
@@ -63,7 +64,7 @@ export function getEquityPositionsBySession(sessionId: string): EquityPosition[]
 export function getEquityPosition(
   ownerAgentId: string,
   enterpriseOwnerId: string,
-  sessionId: string,
+  sessionId: SessionScope,
 ): EquityPosition | undefined {
   const rows = db
     .select()
@@ -112,7 +113,7 @@ export function upsertEquityPosition(pos: EquityPosition): void {
 /**
  * Delete all equity positions for a session (used during session cleanup).
  */
-export function deleteEquityPositionsBySession(sessionId: string): void {
+export function deleteEquityPositionsBySession(sessionId: SessionScope): void {
   db.delete(equityPositions)
     .where(eq(equityPositions.sessionId, sessionId))
     .run();
@@ -123,7 +124,7 @@ export function deleteEquityPositionsBySession(sessionId: string): void {
 /**
  * Get all bond holdings for a session.
  */
-export function getBondHoldingsBySession(sessionId: string): BondHolding[] {
+export function getBondHoldingsBySession(sessionId: SessionScope): BondHolding[] {
   const rows = db
     .select()
     .from(bondHoldings)
@@ -137,7 +138,7 @@ export function getBondHoldingsBySession(sessionId: string): BondHolding[] {
  * Get all active bond holdings for a session (status = 'active' only).
  * These are the holdings eligible for coupon payments and maturity processing.
  */
-export function getActiveBondHoldingsBySession(sessionId: string): BondHolding[] {
+export function getActiveBondHoldingsBySession(sessionId: SessionScope): BondHolding[] {
   const rows = db
     .select()
     .from(bondHoldings)
@@ -195,7 +196,7 @@ export function deleteBondHolding(id: string): void {
 /**
  * Delete all bond holdings for a session (used during session cleanup).
  */
-export function deleteBondHoldingsBySession(sessionId: string): void {
+export function deleteBondHoldingsBySession(sessionId: SessionScope): void {
   db.delete(bondHoldings)
     .where(eq(bondHoldings.sessionId, sessionId))
     .run();
@@ -207,7 +208,7 @@ export function deleteBondHoldingsBySession(sessionId: string): void {
  *
  * SELECT COALESCE(SUM(face_value), 0) FROM bond_holdings WHERE session_id = ? AND status = 'active'
  */
-export function getTotalActiveBondFaceValue(sessionId: string): number {
+export function getTotalActiveBondFaceValue(sessionId: SessionScope): number {
   const result = db
     .select({ total: sql<number>`COALESCE(SUM(${bondHoldings.faceValue}), 0)` })
     .from(bondHoldings)

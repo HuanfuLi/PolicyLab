@@ -16,6 +16,7 @@ import { readSettings } from '../settings.js';
 import { buildReviewChatPrompt } from '../llm/prompts/index.js';
 import { agentRepo } from '../db/repos/agentRepo.js';
 import type { ChatMessage } from '@policylab/shared';
+import { createScope } from '../db/sessionScope.js';
 
 const router = Router({ mergeParams: true });
 
@@ -32,7 +33,7 @@ router.post('/:agentId/chat', async (req, res) => {
   const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
-  const allAgents = await agentRepo.listBySession(id);
+  const allAgents = await agentRepo.listBySession(createScope(id));
   const agent = allAgents.find(a => a.id === agentId);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
 

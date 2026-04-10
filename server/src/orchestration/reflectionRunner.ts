@@ -30,6 +30,7 @@ import {
 import { runWithConcurrency } from './concurrencyPool.js';
 import { reflectionManager } from './reflectionManager.js';
 import type { Agent } from '@policylab/shared';
+import { createScope } from '../db/sessionScope.js';
 
 export async function runReflection(sessionId: string): Promise<void> {
   const settings = readSettings();
@@ -43,7 +44,7 @@ export async function runReflection(sessionId: string): Promise<void> {
     const session = await sessionRepo.getById(sessionId);
     if (!session) throw new Error(`Session ${sessionId} not found`);
 
-    const agents = await agentRepo.listBySession(sessionId);
+    const agents = await agentRepo.listBySession(createScope(sessionId));
     const citizenAgents = agents.filter(a => !a.isCentralAgent);
 
     // Load iteration summaries

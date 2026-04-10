@@ -1,11 +1,12 @@
 /**
  * C1: IterationRepo — CRUD for iterations and agent actions (spec §5.5).
  */
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../index.js';
 import { iterations, agentIntents, resolvedActions } from '../schema.js';
 import type { Iteration, AgentAction, IterationStats } from '@policylab/shared';
+import type { SessionScope } from '../sessionScope.js';
 
 function rowToIteration(row: typeof iterations.$inferSelect): Iteration {
   return {
@@ -69,7 +70,7 @@ export const iterationRepo = {
     return rowToIteration(row);
   },
 
-  async listBySession(sessionId: string): Promise<Iteration[]> {
+  async listBySession(sessionId: SessionScope): Promise<Iteration[]> {
     const rows = await db
       .select()
       .from(iterations)
@@ -79,7 +80,7 @@ export const iterationRepo = {
   },
 
   /** Full iteration data including statistics and lifecycle events (for restoring UI state) */
-  async listBySessionFull(sessionId: string): Promise<Array<Iteration & { statistics: IterationStats; lifecycleEvents: unknown[] }>> {
+  async listBySessionFull(sessionId: SessionScope): Promise<Array<Iteration & { statistics: IterationStats; lifecycleEvents: unknown[] }>> {
     const rows = await db
       .select()
       .from(iterations)
@@ -96,15 +97,28 @@ export const iterationRepo = {
     const [row] = await db.select().from(iterations).where(eq(iterations.id, iterationId));
     if (!row) throw new Error(`Iteration ${iterationId} not found`);
 
+    // Use the iteration's own sessionId to scope sub-queries, preventing cross-session leakage.
+    const scopedSessionId = row.sessionId;
+
     const intents = await db
       .select()
       .from(agentIntents)
-      .where(eq(agentIntents.iterationId, iterationId));
+      .where(
+        and(
+          eq(agentIntents.iterationId, iterationId),
+          eq(agentIntents.sessionId, scopedSessionId),
+        ),
+      );
 
     const resolved = await db
       .select()
       .from(resolvedActions)
-      .where(eq(resolvedActions.iterationId, iterationId));
+      .where(
+        and(
+          eq(resolvedActions.iterationId, iterationId),
+          eq(resolvedActions.sessionId, scopedSessionId),
+        ),
+      );
 
     const resolvedMap = new Map(resolved.map(r => [r.agentId, r]));
 

@@ -7,6 +7,7 @@ import { db, sqlite } from '../index.js';
 import { agents } from '../schema.js';
 import type { Agent, AgentStats, PersonalityTrait } from '@policylab/shared';
 import { PERSONALITY_TRAITS } from '@policylab/shared';
+import type { SessionScope } from '../sessionScope.js';
 
 function parseStats(raw: string): AgentStats {
   try {
@@ -85,11 +86,11 @@ export const agentRepo = {
       }
     })();
 
-    const inserted = await this.listBySession(agentData[0]?.sessionId ?? '');
+    const inserted = await this.listBySession((agentData[0]?.sessionId ?? '') as SessionScope);
     return inserted;
   },
 
-  async listBySession(sessionId: string): Promise<Agent[]> {
+  async listBySession(sessionId: SessionScope): Promise<Agent[]> {
     // D2 fix: Deterministic ordering by agent ID ensures reproducible
     // processing order across iterations and server restarts.
     const rows = await db

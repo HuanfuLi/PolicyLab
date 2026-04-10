@@ -13,6 +13,7 @@ import { iterationRepo } from '../db/repos/iterationRepo.js';
 import { agentRepo } from '../db/repos/agentRepo.js';
 import { db } from '../db/index.js';
 import { resolvedActions, iterations as iterationsTable } from '../db/schema.js';
+import { createScope } from '../db/sessionScope.js';
 
 const router = Router({ mergeParams: true });
 
@@ -22,10 +23,10 @@ router.get('/', async (req, res) => {
   const full = req.query.full === 'true';
   try {
     if (full) {
-      const iters = await iterationRepo.listBySessionFull(id);
+      const iters = await iterationRepo.listBySessionFull(createScope(id));
       return res.json(iters);
     }
-    const iters = await iterationRepo.listBySession(id);
+    const iters = await iterationRepo.listBySession(createScope(id));
     return res.json(iters);
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'DB error' });
@@ -37,7 +38,7 @@ router.get('/', async (req, res) => {
 router.get('/agent-stats', async (req, res) => {
   const { id } = req.params as { id: string };
   try {
-    const agents = await agentRepo.listBySession(id);
+    const agents = await agentRepo.listBySession(createScope(id));
     const citizenAgents = agents.filter(a => !a.isCentralAgent);
 
     const iters = await db.select()
@@ -120,7 +121,7 @@ router.get('/:num', async (req, res) => {
   if (isNaN(iterNum)) return res.status(400).json({ error: 'Invalid iteration number' });
 
   try {
-    const all = await iterationRepo.listBySession(id);
+    const all = await iterationRepo.listBySession(createScope(id));
     const iter = all.find(i => i.number === iterNum);
     if (!iter) return res.status(404).json({ error: `Iteration ${iterNum} not found` });
 

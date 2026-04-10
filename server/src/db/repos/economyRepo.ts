@@ -13,6 +13,7 @@ import { agentEconomy, economySnapshots, marketPrices, ammSnapshots } from '../s
 import type { SkillMatrix, Inventory, EconomySnapshot, PriceIndex } from '@policylab/shared';
 import type { AMMState } from '@policylab/shared';
 import { DEFAULT_SKILL_MATRIX, DEFAULT_INVENTORY } from '@policylab/shared';
+import type { SessionScope } from '../sessionScope.js';
 
 // ── Agent Economy State ──────────────────────────────────────────────────────
 
@@ -49,7 +50,7 @@ export const economyRepo = {
     /**
      * Get or initialize economy state for a single agent.
      */
-    async getAgentEconomy(agentId: string, sessionId: string): Promise<AgentEconomyState> {
+    async getAgentEconomy(agentId: string, sessionId: SessionScope): Promise<AgentEconomyState> {
         const [row] = await db.select()
             .from(agentEconomy)
             .where(and(eq(agentEconomy.agentId, agentId), eq(agentEconomy.sessionId, sessionId)));
@@ -77,7 +78,7 @@ export const economyRepo = {
     /**
      * Load economy state for all agents in a session.
      */
-    async listBySession(sessionId: string): Promise<AgentEconomyState[]> {
+    async listBySession(sessionId: SessionScope): Promise<AgentEconomyState[]> {
         const rows = await db.select()
             .from(agentEconomy)
             .where(eq(agentEconomy.sessionId, sessionId));
@@ -139,7 +140,7 @@ export const economyRepo = {
      * Initialize economy state for agents that don't have one.
      */
     async initializeForSession(
-        sessionId: string,
+        sessionId: SessionScope,
         agents: Array<{ id: string; role: string }>
     ): Promise<void> {
         const existing = await this.listBySession(sessionId);
@@ -166,7 +167,7 @@ export const economyRepo = {
      * Save an economy snapshot for an iteration.
      */
     async saveSnapshot(
-        sessionId: string,
+        sessionId: SessionScope,
         iterationNumber: number,
         snapshot: EconomySnapshot
     ): Promise<void> {
@@ -182,7 +183,7 @@ export const economyRepo = {
     /**
      * Load economy snapshot for a specific iteration.
      */
-    async getSnapshot(sessionId: string, iterationNumber: number): Promise<EconomySnapshot | null> {
+    async getSnapshot(sessionId: SessionScope, iterationNumber: number): Promise<EconomySnapshot | null> {
         const [row] = await db.select()
             .from(economySnapshots)
             .where(
@@ -206,7 +207,7 @@ export const economyRepo = {
      * Save market price indices for an iteration.
      */
     async savePriceIndices(
-        sessionId: string,
+        sessionId: SessionScope,
         iterationNumber: number,
         indices: PriceIndex[]
     ): Promise<void> {
@@ -231,7 +232,7 @@ export const economyRepo = {
      * Get price history for a specific item in a session.
      */
     async getPriceHistory(
-        sessionId: string,
+        sessionId: SessionScope,
         itemType: string
     ): Promise<Array<{ iterationNumber: number; lastPrice: number; vwap: number; volume: number }>> {
         const rows = await db.select()
@@ -258,7 +259,7 @@ export const economyRepo = {
      * Stores both primary food AMM, all multi-commodity pool states, and treasury balance.
      */
     async saveAMMSnapshot(
-        sessionId: string,
+        sessionId: SessionScope,
         iterationNumber: number,
         primary: AMMState,
         multi: Record<string, AMMState>,
@@ -278,7 +279,7 @@ export const economyRepo = {
      * Returns null if no snapshot exists yet.
      */
     async getLatestAMMSnapshot(
-        sessionId: string,
+        sessionId: SessionScope,
     ): Promise<{ primary: AMMState; multi: Record<string, AMMState>; treasury?: number } | null> {
         const [row] = await db.select()
             .from(ammSnapshots)
@@ -303,7 +304,7 @@ export const economyRepo = {
      *                 OR iteration_number == MAX for this session (crash-recovery anchor)
      * Rows deleted:   everything else (e.g. 1–9, 11–19, ...)
      */
-    vacuumAMMSnapshots(sessionId: string, keepInterval = 10): void {
+    vacuumAMMSnapshots(sessionId: SessionScope, keepInterval = 10): void {
         if (!keepInterval || keepInterval < 1) return;
         sqlite.prepare(`
             DELETE FROM amm_snapshots
