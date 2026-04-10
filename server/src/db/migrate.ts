@@ -166,6 +166,13 @@ export function runMigrations() {
       ON market_prices(session_id, iteration_number);
   `);
 
+  // Fix H10: Migrate unique index to include session_id for multi-session support.
+  // Drop the old agent_id-only index and create a composite one.
+  try {
+    sqlite.exec(`DROP INDEX IF EXISTS idx_agent_economy_agent;`);
+    sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_economy_agent_session ON agent_economy(agent_id, session_id);`);
+  } catch { /* index migration already applied */ }
+
   // AMM snapshots: persist AMM reserve state for SFC resilience across server restarts
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS amm_snapshots (

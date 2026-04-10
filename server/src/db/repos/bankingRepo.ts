@@ -36,7 +36,7 @@ function rowToDeposit(row: typeof depositAccounts.$inferSelect): DepositAccount 
 export function upsertDeposit(
   deposit: Omit<DepositAccount, 'id'> & { id?: string },
 ): DepositAccount {
-  const existing = getDeposit(deposit.ownerAgentId, deposit.bankAgentId);
+  const existing = getDeposit(deposit.ownerAgentId, deposit.bankAgentId, deposit.sessionId);
   const id = deposit.id ?? existing?.id ?? uuidv4();
 
   if (existing) {
@@ -71,6 +71,7 @@ export function upsertDeposit(
 export function getDeposit(
   ownerAgentId: string,
   bankAgentId: string,
+  sessionId: string,
 ): DepositAccount | undefined {
   const rows = db
     .select()
@@ -79,6 +80,7 @@ export function getDeposit(
       and(
         eq(depositAccounts.ownerAgentId, ownerAgentId),
         eq(depositAccounts.bankAgentId, bankAgentId),
+        eq(depositAccounts.sessionId, sessionId),
       ),
     )
     .all();
