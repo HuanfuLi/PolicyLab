@@ -2249,7 +2249,24 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       for (const agent of aliveAgents) {
         const weekState = weekStateMap.get(agent.id)!;
         const agentIntent = intentMap.get(agent.id);
-        const queue = (agentIntent?.actions?.slice(0, 3) ?? [{ actionCode: 'NONE', parameters: {} }]) as QueuedActionInstruction[];
+        const rawQueue = (agentIntent?.actions?.slice(0, 3) ?? [{ actionCode: 'NONE', parameters: {} }]) as QueuedActionInstruction[];
+
+        // Deduplicate STEAL/HARASS targets — same victim cannot be targeted twice in one tick.
+        // The LLM occasionally emits multiple STEAL actions against the same agent in a single
+        // multi-action queue, which would double-drain the victim's wealth. This pass keeps only
+        // the first occurrence for each target, leaving non-targeted and non-STEAL/HARASS actions
+        // untouched so the rest of the queue is unchanged.
+        const stealTargetsSeen = new Set<string>();
+        const queue = rawQueue.filter(action => {
+          const isStealLike = action.actionCode === 'STEAL' || action.actionCode === 'HARASS';
+          if (!isStealLike) return true;
+          const targetId = action.parameters?.target ?? action.parameters?.agent_id;
+          if (typeof targetId !== 'string' || !targetId) return true;
+          if (stealTargetsSeen.has(targetId)) return false;
+          stealTargetsSeen.add(targetId);
+          return true;
+        });
+
         let runningWealth = agent.currentStats.wealth;
         let runningHealth = agent.currentStats.health;
         let runningHappiness = agent.currentStats.happiness;
