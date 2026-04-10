@@ -78,6 +78,7 @@ class SimulationManager {
     state.status = 'running';
     state.abortRequested = false;
     state.pauseRequested = false;
+    state.resetRequested = false;
     // earlyStoppingEnabled is intentionally NOT reset here — it may be
     // pre-set by the route handler from request body before start() is called.
   }
