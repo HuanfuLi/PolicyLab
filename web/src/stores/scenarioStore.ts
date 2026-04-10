@@ -240,7 +240,17 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
       set({ runningScenarios: false });
       return allForkIds;
     } catch (err) {
-      set({ runningScenarios: false });
+      // Clean up any forks that were created but failed to start simulation —
+      // abort running simulations and delete orphaned forked sessions.
+      // Awaited in parallel so that a retry doesn't race with in-flight cleanup.
+      const cleanupPromises = allForkIds.map(forkId =>
+        Promise.all([
+          fetch(`/api/sessions/${forkId}/simulate/abort`, { method: 'POST' }).catch(() => {}),
+          fetch(`/api/sessions/${forkId}`, { method: 'DELETE' }).catch(() => {}),
+        ])
+      );
+      await Promise.all(cleanupPromises);
+      set({ runningScenarios: false, scenarioSessionIds: {} });
       throw err;
     }
   },

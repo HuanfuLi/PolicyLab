@@ -74,6 +74,17 @@ export const useReflectionStore = create<ReflectionStore>((set) => ({
   },
 
   loadReflections: async (sessionId: string) => {
+    set({
+      agentReflections: {},
+      evaluation: null,
+      isComplete: false,
+      isRunning: false,
+      currentPass: null,
+      completedCount: 0,
+      totalAgents: 0,
+      isEvaluating: false,
+      error: null,
+    });
     try {
       const res = await fetch(`/api/sessions/${sessionId}/reflect`);
       if (!res.ok) return;
@@ -127,9 +138,14 @@ export const useReflectionStore = create<ReflectionStore>((set) => ({
               const updated = event.pass === 1
                 ? { ...existing, pass1: event.content }
                 : { ...existing, pass2: event.content };
+              // Only increment if this agent hasn't been counted for the current pass
+              // (guards against duplicate SSE events from reconnects)
+              const alreadyCounted = event.pass === 1
+                ? existing.pass1 !== ''
+                : existing.pass2 != null;
               return {
                 agentReflections: { ...state.agentReflections, [event.agentId]: updated },
-                completedCount: state.completedCount + 1,
+                completedCount: alreadyCounted ? state.completedCount : state.completedCount + 1,
               };
             });
             break;
@@ -163,7 +179,10 @@ export const useReflectionStore = create<ReflectionStore>((set) => ({
       } catch { /* ignore parse errors */ }
     };
 
-    es.onerror = () => es.close();
+    es.onerror = () => {
+      set({ isRunning: false, error: 'Connection lost during reflection' });
+      es.close();
+    };
 
     return () => es.close();
   },
