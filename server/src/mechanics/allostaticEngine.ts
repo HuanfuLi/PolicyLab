@@ -222,7 +222,8 @@ export function computeMetSatietyCost(input: MetInput): MetOutput {
   }
 
   // BMR per tick: weightKg × 1.0 kcal/hr × TICK_DURATION_HRS
-  const bmrKcal = weightKg * 1.0 * physicsConfig.tickDurationHrs;
+  const safeWeightKg = Math.max(1, weightKg);
+  const bmrKcal = safeWeightKg * 1.0 * physicsConfig.tickDurationHrs;
 
   // Total kcal burned this tick
   const kcalBurned = bmrKcal * metMultiplier * ageModifier;

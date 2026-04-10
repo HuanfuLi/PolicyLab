@@ -146,6 +146,11 @@ export function processRepayment(
   borrowerDeposit: DepositAccount,
   paymentAmount: number,
 ): { loanUpdate: Partial<LoanContract>; depositDelta: number; bankReservesDelta: number } {
+  // Cap repayment to available deposit balance to prevent overdraft
+  paymentAmount = Math.min(paymentAmount, Math.max(0, borrowerDeposit.balance));
+  if (paymentAmount <= 0) {
+    return { loanUpdate: {}, depositDelta: 0, bankReservesDelta: 0 };
+  }
   const interest = loan.remainingBalance * loan.interestRate;
   const principalPaid = Math.max(0, paymentAmount - interest);
   const interestPaid = Math.min(paymentAmount, interest);

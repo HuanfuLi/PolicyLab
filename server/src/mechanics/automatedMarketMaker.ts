@@ -319,11 +319,11 @@ export class AutomatedMarketMaker {
     // Apply reserve update
     this.fiatReserve += fiatAmount;
     this.foodReserve = this.k / this.fiatReserve;
-    // Asymptotic floor: prevent divide-by-zero at extreme depletion.
-    // H3 fix: re-anchor k after clamping so the invariant holds exactly.
+    // Asymptotic floor: prevent depletion below minimum reserve.
+    // Maintain k invariant by adjusting fiat reserve instead of degrading k.
     if (this.foodReserve < 0.01) {
       this.foodReserve = 0.01;
-      this.k = this.fiatReserve * this.foodReserve;
+      this.fiatReserve = this.k / 0.01;  // raise fiat to preserve k
     }
     this.lastUpdatedTick = currentTick;
 
@@ -413,11 +413,29 @@ export class AutomatedMarketMaker {
    * Updates the invariant k.
    *
    * @param amount  Fiat units to withdraw (must be > 0 and < fiatReserve).
+   * @returns Actual amount withdrawn (may be less than requested if floor is hit).
    */
-  withdrawFiatReserve(amount: number): void {
-    if (amount <= 0) return;
+  withdrawFiatReserve(amount: number): number {
+    if (amount <= 0) return 0;
+    const before = this.fiatReserve;
     this.fiatReserve = Math.max(0.01, this.fiatReserve - amount);
     this.k = this.fiatReserve * this.foodReserve;
+    return before - this.fiatReserve;  // actual amount withdrawn
+  }
+
+  /**
+   * Withdraw goods directly from the reserve (e.g. inflation feedback contraction).
+   * Updates the invariant k.
+   *
+   * @param amount  Goods units to withdraw (must be > 0 and < foodReserve).
+   * @returns Actual amount withdrawn (may be less than requested if floor is hit).
+   */
+  withdrawGoodsReserve(amount: number): number {
+    if (amount <= 0) return 0;
+    const before = this.foodReserve;
+    this.foodReserve = Math.max(0.01, this.foodReserve - amount);
+    this.k = this.fiatReserve * this.foodReserve;
+    return before - this.foodReserve;  // actual amount withdrawn
   }
 
   // ── Persistence ───────────────────────────────────────────────────────────
@@ -546,8 +564,8 @@ export function computeDemurrageCycle(
   const taxMap = new Map<string, number>();
 
   for (const agent of agents) {
-    // Since taxRate ∈ [0, 1], agent.wealth * taxRate ≤ agent.wealth always (no clamp needed)
-    const tax = agent.wealth * taxRate;
+    // Clamp to non-negative: negative-wealth agents must not receive a subsidy from the tax pool.
+    const tax = Math.max(0, agent.wealth * taxRate);
     taxMap.set(agent.agentId, tax);
     taxPoolCollected += tax;
   }
