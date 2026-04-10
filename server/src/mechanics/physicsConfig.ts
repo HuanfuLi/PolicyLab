@@ -82,7 +82,7 @@ const DEFAULTS: PhysicsConfigValues = {
   roleIncomeDefault: 6,
   stealRatio: 0.15,
   stealMax: 15,
-  stealFallback: 3,
+  stealFallback: 0,
   lowWealthThreshold: 20,
   lowWealthCortisolPenalty: 10,
   lowHealthThreshold: 30,
