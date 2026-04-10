@@ -1258,15 +1258,16 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           weekState.cortisolDelta += effectiveCortisolDelta;
           weekState.dopamineDelta += physics.dopamineDelta;
 
-          // Fix A: Zero-sum STEAL — deduct stolen amount from victim's weekState
-          if (action.actionCode === 'STEAL' && targetAgent && physics.wealthDelta > 0) {
+          // Fix A: Zero-sum STEAL — deduct stolen amount from victim's weekState.
+          // Use originalWealthDelta so enforcement seizure doesn't prevent victim debit.
+          if (action.actionCode === 'STEAL' && targetAgent && originalWealthDelta > 0) {
             const victimState = weekStateMap.get(targetAgent.id);
             if (victimState) {
               const victimAvailable = Math.max(0, targetAgent.currentStats.wealth + victimState.wealthDelta);
-              const actualStolen = Math.min(physics.wealthDelta, victimAvailable);
+              const actualStolen = Math.min(originalWealthDelta, victimAvailable);
               victimState.wealthDelta -= actualStolen;
-              if (actualStolen < physics.wealthDelta) {
-                weekState.wealthDelta -= (physics.wealthDelta - actualStolen);
+              if (actualStolen < originalWealthDelta) {
+                weekState.wealthDelta -= (originalWealthDelta - actualStolen);
               }
             }
           }
