@@ -40,6 +40,7 @@ export type SimulationEvent =
   | { type: 'simulation-complete'; finalReport: string }
   | { type: 'paused'; iteration: number }
   | { type: 'error'; message: string }
+  | { type: 'warning'; message: string }
   | { type: 'aborted-reset' };
 
 class SimulationManager {
@@ -62,6 +63,14 @@ class SimulationManager {
 
   getStatus(sessionId: string): SimulationStatus {
     return this.sessions.get(sessionId)?.status ?? 'idle';
+  }
+
+  /** S2 fix: Returns true if any session has a running simulation. */
+  hasRunning(): boolean {
+    for (const state of this.sessions.values()) {
+      if (state.status === 'running') return true;
+    }
+    return false;
   }
 
   start(sessionId: string): void {

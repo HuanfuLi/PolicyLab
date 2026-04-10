@@ -642,6 +642,13 @@ function applyEnterpriseAction(params: {
   enterpriseRegistry: Map<string, EnterpriseRecord>;
   employmentRegistry: Map<string, EmploymentRecord>;
   orderBook: ReturnType<typeof getOrderBook>;
+  /**
+   * Set of enterprise owner agent IDs that have at least one external shareholder
+   * this iteration. Revenue for enterprises NOT in this set goes directly to the
+   * owner's personal wealth (sole-proprietor auto-withdraw) instead of accumulating
+   * in the enterprise deposit account where it would never be distributed.
+   */
+  enterprisesWithExternalShareholders: Set<string>;
   /** AMM instance for this session — food trades route through it instead of order book. */
   amm?: AutomatedMarketMaker;
   /** Multi-commodity AMM pools for non-food items. */
@@ -831,18 +838,26 @@ function applyEnterpriseAction(params: {
             }
           }
 
-          // Fix #4: Route enterprise revenue to enterprise deposit account when one exists.
-          // When banking is enabled, revenue belongs to the enterprise (not the owner personally).
-          // Owner withdraws profits via dividends, not by receiving raw AMM proceeds.
+          // Route enterprise revenue: if the enterprise has external shareholders, credit
+          // the enterprise deposit so dividends distribute profits at end-of-iteration.
+          // If the owner holds 100% (no external shareholders), auto-withdraw directly to
+          // owner's personal wealth — the deposit would otherwise accumulate forever since
+          // the dividend step skips enterprises with no external positions.
           if (fiatRevenue > 0) {
             const entDepositId = `ent_${enterpriseId}`;
             const entDeposit = bankingRepo.getDepositById(entDepositId);
-            if (entDeposit) {
+            const ownerHasExternalShareholders = enterprise
+              ? params.enterprisesWithExternalShareholders.has(enterprise.ownerId)
+              : false;
+
+            if (entDeposit && ownerHasExternalShareholders) {
+              // External shareholders exist — route to enterprise deposit for dividend distribution
               bankingRepo.updateDepositBalance(entDeposit.id, entDeposit.balance + fiatRevenue, iterationNumber);
-              ownerState?.events.push(`Enterprise ${enterpriseId}: +${fiatRevenue} fiat revenue credited to enterprise deposit`);
+              ownerState?.events.push(`Enterprise ${enterpriseId}: +${fiatRevenue.toFixed(2)} fiat revenue credited to enterprise deposit`);
             } else if (ownerState) {
-              // No enterprise deposit account — fall back to owner's personal wealth
+              // Owner-only enterprise (or no deposit) — auto-withdraw to personal wealth
               ownerState.wealthDelta += fiatRevenue;
+              ownerState.events.push(`Enterprise ${enterpriseId}: +${fiatRevenue.toFixed(2)} fiat revenue (owner-only auto-withdraw)`);
             }
           }
 
@@ -1065,18 +1080,20 @@ export async function runSimulation(sessionId: string, totalIterations: number):
   const citizenProv = getLoadBalancer();
   const summaries: Array<{ number: number; summary: string }> = [];
 
+  // Hoist outside try so the catch block can deregister the listener without scoping issues.
+  const onDataLoss = ({ rowsLost }: DataLossPayload) => {
+    simulationManager.broadcast(sessionId, {
+      type: 'warning',
+      message: `[Storage] ${rowsLost} simulation log rows were dropped due to repeated DB write failures. Simulation data may be incomplete.`,
+    });
+  };
+
   try {
     asyncLogFlusher.start();
 
     // Broadcast a SSE warning to the frontend if the flusher drops rows due to
     // repeated DB write failures. This surfaces storage issues that would otherwise
     // be silent (only logged to stderr), allowing the user to take action.
-    const onDataLoss = ({ rowsLost }: DataLossPayload) => {
-      simulationManager.broadcast(sessionId, {
-        type: 'warning',
-        message: `[Storage] ${rowsLost} simulation log rows were dropped due to repeated DB write failures. Simulation data may be incomplete.`,
-      });
-    };
     asyncLogFlusher.on('data-loss', onDataLoss);
 
     await sessionRepo.updateStage(sessionId, 'simulating');
@@ -1635,6 +1652,15 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         ? agents.filter(a => a.type === 'bank' && a.isAlive) : [];
       const iterEquityPositions = iterEconomyConfig.capitalMarketsEnabled
         ? capitalMarketRepo.getEquityPositionsBySession(sessionId) : [];
+      // Pre-compute which enterprises have external shareholders this iteration.
+      // Used by applyEnterpriseAction to decide whether revenue routes to the
+      // enterprise deposit (for dividend distribution) or directly to owner wealth
+      // (sole-proprietor auto-withdraw when no external shareholders exist).
+      const enterprisesWithExternalShareholders = new Set<string>(
+        iterEquityPositions
+          .filter(p => p.ownerAgentId !== p.enterpriseOwnerId && p.sharesHeld > 0)
+          .map(p => p.enterpriseOwnerId),
+      );
       const iterBondHoldings = iterEconomyConfig.capitalMarketsEnabled
         ? capitalMarketRepo.getActiveBondHoldingsBySession(sessionId) : [];
       const iterBudgetAllocation = iterEconomyConfig.fiscalEnabled
@@ -2280,7 +2306,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         // untouched so the rest of the queue is unchanged.
         const stealTargetsSeen = new Set<string>();
         const queue = rawQueue.filter(action => {
-          const isStealLike = action.actionCode === 'STEAL' || action.actionCode === 'HARASS';
+          const isStealLike = action.actionCode === 'STEAL';
           if (!isStealLike) return true;
           const targetId = action.parameters?.target ?? action.parameters?.agent_id;
           if (typeof targetId !== 'string' || !targetId) return true;
@@ -2310,6 +2336,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             enterpriseRegistry,
             employmentRegistry,
             orderBook,
+            enterprisesWithExternalShareholders,
             amm: sessionAMMRegistry.get(sessionId),
             multiAMMs: sessionMultiAMMRegistry.get(sessionId),
             enterpriseLedger: enterpriseLedgerMap,
