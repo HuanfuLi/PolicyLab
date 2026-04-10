@@ -1276,6 +1276,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           // in-action-loop position BEFORE this action's physics.wealthDelta is applied).
           // If the helper has less than the full help_amount, only transfer what is available
           // and clawback the uncovered portion from weekState.wealthDelta so no fiat is destroyed.
+          // SFC fix: HELP with no valid target — reverse the wealth cost to prevent fiat destruction.
+          if (action.actionCode === 'HELP' && !targetAgent && physics.wealthDelta < 0) {
+            weekState.wealthDelta -= physics.wealthDelta; // undo the -5
+          }
           if (action.actionCode === 'HELP' && targetAgent && physics.wealthDelta < 0) {
             const beneficiaryState = weekStateMap.get(targetAgent.id);
             if (beneficiaryState) {
@@ -1738,7 +1742,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         else ammFoodTrend = 'flat';
         // Replace or prepend food entry
         const withoutFood = latestMarketBoard.filter(e => e.itemType !== 'food');
-        const INITIAL_FOOD_SPOT_PRICE = 6.0;
         latestMarketBoard = [{ itemType: 'food', averageClearingPrice: ammFoodPrice, trend: ammFoodTrend }, ...withoutFood];
         // Update price history for food from AMM
         let priceHist = sessionPriceHistory.get(sessionId);

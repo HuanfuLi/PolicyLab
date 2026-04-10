@@ -164,8 +164,9 @@ export class SimulationLifecycle {
     cleanupSessionState(this.sessionId);
 
     const message = err instanceof Error ? err.message : 'Simulation error';
-    simulationManager.broadcast(this.sessionId, { type: 'error', message });
+    try { simulationManager.broadcast(this.sessionId, { type: 'error', message }); } catch { /* best-effort */ }
     console.error(`[SimulationRunner] Session ${this.sessionId}:`, err);
+    try { await sessionRepo.updateStage(this.sessionId, 'simulation-complete'); } catch { /* best-effort */ }
     simulationManager.finish(this.sessionId);
   }
 

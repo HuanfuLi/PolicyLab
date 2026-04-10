@@ -21,7 +21,7 @@ import type { AgentWeekState } from './weekState.js';
  */
 export function applyMETMetabolism(
   state: AgentWeekState,
-  agent: { role: string; age?: number; weightKg?: number; currentWealth: number },
+  agent: { id: string; role: string; age?: number; weightKg?: number; currentWealth: number },
   sessionId: string,
   iterationNumber: number,
 ): void {
@@ -37,7 +37,7 @@ export function applyMETMetabolism(
   const enterpriseIndustry = (() => {
     const enterprises = getEnterpriseRegistry(sessionId);
     for (const ent of enterprises.values()) {
-      if (ent.employees.has(agent.role)) return ent.industry; // approximate match
+      if (ent.employees.has(agent.id)) return ent.industry;
     }
     return undefined;
   })();

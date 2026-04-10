@@ -764,7 +764,10 @@ export function processIteration(params: {
   }
 
   // ── Step 6: Process coupon payments ────────────────────────────────────────
-  const couponResult = processCoupons({ holdings: bondHoldings, currentIteration: iterationNumber });
+  // SFC fix: exclude bonds held by dead agents — otherwise the issuer is debited
+  // but the holder credit is silently skipped by applyWealthDelta, destroying fiat.
+  const liveBondHoldings = bondHoldings.filter(h => agentWealth.has(h.ownerAgentId));
+  const couponResult = processCoupons({ holdings: liveBondHoldings, currentIteration: iterationNumber });
   for (const [id, amount] of couponResult.wealthDeltas) {
     applyWealthDelta(id, amount);
   }
@@ -775,7 +778,7 @@ export function processIteration(params: {
   delta.trace.push(...couponResult.trace);
 
   // ── Step 7: Process bond maturities ────────────────────────────────────────
-  const maturityResult = processMaturities({ holdings: bondHoldings, currentIteration: iterationNumber });
+  const maturityResult = processMaturities({ holdings: liveBondHoldings, currentIteration: iterationNumber });
   for (const [id, amount] of maturityResult.wealthDeltas) {
     applyWealthDelta(id, amount);
   }
