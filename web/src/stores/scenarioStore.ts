@@ -42,14 +42,19 @@ function computeDeltas(
   for (const key of new Set([...Object.keys(fullBaseline), ...Object.keys(fullTab)])) {
     const baseVal = fullBaseline[key];
     const tabVal = fullTab[key];
+    // Normalize feature flag booleans: treat undefined as false to avoid
+    // undefined vs false asymmetry (e.g. capitalMarketsEnabled may be absent on older configs).
+    const defaultIsBoolean = typeof (DEFAULT_ECONOMY_CONFIG as Record<string, unknown>)[key] === 'boolean';
+    const normalizedBase = defaultIsBoolean && baseVal === undefined ? false : baseVal;
+    const normalizedTab = defaultIsBoolean && tabVal === undefined ? false : tabVal;
     if (
-      baseVal !== tabVal &&
-      (typeof baseVal === 'number' || typeof baseVal === 'boolean') &&
-      (typeof tabVal === 'number' || typeof tabVal === 'boolean')
+      normalizedBase !== normalizedTab &&
+      (typeof normalizedBase === 'number' || typeof normalizedBase === 'boolean') &&
+      (typeof normalizedTab === 'number' || typeof normalizedTab === 'boolean')
     ) {
       deltas[key] = {
-        from: baseVal as number | boolean,
-        to: tabVal as number | boolean,
+        from: normalizedBase as number | boolean,
+        to: normalizedTab as number | boolean,
       };
     }
   }
@@ -240,6 +245,8 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
       set({ runningScenarios: false });
       return allForkIds;
     } catch (err) {
+      // Abort baseline simulation if it was started
+      fetch(`/api/sessions/${baseSessionId}/simulate/abort`, { method: 'POST' }).catch(() => {});
       // Clean up any forks that were created but failed to start simulation —
       // abort running simulations and delete orphaned forked sessions.
       // Awaited in parallel so that a retry doesn't race with in-flight cleanup.

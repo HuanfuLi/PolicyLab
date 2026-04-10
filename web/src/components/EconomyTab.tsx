@@ -609,8 +609,16 @@ export default function EconomyTab({
                             min={meta.min}
                             max={meta.max}
                             step={meta.step}
-                            onChange={e => handleParamChange(meta, Number(e.target.value))}
-                            onBlur={e => commitParam(meta, Number(e.target.value))}
+                            onChange={e => {
+                              const val = Number(e.target.value);
+                              if (!isNaN(val)) handleParamChange(meta, val);
+                            }}
+                            onBlur={e => {
+                              const val = Number(e.target.value);
+                              if (!isNaN(val) && val >= (meta.min ?? 0)) {
+                                commitParam(meta, val);
+                              }
+                            }}
                             style={{
                               width: '80px',
                               padding: '0.2rem 0.4rem',

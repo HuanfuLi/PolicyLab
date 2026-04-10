@@ -125,7 +125,10 @@ const MACRO_HISTORY_CAP = 1000;
 export const useSimulationStore = create<SimulationStore>((set, get) => ({
   ...initialState,
 
-  reset: () => set({ ...initialState, macroHistory: [] as TelemetryLog[] }),
+  reset: () => {
+    macroHistoryGeneration = 0;
+    set({ ...initialState, macroHistory: [] as TelemetryLog[] });
+  },
 
   loadAgents: async (sessionId: string) => {
     try {

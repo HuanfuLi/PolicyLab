@@ -267,9 +267,18 @@ export function generateAgentRoster(
   const normIndustry = industryPct / total;
 
   // Calculate sector counts
-  const agriCount = Math.round(agentCount * normAgri);
-  const industryCount = Math.round(agentCount * normIndustry);
-  const servicesCount = agentCount - agriCount - industryCount; // remainder to services
+  let agriCount = Math.round(agentCount * normAgri);
+  let industryCount = Math.round(agentCount * normIndustry);
+  // Ensure sector counts don't exceed total agent count
+  if (agriCount + industryCount > agentCount) {
+    const excess = agriCount + industryCount - agentCount;
+    if (agriCount >= industryCount) {
+      agriCount = Math.max(0, agriCount - excess);
+    } else {
+      industryCount = Math.max(0, industryCount - excess);
+    }
+  }
+  const servicesCount = Math.max(0, agentCount - agriCount - industryCount);
 
   // Distribute wealth using Gini
   // World Bank Gini is 0-100; distributeWealth expects 0-1 (Pitfall 4)

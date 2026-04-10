@@ -178,8 +178,12 @@ const Simulation = () => {
   const handleAbort = async () => {
     if (!id) return;
     sseCleanupRef.current?.();
+    try {
+      await abortAndReset(id);
+    } catch {
+      // Server abort failed — still navigate since user explicitly requested abort
+    }
     reset();
-    await abortAndReset(id);
     navigate(`/session/${id}/design`);
   };
 

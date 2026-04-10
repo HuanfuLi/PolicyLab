@@ -245,7 +245,7 @@ export async function runGovernanceCycle(params: {
   const newPolicy: SessionPolicy = { ...currentPolicy };
 
   for (const { item, yesCount, noCount } of voteResults) {
-    const passes = yesCount > noCount; // Simple majority (ties go to yes)
+    const passes = yesCount > noCount; // Strict majority required; ties and abstentions reject the item.
     if (passes) {
       newPolicy[item.field] = item.proposedValue;
       ratifiedItems.push(item);
