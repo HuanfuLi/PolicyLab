@@ -208,7 +208,7 @@ export async function generateDesign(
         role: string;
         background: string;
         personalityTraits?: string[];
-        initialStats: { wealth: number; health: number; happiness: number; cortisol?: number; dopamine?: number };
+        initialStats: { wealth: number; health: number; happiness: number; cortisol?: number };
       }>;
       enterprises?: Array<{
         id: string;
@@ -245,7 +245,6 @@ export async function generateDesign(
       health: a.initialStats?.health ?? 70,
       happiness: a.initialStats?.happiness ?? 60,
       cortisol: a.initialStats?.cortisol ?? 20,
-      dopamine: a.initialStats?.dopamine ?? 50,
     };
     return {
       id: uuidv4(),
@@ -292,7 +291,7 @@ export async function generateDesign(
         try { return sum + (JSON.parse(a.initialStats).wealth ?? 50); } catch { return sum + 50; }
       }, 0);
       const bankWealth = Math.round(totalAgentWealth * 0.5);
-      const bankStats = JSON.stringify({ wealth: bankWealth, health: 100, happiness: 100, cortisol: 0, dopamine: 50 });
+      const bankStats = JSON.stringify({ wealth: bankWealth, health: 100, happiness: 100, cortisol: 0 });
       await db.insert(agents).values({
         id: uuidv4(),
         sessionId: session.id,
@@ -372,9 +371,9 @@ export async function refine(
       remove?: string[];
     } | null;
     agentChanges: {
-      add: Array<{ name: string; role: string; background: string; personalityTraits?: string[]; initialStats: { wealth: number; health: number; happiness: number; cortisol?: number; dopamine?: number } }>;
+      add: Array<{ name: string; role: string; background: string; personalityTraits?: string[]; initialStats: { wealth: number; health: number; happiness: number; cortisol?: number } }>;
       remove: string[];
-      modify: Array<{ name: string; role: string; background: string; personalityTraits?: string[]; initialStats: { wealth: number; health: number; happiness: number; cortisol?: number; dopamine?: number } }>;
+      modify: Array<{ name: string; role: string; background: string; personalityTraits?: string[]; initialStats: { wealth: number; health: number; happiness: number; cortisol?: number } }>;
     };
     agentsSummary: string | null;
   }>(raw);
@@ -387,7 +386,6 @@ export async function refine(
       health: Math.max(0, Math.min(100, Math.round(Number(obj.health) || 70))),
       happiness: Math.max(0, Math.min(100, Math.round(Number(obj.happiness) || 60))),
       cortisol: Math.max(0, Math.min(100, Math.round(Number(obj.cortisol) || 20))),
-      dopamine: Math.max(0, Math.min(100, Math.round(Number(obj.dopamine) || 50))),
     };
   };
 

@@ -45,7 +45,9 @@ export async function runReflection(sessionId: string): Promise<void> {
     if (!session) throw new Error(`Session ${sessionId} not found`);
 
     const agents = await agentRepo.listBySession(createScope(sessionId));
-    const citizenAgents = agents.filter(a => !a.isCentralAgent);
+    // Exclude Central Agent and institutional agents (bank/central_bank) from reflection.
+    // Institutional agents don't have personal experiences to reflect on.
+    const citizenAgents = agents.filter(a => !a.isCentralAgent && a.type !== 'bank');
 
     // Load iteration summaries
     const iterRows = await db
@@ -62,24 +64,12 @@ export async function runReflection(sessionId: string): Promise<void> {
     const total = citizenAgents.length;
 
     // ── Build per-agent stat trajectories from resolved actions (D-21) ──────
+    // Resolved actions store finalWealth/finalHealth/finalHappiness in outcome JSON,
+    // allowing reconstruction of per-agent per-iteration stat snapshots.
     const allResolvedActions = await db
       .select()
       .from(resolvedActions)
       .where(eq(resolvedActions.sessionId, sessionId));
-
-    // Group resolved actions by agent and iteration
-    const agentActionsByIter = new Map<string, Map<string, string[]>>();
-    for (const ra of allResolvedActions) {
-      if (!agentActionsByIter.has(ra.agentId)) {
-        agentActionsByIter.set(ra.agentId, new Map());
-      }
-      const iterMap = agentActionsByIter.get(ra.agentId)!;
-      const iterKey = ra.iterationId ?? 'unknown';
-      if (!iterMap.has(iterKey)) {
-        iterMap.set(iterKey, []);
-      }
-      iterMap.get(iterKey)!.push(ra.action);
-    }
 
     // Build trajectory lookup: map iteration IDs to numbers
     const iterIdToNumber = new Map<string, number>();
@@ -87,25 +77,63 @@ export async function runReflection(sessionId: string): Promise<void> {
       iterIdToNumber.set(row.id, row.iterationNumber);
     }
 
-    function buildStatTrajectory(agentId: string, agent: Agent): StatTrajectoryEntry[] {
-      const iterActions = agentActionsByIter.get(agentId);
-      if (!iterActions) return [];
-      const entries: StatTrajectoryEntry[] = [];
-      for (const [iterId, actions] of iterActions) {
-        const iterNum = iterIdToNumber.get(iterId) ?? 0;
-        if (iterNum === 0) continue;
-        // Per-iteration agent stats are not stored in DB; use final stats as approximation
-        // with iteration context from actions taken
-        entries.push({
-          iteration: iterNum,
-          wealth: agent.currentStats.wealth,
-          health: agent.currentStats.health,
-          happiness: agent.currentStats.happiness,
-          actions,
-        });
+    // Group resolved actions by agent → iteration, extracting both actions and stats
+    interface IterEntry { actions: string[]; finalWealth?: number; finalHealth?: number; finalHappiness?: number; wealthDelta: number; healthDelta: number; happinessDelta: number }
+    const agentIterData = new Map<string, Map<string, IterEntry>>();
+    for (const ra of allResolvedActions) {
+      if (!agentIterData.has(ra.agentId)) agentIterData.set(ra.agentId, new Map());
+      const iterMap = agentIterData.get(ra.agentId)!;
+      const iterKey = ra.iterationId ?? 'unknown';
+      if (!iterMap.has(iterKey)) {
+        iterMap.set(iterKey, { actions: [], wealthDelta: 0, healthDelta: 0, happinessDelta: 0 });
       }
-      // Sort by iteration and limit to last 10 for token budget
-      entries.sort((a, b) => a.iteration - b.iteration);
+      const entry = iterMap.get(iterKey)!;
+      entry.actions.push(ra.action);
+      if (ra.outcome) {
+        try {
+          const parsed = JSON.parse(ra.outcome) as Record<string, unknown>;
+          if (parsed.finalWealth !== undefined) entry.finalWealth = Number(parsed.finalWealth);
+          if (parsed.finalHealth !== undefined) entry.finalHealth = Number(parsed.finalHealth);
+          if (parsed.finalHappiness !== undefined) entry.finalHappiness = Number(parsed.finalHappiness);
+          entry.wealthDelta += Number(parsed.wealthDelta ?? 0);
+          entry.healthDelta += Number(parsed.healthDelta ?? 0);
+          entry.happinessDelta += Number(parsed.happinessDelta ?? 0);
+        } catch { /* ignore malformed outcome */ }
+      }
+    }
+
+    const clampStat = (v: number) => Math.min(100, Math.max(0, v));
+
+    function buildStatTrajectory(agentId: string, agent: Agent): StatTrajectoryEntry[] {
+      const iterData = agentIterData.get(agentId);
+      if (!iterData) return [];
+
+      // Reconstruct per-iteration stats using final values (preferred) or delta accumulation (fallback)
+      let w = agent.initialStats.wealth;
+      let h = agent.initialStats.health;
+      let hap = agent.initialStats.happiness;
+
+      // Sort iteration entries by iteration number for correct accumulation order
+      const sortedEntries = [...iterData.entries()]
+        .map(([iterId, data]) => ({ iterNum: iterIdToNumber.get(iterId) ?? 0, data }))
+        .filter(e => e.iterNum > 0)
+        .sort((a, b) => a.iterNum - b.iterNum);
+
+      const entries: StatTrajectoryEntry[] = [];
+      for (const { iterNum, data } of sortedEntries) {
+        if (data.finalWealth !== undefined && data.finalHealth !== undefined && data.finalHappiness !== undefined) {
+          w = data.finalWealth;
+          h = data.finalHealth;
+          hap = data.finalHappiness;
+        } else {
+          // Delta accumulation fallback for old data without final values
+          w = Math.max(0, w + data.wealthDelta);
+          h = clampStat(h + data.healthDelta);
+          hap = clampStat(hap + data.happinessDelta);
+        }
+        entries.push({ iteration: iterNum, wealth: w, health: h, happiness: hap, actions: data.actions });
+      }
+      // Limit to last 10 for token budget
       return entries.slice(-10);
     }
 

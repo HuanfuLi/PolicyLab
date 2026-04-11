@@ -14,6 +14,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { getProvider } from '../llm/gateway.js';
 import { readSettings } from '../settings.js';
 import { buildComparisonMessages, buildComparisonChatMessages } from '../llm/prompts/index.js';
+import type { IterationMetricRow, WealthDistribution } from '../llm/prompts/comparison.js';
+import { getSessionTelemetry } from '../orchestration/simulationRunner.js';
 import { parseJSON } from '../parsers/json.js';
 import type { ComparisonResult, ChatMessage, EconomyParamDiff } from '@policylab/shared';
 
@@ -126,6 +128,64 @@ const PARAM_LABELS: Record<string, string> = {
   centralBankEnabled: 'Central Bank Enabled',
 };
 
+/** Build per-iteration metric trajectory from iteration rows + telemetry for comparison prompt grounding. */
+function buildTimeSeries(
+  iterRows: Array<{ iterationNumber: number; statistics: string }>,
+  sessionId: string,
+): IterationMetricRow[] {
+  const telemetry = getSessionTelemetry(sessionId);
+  const telemetryByIter = new Map(telemetry.map(t => [t.iterationNumber, t]));
+
+  return iterRows.map(row => {
+    let avgWealth = 0, avgHealth = 0, avgHappiness = 0, gini: number | undefined;
+    try {
+      const stats = JSON.parse(row.statistics) as Record<string, unknown>;
+      avgWealth = Math.round((stats.avgWealth as number) ?? 0);
+      avgHealth = Math.round((stats.avgHealth as number) ?? 0);
+      avgHappiness = Math.round((stats.avgHappiness as number) ?? 0);
+      gini = typeof stats.giniWealth === 'number' ? stats.giniWealth : undefined;
+    } catch { /* use defaults */ }
+
+    const t = telemetryByIter.get(row.iterationNumber);
+    return {
+      iter: row.iterationNumber,
+      avgWealth,
+      avgHealth,
+      avgHappiness,
+      gini: gini ?? t?.giniCoefficient,
+      cpi: t?.cpi,
+      m1: t?.m1,
+    };
+  });
+}
+
+/** Compute wealth distribution quartiles from alive agents. */
+function computeWealthDistribution(agentRows: Array<{ status: string | null; currentStats: string }>): WealthDistribution | undefined {
+  const aliveWealth = agentRows
+    .filter(a => a.status !== 'dead')
+    .map(a => {
+      try {
+        const stats = JSON.parse(a.currentStats) as { wealth?: number };
+        return stats.wealth ?? 0;
+      } catch { return 0; }
+    })
+    .sort((a, b) => a - b);
+
+  if (aliveWealth.length < 4) return undefined;
+
+  const q1End = Math.floor(aliveWealth.length * 0.25);
+  const q3Start = Math.floor(aliveWealth.length * 0.75);
+  const bottom25 = aliveWealth.slice(0, q1End);
+  const top25 = aliveWealth.slice(q3Start);
+  const medianIdx = Math.floor(aliveWealth.length / 2);
+
+  return {
+    bottom25Avg: Math.round(bottom25.reduce((s, v) => s + v, 0) / (bottom25.length || 1)),
+    median: Math.round(aliveWealth[medianIdx]),
+    top25Avg: Math.round(top25.reduce((s, v) => s + v, 0) / (top25.length || 1)),
+  };
+}
+
 /** Compute deterministic param diffs between two sessions' economyConfig objects. */
 function computeParamDiffs(
   config1: Record<string, unknown>,
@@ -169,13 +229,48 @@ router.post('/', async (req, res) => {
   try {
     const settings = readSettings();
     const provider = getProvider();
-    const llmMessages = buildComparisonMessages(summary1, summary2);
+
+    const economyParamDiffs = computeParamDiffs(summary1.economyConfig, summary2.economyConfig);
+
+    // Gather per-iteration time-series for trend grounding
+    const [iterRows1, iterRows2] = await Promise.all([
+      db.select({ iterationNumber: iterations.iterationNumber, statistics: iterations.statistics })
+        .from(iterations).where(eq(iterations.sessionId, id1)).orderBy(asc(iterations.iterationNumber)),
+      db.select({ iterationNumber: iterations.iterationNumber, statistics: iterations.statistics })
+        .from(iterations).where(eq(iterations.sessionId, id2)).orderBy(asc(iterations.iterationNumber)),
+    ]);
+    const timeSeries1 = buildTimeSeries(iterRows1, id1);
+    const timeSeries2 = buildTimeSeries(iterRows2, id2);
+
+    // Gather wealth distribution for inequality grounding
+    const [agentRows1, agentRows2] = await Promise.all([
+      db.select({ status: agents.status, currentStats: agents.currentStats })
+        .from(agents).where(eq(agents.sessionId, id1)),
+      db.select({ status: agents.status, currentStats: agents.currentStats })
+        .from(agents).where(eq(agents.sessionId, id2)),
+    ]);
+    const wealthDist1 = computeWealthDistribution(agentRows1);
+    const wealthDist2 = computeWealthDistribution(agentRows2);
+
+    // Sample time-series if iterations exceed 30 to keep prompt within token budget.
+    // Every Nth row is kept, plus always the first and last for endpoint anchoring.
+    const sampleTimeSeries = (rows: typeof timeSeries1): typeof timeSeries1 => {
+      if (rows.length <= 30) return rows;
+      const step = Math.ceil(rows.length / 25);
+      const sampled = rows.filter((_, i) => i === 0 || i === rows.length - 1 || i % step === 0);
+      return sampled;
+    };
+
+    const llmMessages = buildComparisonMessages(
+      summary1, summary2,
+      economyParamDiffs.length > 0 ? economyParamDiffs : undefined,
+      sampleTimeSeries(timeSeries1), sampleTimeSeries(timeSeries2),
+      wealthDist1, wealthDist2,
+    );
     const raw = await provider.chat(llmMessages, {
       model: settings.centralAgentModel
     });
     const parsed = parseJSON<{ narrative: string; dimensions: ComparisonResult['dimensions']; verdict: string }>(raw);
-
-    const economyParamDiffs = computeParamDiffs(summary1.economyConfig, summary2.economyConfig);
 
     const comparison: ComparisonResult = {
       session1Id: id1,

@@ -47,9 +47,6 @@ export interface PhysicsConfigValues {
   suppressionCortisolPenalty: number;
   /** Happiness removed per tick from an agent under active SUPPRESS enforcement. */
   suppressionHappinessPenalty: number;
-  /** Hedonic adaptation: dopamine decays by this amount at the end of every tick. */
-  dopamineDecay: number;
-
   // ── Interrupt Thresholds ─────────────────────────────────────────────
   /** Health threshold below which the starvation action-queue interrupt fires. */
   starvationHealthInterrupt: number;
@@ -89,7 +86,6 @@ const DEFAULTS: PhysicsConfigValues = {
   lowHealthCortisolPenalty: 8,
   suppressionCortisolPenalty: 15,
   suppressionHappinessPenalty: -8,
-  dopamineDecay: -3,
   starvationHealthInterrupt: 20,
   mentalBreakdownCortisolInterrupt: 90,
   satietyKcalPerPoint: 70,

@@ -27,13 +27,12 @@ function makeAgent(overrides: Partial<Agent> & { id: string }): Agent {
     name: overrides.name ?? 'Agent ' + overrides.id,
     role: overrides.role ?? 'citizen',
     background: '',
-    initialStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20, dopamine: 50 },
+    initialStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20 },
     currentStats: {
       wealth: overrides.currentStats?.wealth ?? 100,
       health: overrides.currentStats?.health ?? 70,
       happiness: overrides.currentStats?.happiness ?? 60,
       cortisol: overrides.currentStats?.cortisol ?? 20,
-      dopamine: overrides.currentStats?.dopamine ?? 50,
     },
     isAlive: true,
     status: 'alive',
@@ -90,8 +89,8 @@ describe('canIssueLoan', () => {
 // ── processLoanRequest tests ─────────────────────────────────────────────────
 
 describe('processLoanRequest', () => {
-  const bank = makeAgent({ id: 'bank-1', type: 'bank', currentStats: { wealth: 200, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-  const borrower = makeAgent({ id: 'borrower-1', currentStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+  const bank = makeAgent({ id: 'bank-1', type: 'bank', currentStats: { wealth: 200, health: 70, happiness: 60, cortisol: 20 } });
+  const borrower = makeAgent({ id: 'borrower-1', currentStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20 } });
 
   it('returns a LoanContract with correct principal and a deposit delta increasing borrower balance by principal', () => {
     const result = processLoanRequest({
@@ -129,7 +128,7 @@ describe('processLoanRequest', () => {
 
   it('collateralAmount is capped at principal when borrowerWealth * 0.5 > principal', () => {
     // borrower.wealth=300, principal=50 => collateral = min(150, 50) = 50
-    const richBorrower = makeAgent({ id: 'borrower-2', currentStats: { wealth: 300, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const richBorrower = makeAgent({ id: 'borrower-2', currentStats: { wealth: 300, health: 70, happiness: 60, cortisol: 20 } });
     const result = processLoanRequest({
       bank,
       borrower: richBorrower,
@@ -157,7 +156,7 @@ describe('processLoanRequest', () => {
 
   it('rejects when reserve requirement is not met', () => {
     // bank with no reserves issuing into a full deposit pool
-    const poorBank = makeAgent({ id: 'bank-poor', type: 'bank', currentStats: { wealth: 1, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const poorBank = makeAgent({ id: 'bank-poor', type: 'bank', currentStats: { wealth: 1, health: 70, happiness: 60, cortisol: 20 } });
     // deposits far exceed reserves: reserve ratio = 1/(1000+50) ~0.001 < 0.10
     const manyDeposits: DepositAccount[] = [
       makeDeposit({ id: 'd1', ownerAgentId: 'a1', bankAgentId: 'bank-poor', balance: 1000 }),
@@ -329,7 +328,7 @@ describe('processDefault', () => {
 
 describe('accrueDepositInterest', () => {
   it('increases each deposit balance by balance * depositInterestRate', () => {
-    const bank = makeAgent({ id: 'bank-1', type: 'bank', currentStats: { wealth: 1000, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const bank = makeAgent({ id: 'bank-1', type: 'bank', currentStats: { wealth: 1000, health: 70, happiness: 60, cortisol: 20 } });
     const deposits = [
       makeDeposit({ id: 'd1', ownerAgentId: 'a1', bankAgentId: 'bank-1', balance: 1000 }),
       makeDeposit({ id: 'd2', ownerAgentId: 'a2', bankAgentId: 'bank-1', balance: 500 }),
@@ -344,7 +343,7 @@ describe('accrueDepositInterest', () => {
   });
 
   it('decreases bank reserves by the total interest paid', () => {
-    const bank = makeAgent({ id: 'bank-1', type: 'bank', currentStats: { wealth: 1000, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const bank = makeAgent({ id: 'bank-1', type: 'bank', currentStats: { wealth: 1000, health: 70, happiness: 60, cortisol: 20 } });
     const deposits = [
       makeDeposit({ id: 'd1', ownerAgentId: 'a1', bankAgentId: 'bank-1', balance: 500 }),
     ];
@@ -355,7 +354,7 @@ describe('accrueDepositInterest', () => {
 
   it('pro-rates interest when bank reserves are insufficient', () => {
     // bank has only 0.5 reserves but needs to pay 1 in interest
-    const bank = makeAgent({ id: 'bank-1', type: 'bank', currentStats: { wealth: 0.5, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const bank = makeAgent({ id: 'bank-1', type: 'bank', currentStats: { wealth: 0.5, health: 70, happiness: 60, cortisol: 20 } });
     const deposits = [
       makeDeposit({ id: 'd1', ownerAgentId: 'a1', bankAgentId: 'bank-1', balance: 500 }),
     ];
@@ -370,7 +369,7 @@ describe('accrueDepositInterest', () => {
 
 describe('processIteration', () => {
   it('returns a BankingDelta with trace, depositUpdates, loanUpdates arrays', () => {
-    const bank = makeAgent({ id: 'bank-1', type: 'bank', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const bank = makeAgent({ id: 'bank-1', type: 'bank', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20 } });
     const borrower = makeAgent({ id: 'borrower-1' });
     const loan: LoanContract = {
       id: 'loan-1',
@@ -411,8 +410,8 @@ describe('processIteration', () => {
 // ── Differentiated Loan Products (D-25) ─────────────────────────────────────
 
 describe('Differentiated Loan Products (D-25)', () => {
-  const bank = makeAgent({ id: 'bank-1', type: 'bank', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-  const borrower = makeAgent({ id: 'borrower-1', currentStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+  const bank = makeAgent({ id: 'bank-1', type: 'bank', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20 } });
+  const borrower = makeAgent({ id: 'borrower-1', currentStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20 } });
 
   it('business loan rate = baseLoanInterestRate * (1 - businessLoanRateDiscount)', () => {
     const result = processLoanRequest({

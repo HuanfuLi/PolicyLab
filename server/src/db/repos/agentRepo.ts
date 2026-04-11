@@ -17,10 +17,9 @@ function parseStats(raw: string): AgentStats {
       health: parsed.health ?? 70,
       happiness: parsed.happiness ?? 60,
       cortisol: parsed.cortisol ?? 20,
-      dopamine: parsed.dopamine ?? 50,
     };
   } catch {
-    return { wealth: 50, health: 70, happiness: 60, cortisol: 20, dopamine: 50 };
+    return { wealth: 50, health: 70, happiness: 60, cortisol: 20 };
   }
 }
 
@@ -106,14 +105,13 @@ export const agentRepo = {
    * Update an agent's current stats after an iteration resolves.
    * Clamps values to [0, 100].
    */
-  async updateStats(id: string, wealth: number, health: number, happiness: number, cortisol: number = 20, dopamine: number = 50): Promise<Agent> {
-    const clamp = (v: number) => Math.min(100, Math.max(0, Math.round(v)));
+  async updateStats(id: string, wealth: number, health: number, happiness: number, cortisol: number = 20): Promise<Agent> {
+    const clamp = (v: number) => Math.min(100, Math.max(0, v));
     const stats: AgentStats = {
       wealth: Math.max(0, wealth),
       health: clamp(health),
       happiness: clamp(happiness),
       cortisol: clamp(cortisol),
-      dopamine: clamp(dopamine),
     };
     await db
       .update(agents)
@@ -135,10 +133,10 @@ export const agentRepo = {
    * Much faster than individual UPDATE statements when agent count is high.
    */
   async bulkUpdateStats(
-    updates: Array<{ id: string; wealth: number; health: number; happiness: number; cortisol?: number; dopamine?: number }>
+    updates: Array<{ id: string; wealth: number; health: number; happiness: number; cortisol?: number }>
   ): Promise<void> {
     if (updates.length === 0) return;
-    const clamp = (v: number) => Math.min(100, Math.max(0, Math.round(v)));
+    const clamp = (v: number) => Math.min(100, Math.max(0, v));
     const stmt = sqlite.prepare(
       `UPDATE agents SET current_stats = ? WHERE id = ?`
     );
@@ -149,7 +147,6 @@ export const agentRepo = {
           health: clamp(u.health),
           happiness: clamp(u.happiness),
           cortisol: clamp(u.cortisol ?? 20),
-          dopamine: clamp(u.dopamine ?? 50),
         };
         stmt.run(JSON.stringify(stats), u.id);
       }

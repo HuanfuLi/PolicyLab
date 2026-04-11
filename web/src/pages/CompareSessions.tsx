@@ -92,19 +92,59 @@ function ConfigDiffSection({ diffs, session1Title, session2Title }: {
   );
 }
 
+function MiniLineChart({ label, color, values, yMin, yMax }: {
+  label: string; color: string;
+  values: Array<{ idx: number; val: number }>;
+  yMin: number; yMax: number;
+}) {
+  const width = 400;
+  const height = 70;
+  const padL = 40;
+  const padR = 8;
+  const padY = 10;
+
+  const xRange = Math.max(1, values.length - 1);
+  const yRange = yMax - yMin || 1;
+
+  const sx = (i: number) => padL + (i / xRange) * (width - padL - padR);
+  const sy = (v: number) => padY + (height - 2 * padY) - ((v - yMin) / yRange) * (height - 2 * padY);
+
+  const pts = values.map((d, i) => `${sx(i)},${sy(d.val)}`).join(' ');
+
+  const fmt = (n: number) => {
+    if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    if (Math.abs(n) >= 1_000) return (n / 1_000).toFixed(1) + 'k';
+    return Number.isInteger(n) ? n.toString() : n.toFixed(1);
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.15rem' }}>
+        <span style={{ color, fontSize: '0.75rem', fontWeight: 600 }}>{label}</span>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
+        {/* Y-axis labels */}
+        <text x={padL - 4} y={sy(yMax) + 3} fill="var(--text-dim)" fontSize="8" textAnchor="end">{fmt(yMax)}</text>
+        <text x={padL - 4} y={sy(yMin) + 3} fill="var(--text-dim)" fontSize="8" textAnchor="end">{fmt(yMin)}</text>
+        {/* Grid */}
+        <line x1={padL} y1={sy(yMin)} x2={width - padR} y2={sy(yMin)} stroke="var(--glass-border)" strokeWidth="0.5" />
+        <line x1={padL} y1={sy((yMin + yMax) / 2)} x2={width - padR} y2={sy((yMin + yMax) / 2)} stroke="var(--glass-border)" strokeWidth="0.5" strokeDasharray="3,3" />
+        <line x1={padL} y1={sy(yMax)} x2={width - padR} y2={sy(yMax)} stroke="var(--glass-border)" strokeWidth="0.5" />
+        {/* Line */}
+        <polyline points={pts} fill="none" style={{ stroke: color }} strokeWidth="2" strokeLinejoin="round" />
+      </svg>
+    </div>
+  );
+}
+
 function SVGLineChart({ title, iterations }: { title: string, iterations: Array<{ statistics?: { avgWealth?: number; avgHealth?: number; avgHappiness?: number } }> }) {
-  if (!iterations || iterations.length === 0) return (
+  const empty = (
     <div style={{ flex: 1, background: 'var(--panel-alpha-05)', borderRadius: '8px', padding: '1rem', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.85rem' }}>
       No metric history available for {title}
     </div>
   );
 
-  const width = 400;
-  const height = 150;
-  const padUrl = 20;
-
-  const x = (i: number) => padUrl + (i / Math.max(1, iterations.length - 1)) * (width - 2 * padUrl);
-  const y = (val: number) => height - padUrl - (val / 100) * (height - 2 * padUrl);
+  if (!iterations || iterations.length === 0) return empty;
 
   // Filter to only iterations that have statistics — missing statistics would create
   // synthetic flat lines at the midpoint, causing the "locked at middle" visual bug
@@ -112,35 +152,27 @@ function SVGLineChart({ title, iterations }: { title: string, iterations: Array<
     .map((it, i) => ({ it, i }))
     .filter(({ it }) => it.statistics != null);
 
-  if (valid.length === 0) return (
-    <div style={{ flex: 1, background: 'var(--panel-alpha-05)', borderRadius: '8px', padding: '1rem', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.85rem' }}>
-      No metric history available for {title}
-    </div>
-  );
+  if (valid.length === 0) return empty;
 
-  const pointsWealth = valid.map(({ it, i }) => `${x(i)},${y(it.statistics?.avgWealth ?? 50)}`).join(' ');
-  const pointsHealth = valid.map(({ it, i }) => `${x(i)},${y(it.statistics?.avgHealth ?? 50)}`).join(' ');
-  const pointsHappiness = valid.map(({ it, i }) => `${x(i)},${y(it.statistics?.avgHappiness ?? 50)}`).join(' ');
+  const wealthVals = valid.map(({ it, i }) => ({ idx: i, val: it.statistics?.avgWealth ?? 0 }));
+  const healthVals = valid.map(({ it, i }) => ({ idx: i, val: it.statistics?.avgHealth ?? 0 }));
+  const happyVals  = valid.map(({ it, i }) => ({ idx: i, val: it.statistics?.avgHappiness ?? 0 }));
+
+  // Adaptive Y range for wealth; fixed 0-100 for health & happiness
+  const wealthMin = Math.min(...wealthVals.map(d => d.val));
+  const wealthMax = Math.max(...wealthVals.map(d => d.val));
+  const wealthPad = (wealthMax - wealthMin) * 0.1 || 10;
 
   return (
     <div style={{ flex: 1, background: 'var(--panel-alpha-05)', borderRadius: '8px', padding: '1rem' }}>
-      <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--color-bright)', textAlign: 'center' }}>
+      <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem', color: 'var(--color-bright)', textAlign: 'center' }}>
         {title} Metrics Over Time
       </h4>
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
-        <g stroke="var(--glass-border)" strokeWidth="1">
-          <line x1={padUrl} y1={y(0)} x2={width - padUrl} y2={y(0)} />
-          <line x1={padUrl} y1={y(50)} x2={width - padUrl} y2={y(50)} strokeDasharray="4,4" />
-          <line x1={padUrl} y1={y(100)} x2={width - padUrl} y2={y(100)} />
-        </g>
-        <polyline points={pointsWealth} fill="none" style={{ stroke: 'var(--success)' }} strokeWidth="2" />
-        <polyline points={pointsHealth} fill="none" style={{ stroke: 'var(--danger)' }} strokeWidth="2" />
-        <polyline points={pointsHappiness} fill="none" style={{ stroke: 'var(--chart-sapphire)' }} strokeWidth="2" />
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '0.5rem', fontSize: '0.75rem' }}>
-        <span style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>● Wealth</span>
-        <span style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>● Health</span>
-        <span style={{ color: 'var(--chart-sapphire)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>● Happiness</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+        <MiniLineChart label="Wealth" color="var(--success)" values={wealthVals}
+          yMin={Math.floor(wealthMin - wealthPad)} yMax={Math.ceil(wealthMax + wealthPad)} />
+        <MiniLineChart label="Health" color="var(--danger)" values={healthVals} yMin={0} yMax={100} />
+        <MiniLineChart label="Happiness" color="var(--chart-sapphire)" values={happyVals} yMin={0} yMax={100} />
       </div>
     </div>
   );
@@ -225,7 +257,6 @@ function EconomyComparisonCharts({ t1, t2, title1, title2 }: {
     { key: 'trustIndex', label: 'Trust Index' },
     { key: 'crimeRate', label: 'Crime Rate' },
     { key: 'averageCortisol', label: 'Avg Cortisol' },
-    { key: 'averageDopamine', label: 'Avg Dopamine' },
     { key: 'infrastructureQuality', label: 'Infrastructure Quality' },
     { key: 'educationQuality', label: 'Education Quality' },
   ];

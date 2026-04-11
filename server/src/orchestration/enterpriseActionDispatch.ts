@@ -24,7 +24,7 @@ export function applyEnterpriseAction(params: {
   multiAMMs?: Map<MultiAMMItemType, AutomatedMarketMaker>;
   /** Per-enterprise ledger for this iteration — updated by WORK_AT_ENTERPRISE. */
   enterpriseLedger?: Map<string, EnterpriseLedger>;
-}): { wealthDelta: number; healthDelta: number; happinessDelta: number; cortisolDelta: number; dopamineDelta: number } {
+}): { wealthDelta: number; healthDelta: number; happinessDelta: number; cortisolDelta: number } {
   const {
     iterationNumber,
     agent,
@@ -38,7 +38,7 @@ export function applyEnterpriseAction(params: {
     multiAMMs,
     enterpriseLedger,
   } = params;
-  const economyDelta = { wealthDelta: 0, healthDelta: 0, happinessDelta: 0, cortisolDelta: 0, dopamineDelta: 0 };
+  const economyDelta = { wealthDelta: 0, healthDelta: 0, happinessDelta: 0, cortisolDelta: 0 };
   const getNumber = (value: unknown, fallback: number): number => {
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;

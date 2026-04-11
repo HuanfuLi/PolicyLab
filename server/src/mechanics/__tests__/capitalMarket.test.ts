@@ -32,13 +32,12 @@ function makeAgent(overrides: Partial<Agent> & { id: string }): Agent {
     name: overrides.name ?? 'Agent ' + overrides.id,
     role: overrides.role ?? 'citizen',
     background: '',
-    initialStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20, dopamine: 50 },
+    initialStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20 },
     currentStats: {
       wealth: overrides.currentStats?.wealth ?? 100,
       health: overrides.currentStats?.health ?? 70,
       happiness: overrides.currentStats?.happiness ?? 60,
       cortisol: overrides.currentStats?.cortisol ?? 20,
-      dopamine: overrides.currentStats?.dopamine ?? 50,
     },
     isAlive: true,
     status: 'alive',
@@ -92,8 +91,8 @@ function makeBondHolding(overrides: Partial<BondHolding> & { id: string; ownerAg
 
 describe('processSharePurchase', () => {
   it('transfers wealth from buyer to enterprise owner (SFC neutral)', () => {
-    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 200, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 200, health: 70, happiness: 60, cortisol: 20 } });
+    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20 } });
     // Enterprise has 100 shares outstanding, so price = 500 / 100 = 5 fiat/share
     const sharesToBuy = 10;
 
@@ -126,8 +125,8 @@ describe('processSharePurchase', () => {
   });
 
   it('creates position with correct weighted average cost basis', () => {
-    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 400, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20 } });
+    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 400, health: 70, happiness: 60, cortisol: 20 } });
     // First purchase: no existing position, price = 400/100 = 4
     const result = processSharePurchase({
       sessionId: 'session-1',
@@ -145,8 +144,8 @@ describe('processSharePurchase', () => {
   });
 
   it('rejects purchase when buyer has insufficient wealth', () => {
-    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 10, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 10, health: 70, happiness: 60, cortisol: 20 } });
+    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20 } });
     // price = 500/100 = 5 per share. 50 shares = 250 total. Buyer only has 10.
     const result = processSharePurchase({
       sessionId: 'session-1',
@@ -164,8 +163,8 @@ describe('processSharePurchase', () => {
   });
 
   it('updates existing position with weighted average cost basis', () => {
-    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 600, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20 } });
+    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 600, health: 70, happiness: 60, cortisol: 20 } });
     const existing = makeEquityPosition({
       id: 'pos-1',
       ownerAgentId: 'buyer',
@@ -192,8 +191,8 @@ describe('processSharePurchase', () => {
   });
 
   it('uses fixed price of 10 for IPO (zero shares outstanding)', () => {
-    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 200, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 0, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 200, health: 70, happiness: 60, cortisol: 20 } });
+    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 0, health: 70, happiness: 60, cortisol: 20 } });
     const result = processSharePurchase({
       sessionId: 'session-1',
       buyer,
@@ -215,9 +214,9 @@ describe('processSharePurchase', () => {
 
 describe('processShareSale', () => {
   it('transfers wealth from buyer to seller (SFC neutral)', () => {
-    const seller = makeAgent({ id: 'seller', currentStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 300, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const seller = makeAgent({ id: 'seller', currentStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20 } });
+    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 300, health: 70, happiness: 60, cortisol: 20 } });
+    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20 } });
     const sellerPosition = makeEquityPosition({
       id: 'pos-1',
       ownerAgentId: 'seller',
@@ -255,9 +254,9 @@ describe('processShareSale', () => {
   });
 
   it('rejects sale when seller has insufficient shares', () => {
-    const seller = makeAgent({ id: 'seller', currentStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 300, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const seller = makeAgent({ id: 'seller', currentStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20 } });
+    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 300, health: 70, happiness: 60, cortisol: 20 } });
+    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20 } });
     const sellerPosition = makeEquityPosition({
       id: 'pos-1',
       ownerAgentId: 'seller',
@@ -285,7 +284,7 @@ describe('processShareSale', () => {
 
 describe('distributeDividends', () => {
   it('distributes pro-rata to shareholders and reduces enterprise owner wealth (SFC neutral)', () => {
-    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 1000, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 1000, health: 70, happiness: 60, cortisol: 20 } });
     const shareholders = [
       makeEquityPosition({ id: 'pos-1', ownerAgentId: 'alice', enterpriseOwnerId: 'owner', sharesHeld: 6 }),
       makeEquityPosition({ id: 'pos-2', ownerAgentId: 'bob', enterpriseOwnerId: 'owner', sharesHeld: 4 }),
@@ -311,7 +310,7 @@ describe('distributeDividends', () => {
   });
 
   it('returns no-op delta when there are zero shareholders', () => {
-    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 1000, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 1000, health: 70, happiness: 60, cortisol: 20 } });
 
     const result = distributeDividends({
       enterpriseOwner,
@@ -325,7 +324,7 @@ describe('distributeDividends', () => {
 
   it('handles dividendPayoutRatio missing from config (no-op)', () => {
     const configWithout = { ...defaultConfig, dividendPayoutRatio: undefined };
-    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 1000, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 1000, health: 70, happiness: 60, cortisol: 20 } });
     const shareholders = [
       makeEquityPosition({ id: 'pos-1', ownerAgentId: 'alice', enterpriseOwnerId: 'owner', sharesHeld: 10 }),
     ];
@@ -345,7 +344,7 @@ describe('distributeDividends', () => {
 
 describe('processGovBondPurchase', () => {
   it('transfers wealth from buyer to treasury and creates bond holding (SFC neutral)', () => {
-    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20 } });
     const faceValue = 100;
 
     const result = processGovBondPurchase({
@@ -378,7 +377,7 @@ describe('processGovBondPurchase', () => {
   });
 
   it('rejects purchase when buyer wealth < faceValue', () => {
-    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 50, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 50, health: 70, happiness: 60, cortisol: 20 } });
 
     const result = processGovBondPurchase({
       sessionId: 'session-1',
@@ -396,8 +395,8 @@ describe('processGovBondPurchase', () => {
 
 describe('processCorpBondIssuance', () => {
   it('transfers wealth from buyer to enterprise owner and creates bond holding (SFC neutral)', () => {
-    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 200, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const buyer = makeAgent({ id: 'buyer', currentStats: { wealth: 500, health: 70, happiness: 60, cortisol: 20 } });
+    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 200, health: 70, happiness: 60, cortisol: 20 } });
     const faceValue = 100;
     const couponRate = 0.01;
     const maturityIteration = 20;
@@ -590,9 +589,9 @@ describe('processMaturities', () => {
 
 describe('processIteration', () => {
   it('orchestrates dividends + coupons + maturities in one call', () => {
-    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 1000, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-    const shareholder = makeAgent({ id: 'shareholder', currentStats: { wealth: 200, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
-    const bondHolder = makeAgent({ id: 'bondholder', currentStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20, dopamine: 50 } });
+    const enterpriseOwner = makeAgent({ id: 'owner', currentStats: { wealth: 1000, health: 70, happiness: 60, cortisol: 20 } });
+    const shareholder = makeAgent({ id: 'shareholder', currentStats: { wealth: 200, health: 70, happiness: 60, cortisol: 20 } });
+    const bondHolder = makeAgent({ id: 'bondholder', currentStats: { wealth: 100, health: 70, happiness: 60, cortisol: 20 } });
 
     const equityPositions = [
       makeEquityPosition({ id: 'pos-1', ownerAgentId: 'shareholder', enterpriseOwnerId: 'owner', sharesHeld: 10 }),

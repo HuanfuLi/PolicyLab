@@ -240,9 +240,9 @@ const AgentReview = () => {
                 <span className="badge badge-neutral">{activeAgent.role}</span>
                 {!activeAgent.isAlive && <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Deceased</span>}
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-                  <span>W:{activeAgent.currentStats.wealth}</span>
-                  <span>H:{activeAgent.currentStats.health}</span>
-                  <span>Hap:{activeAgent.currentStats.happiness}</span>
+                  <span>W:{Math.round(activeAgent.currentStats.wealth)}</span>
+                  <span>H:{Math.round(activeAgent.currentStats.health)}</span>
+                  <span>Hap:{Math.round(activeAgent.currentStats.happiness)}</span>
                 </div>
               </div>
 

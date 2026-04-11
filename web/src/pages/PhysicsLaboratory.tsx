@@ -28,7 +28,7 @@ const CONFIG_GROUPS: { label: string; keys: (keyof PhysicsConfigValues)[] }[] = 
   },
   {
     label: 'Stress Thresholds',
-    keys: ['lowWealthThreshold', 'lowWealthCortisolPenalty', 'lowHealthThreshold', 'lowHealthCortisolPenalty', 'suppressionCortisolPenalty', 'suppressionHappinessPenalty', 'dopamineDecay'],
+    keys: ['lowWealthThreshold', 'lowWealthCortisolPenalty', 'lowHealthThreshold', 'lowHealthCortisolPenalty', 'suppressionCortisolPenalty', 'suppressionHappinessPenalty'],
   },
   {
     label: 'Interrupt Thresholds',
@@ -90,7 +90,6 @@ const PhysicsLaboratory: React.FC = () => {
   const [health, setHealth] = useState(70);
   const [happiness, setHappiness] = useState(60);
   const [cortisol, setCortisol] = useState(20);
-  const [dopamine, setDopamine] = useState(50);
   const [actionCode, setActionCode] = useState('WORK');
   const [isSabotaged, setIsSabotaged] = useState(false);
   const [isSuppressed, setIsSuppressed] = useState(false);
@@ -129,7 +128,7 @@ const PhysicsLaboratory: React.FC = () => {
     debounceRef.current = setTimeout(runTrace, 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role, wealth, health, happiness, cortisol, dopamine, actionCode, isSabotaged, isSuppressed, skillKey]);
+  }, [role, wealth, health, happiness, cortisol, actionCode, isSabotaged, isSuppressed, skillKey]);
 
   const runTrace = async () => {
     setLoading(true);
@@ -140,7 +139,7 @@ const PhysicsLaboratory: React.FC = () => {
 
       const res = await settingsApi.tracePhysics({
         role,
-        stats: { wealth, health, happiness, cortisol, dopamine },
+        stats: { wealth, health, happiness, cortisol },
         skills,
         actionCode,
         isSabotaged,
@@ -199,7 +198,6 @@ const PhysicsLaboratory: React.FC = () => {
     health: Math.max(0, Math.min(100, health + result.healthDelta)),
     happiness: result.happinessClamped ? result.clampedHappiness : Math.max(0, Math.min(100, happiness + result.happinessDelta)),
     cortisol: Math.max(0, Math.min(100, cortisol + result.cortisolDelta)),
-    dopamine: Math.max(0, Math.min(100, dopamine + result.dopamineDelta)),
   } : null;
 
   return (
@@ -241,7 +239,6 @@ const PhysicsLaboratory: React.FC = () => {
           <StatSlider label="Health" value={health} max={100} setter={setHealth} />
           <StatSlider label="Happiness" value={happiness} max={100} setter={setHappiness} />
           <StatSlider label="Cortisol" value={cortisol} max={100} setter={setCortisol} />
-          <StatSlider label="Dopamine" value={dopamine} max={100} setter={setDopamine} />
 
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '0.65rem', marginTop: '0.3rem' }}>
             <div className="text-xs" style={{ color: 'var(--text-dim)', marginBottom: '0.5rem', fontWeight: 600 }}>
@@ -343,7 +340,6 @@ const PhysicsLaboratory: React.FC = () => {
                   clamped={result.happinessClamped}
                 />
                 <DeltaBadge label="Cortisol" value={result.cortisolDelta} />
-                <DeltaBadge label="Dopamine" value={result.dopamineDelta} />
               </div>
 
               {/* Projected final stats */}
@@ -353,7 +349,6 @@ const PhysicsLaboratory: React.FC = () => {
                   <span>H: <strong style={{ color: projected.health < 30 ? 'var(--danger)' : 'var(--text-main)' }}>{projected.health.toFixed(0)}</strong></span>
                   <span>Hap: <strong style={{ color: result.happinessClamped ? 'var(--warning)' : 'var(--text-main)' }}>{projected.happiness.toFixed(0)}</strong></span>
                   <span>Cor: <strong style={{ color: projected.cortisol > 60 ? 'var(--danger)' : 'var(--text-main)' }}>{projected.cortisol.toFixed(0)}</strong></span>
-                  <span>Dop: <strong style={{ color: 'var(--text-main)' }}>{projected.dopamine.toFixed(0)}</strong></span>
                 </div>
               )}
 

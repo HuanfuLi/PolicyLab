@@ -29,20 +29,18 @@ export function computeStats(agents: Agent[], iterationNumber: number): Iteratio
       giniWealth: 0,
       giniHappiness: 0,
       avgCortisol: 0,
-      avgDopamine: 0,
     };
   }
   const wArr = alive.map(a => a.currentStats.wealth);
   const hArr = alive.map(a => a.currentStats.health);
   const hapArr = alive.map(a => a.currentStats.happiness);
   const cortArr = alive.map(a => a.currentStats.cortisol ?? 0);
-  const dopArr = alive.map(a => a.currentStats.dopamine ?? 0);
   return {
     iterationNumber,
-    // Display rounding only; underlying wealth preserved unrounded in agent.currentStats.wealth
-    avgWealth: Math.round(wArr.reduce((s, v) => s + v, 0) / alive.length),
-    avgHealth: Math.round(hArr.reduce((s, v) => s + v, 0) / alive.length),
-    avgHappiness: Math.round(hapArr.reduce((s, v) => s + v, 0) / alive.length),
+    // Raw precision preserved — rounding is the UI's responsibility.
+    avgWealth: wArr.reduce((s, v) => s + v, 0) / alive.length,
+    avgHealth: hArr.reduce((s, v) => s + v, 0) / alive.length,
+    avgHappiness: hapArr.reduce((s, v) => s + v, 0) / alive.length,
     minWealth: Math.min(...wArr), maxWealth: Math.max(...wArr),
     minHealth: Math.min(...hArr), maxHealth: Math.max(...hArr),
     minHappiness: Math.min(...hapArr), maxHappiness: Math.max(...hapArr),
@@ -50,7 +48,6 @@ export function computeStats(agents: Agent[], iterationNumber: number): Iteratio
     totalCount: agents.length,
     giniWealth: gini(wArr),
     giniHappiness: gini(hapArr),
-    avgCortisol: Math.round(cortArr.reduce((s, v) => s + v, 0) / alive.length),
-    avgDopamine: Math.round(dopArr.reduce((s, v) => s + v, 0) / alive.length),
+    avgCortisol: cortArr.reduce((s, v) => s + v, 0) / alive.length,
   };
 }

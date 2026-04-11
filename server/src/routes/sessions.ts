@@ -150,10 +150,10 @@ router.get('/:id/agents', async (req, res) => {
       role: a.role,
       background: a.background,
       initialStats: (() => {
-        try { return JSON.parse(a.initialStats); } catch { return { wealth: 50, health: 70, happiness: 60, cortisol: 0, dopamine: 50 }; }
+        try { return JSON.parse(a.initialStats); } catch { return { wealth: 50, health: 70, happiness: 60, cortisol: 0 }; }
       })(),
       currentStats: (() => {
-        try { return JSON.parse(a.currentStats); } catch { return { wealth: 50, health: 70, happiness: 60, cortisol: 0, dopamine: 50 }; }
+        try { return JSON.parse(a.currentStats); } catch { return { wealth: 50, health: 70, happiness: 60, cortisol: 0 }; }
       })(),
       isAlive: a.status === 'alive',
       isCentralAgent: a.type === 'central' || undefined,
@@ -583,7 +583,7 @@ router.post('/:id/fork-simulation', async (req, res) => {
 // PATCH /api/sessions/:id/agents/:agentId — update agent initial stats (design stage)
 router.patch('/:id/agents/:agentId', async (req, res) => {
   const { id, agentId } = req.params;
-  const body = req.body as { wealth?: number; health?: number; happiness?: number; cortisol?: number; dopamine?: number };
+  const body = req.body as { wealth?: number; health?: number; happiness?: number; cortisol?: number };
 
   const clamp = (v: number, min = 0, max = 100) => Math.min(max, Math.max(min, Math.round(v)));
 
@@ -600,7 +600,6 @@ router.patch('/:id/agents/:agentId', async (req, res) => {
     if (body.health !== undefined) current.health = clamp(body.health);
     if (body.happiness !== undefined) current.happiness = clamp(body.happiness);
     if (body.cortisol !== undefined) current.cortisol = clamp(body.cortisol);
-    if (body.dopamine !== undefined) current.dopamine = clamp(body.dopamine);
 
     const statsJson = JSON.stringify(current);
     await db.update(agents)

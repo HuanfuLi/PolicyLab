@@ -292,27 +292,33 @@ expect(result.wealthDelta).toBeGreaterThan(0);
 
 ## 3. Test Inventory
 
-### Existing Tests (20 files, 195 tests)
+### Existing Tests (24 files, 300 tests)
 
 | Test File | Module | Type | Count |
 |---|---|---|---|
-| `mechanics/__tests__/banking.test.ts` | bankingEngine | Unit | 24 |
+| `mechanics/__tests__/banking.test.ts` | bankingEngine | Unit | 32 |
 | `mechanics/__tests__/capitalMarket.test.ts` | capitalMarketEngine | Unit | 20 |
-| `mechanics/__tests__/fiscal.test.ts` | fiscalEngine | Unit | 18 |
-| `mechanics/__tests__/inflationEngine.test.ts` | inflationEngine | Unit | 11 |
-| `mechanics/__tests__/edgeCases.test.ts` | physics edge cases | Unit | 15 |
+| `mechanics/__tests__/fiscal.test.ts` | fiscalEngine | Unit | 31 |
+| `mechanics/__tests__/inflationEngine.test.ts` | inflationEngine | Unit | 23 |
+| `mechanics/__tests__/edgeCases.test.ts` | physics edge cases | Unit | 16 |
+| `mechanics/__tests__/enterpriseEngine.test.ts` | enterpriseEngine | Unit | 16 |
 | `mechanics/__tests__/sfcAudit.test.ts` | AMM SFC loop | Integration | 4 |
+| `mechanics/__tests__/sfcInvariant.test.ts` | SFC invariant | Integration | 16 |
 | `__tests__/sfcBanking.test.ts` | banking SFC | Integration | 6 |
 | `__tests__/sfcCapitalMarkets.test.ts` | capital markets SFC | Integration | 6 |
 | `__tests__/sfcFiscal.test.ts` | fiscal SFC | Integration | 20 |
 | `__tests__/sfcInflation.test.ts` | inflation SFC | Integration | 9 |
 | `__tests__/sfc-unrounded.test.ts` | AMM rounding SFC | Integration | 10 |
 | `__tests__/economyConfig.test.ts` | config validation | Unit | 16 |
-| `__tests__/scenarioEntry.test.ts` | scenario forking | Placeholder | 8 |
+| `__tests__/scenarioEntry.test.ts` | scenario forking | Integration | 8 |
 | `data/__tests__/dataBootstrapPipeline.test.ts` | bootstrap mapping | Unit | 7 |
+| `data/__tests__/enterpriseBootstrap.test.ts` | enterprise bootstrap | Unit | 11 |
 | `data/__tests__/giniDistribution.test.ts` | Gini algorithm | Unit | 8 |
 | `data/__tests__/locationCache.test.ts` | file cache | Unit | 3 |
 | `data/__tests__/worldBankApi.test.ts` | WB API | Unit (mock) | 7 |
+| `llm/__tests__/promptContent.test.ts` | prompt content | Unit | 12 |
+| `llm/__tests__/loadBalancer.test.ts` | load balancer | Unit | 7 |
+| `llm/__tests__/narrativeValidation.test.ts` | narrative validation | Unit | 9 |
 | `db/repos/__tests__/agentRepo.test.ts` | agent repo | Unit | 3 |
 | `cognition/__tests__/phase3.test.ts` | cognitive layer | Manual script | N/A |
 | `llm/__tests__/phase2.test.ts` | parser agent | Manual script | N/A |

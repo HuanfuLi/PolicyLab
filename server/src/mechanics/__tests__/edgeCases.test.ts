@@ -11,8 +11,8 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     name: 'Test Agent',
     role: 'farmer',
     background: '',
-    initialStats: { wealth: 100, health: 100, happiness: 50, cortisol: 10, dopamine: 50, satiety: 80 },
-    currentStats: { wealth: 100, health: 100, happiness: 50, cortisol: 10, dopamine: 50, satiety: 80 },
+    initialStats: { wealth: 100, health: 100, happiness: 50, cortisol: 10, satiety: 80 },
+    currentStats: { wealth: 100, health: 100, happiness: 50, cortisol: 10, satiety: 80 },
     isAlive: true,
     status: 'alive',
     type: 'citizen',
@@ -197,50 +197,4 @@ describe('Edge Cases - BUG-02, BUG-03, BUG-05, BUG-06', () => {
     });
   });
 
-  describe('BUG-06: Dopamine Feedback Re-Application Guard', () => {
-    it('should apply dopamine feedback maximum once per tick', () => {
-      // Edge case: multiple retries in same iteration
-      // Before fix: cortisol bonus re-stacked on every retry call
-      // After fix: !dopamineFeedbackApplied prevents re-application
-
-      const dopamine = 25;  // <= 30, triggers low-dopamine feedback
-      const dopamineFeedbackApplied = false;  // First call in tick
-
-      const feedbackTriggered = (
-        !dopamineFeedbackApplied &&
-        dopamine !== undefined &&
-        dopamine <= 30
-      );
-
-      expect(feedbackTriggered).toBe(true);  // Feedback applies on first call
-    });
-
-    it('should skip feedback if already applied in retry', () => {
-      // Same dopamine value, but dopamineFeedbackApplied=true (retry scenario)
-      const dopamine = 25;
-      const dopamineFeedbackApplied = true;  // Already applied this tick
-
-      const feedbackTriggered = (
-        !dopamineFeedbackApplied &&
-        dopamine !== undefined &&
-        dopamine <= 30
-      );
-
-      expect(feedbackTriggered).toBe(false);  // NOT re-applied in retry
-    });
-
-    it('should not trigger feedback when dopamine is above threshold', () => {
-      // Dopamine > 30: no feedback even on first call
-      const dopamine = 75;  // High dopamine, no feedback needed
-      const dopamineFeedbackApplied = false;
-
-      const feedbackTriggered = (
-        !dopamineFeedbackApplied &&
-        dopamine !== undefined &&
-        dopamine <= 30
-      );
-
-      expect(feedbackTriggered).toBe(false);  // Threshold not met
-    });
-  });
 });

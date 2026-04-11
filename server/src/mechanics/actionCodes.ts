@@ -150,14 +150,18 @@ const BASE_ACTIONS: readonly ActionCode[] = [
   'NONE',
 ];
 
-/** Bank agent exclusive actions — all of BASE_ACTIONS + bank operations */
+/** Bank agent institutional actions — no citizen survival actions (REST, WORK, STEAL, etc.) */
 const BANK_ACTIONS: readonly ActionCode[] = [
-  ...BASE_ACTIONS,
   'ISSUE_LOAN', 'SET_INTEREST_RATE',
+  'POST_BUY_ORDER', 'POST_SELL_ORDER',  // open-market operations (commodity stabilisation)
+  'DEPOSIT', 'WITHDRAW',                 // inter-bank liquidity management
+  'BUY_BOND',                             // government bond purchases
+  'NONE',                                 // do nothing this tick
 ];
 
-/** Central bank exclusive actions — bank operations plus monetary policy levers */
+/** Central bank exclusive actions — monetary policy levers on top of bank actions */
 const CENTRAL_BANK_ACTIONS: readonly ActionCode[] = [
+  ...BANK_ACTIONS,
   'SET_RESERVE_RATIO', 'SET_BASE_RATE',
 ];
 
@@ -188,9 +192,7 @@ const ELITE_ACTIONS: readonly ActionCode[] = [
  */
 export function getAllowedActions(role: string): readonly ActionCode[] {
   if (role.toLowerCase() === 'bank') return BANK_ACTIONS;
-  if (role.toLowerCase() === 'central_bank') {
-    return [...new Set([...BASE_ACTIONS, ...BANK_ACTIONS, ...CENTRAL_BANK_ACTIONS])];
-  }
+  if (role.toLowerCase() === 'central_bank') return CENTRAL_BANK_ACTIONS;
   const tier = getRoleTier(role);
   if (tier === 'elite') return ELITE_ACTIONS;
   if (tier === 'specialist') return SPECIALIST_ACTIONS;

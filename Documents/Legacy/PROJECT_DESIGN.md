@@ -1,5 +1,7 @@
 # Ideal World — Project Design
 
+> **⚠️ LEGACY DOCUMENT:** This document describes the "Ideal World" design prior to the PolicyLab fork. It is preserved for historical context. For the current PolicyLab architecture, please refer to `MODULE_MAP.md` and `CODEBASE_OVERVIEW.md`.
+
 This document defines the complete technical architecture, data models, component design, and implementation strategy for Ideal World, a multi-agent society simulation platform. It is the engineering counterpart to [USER_FLOW.md](./USER_FLOW.md), which describes the user-facing experience.
 
 ---

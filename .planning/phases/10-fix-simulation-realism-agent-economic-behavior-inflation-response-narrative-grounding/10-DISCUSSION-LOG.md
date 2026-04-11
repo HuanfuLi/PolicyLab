@@ -360,3 +360,38 @@
 - Order-book pricing as AMM replacement — future milestone
 - Dynamic CPI basket weights (Engel's law) — interesting but beyond current needs
 - Enterprise merger/acquisition mechanics — beyond current scope
+
+---
+
+## GC5: Post-Simulation Human Review (2026-04-11)
+
+### Issues Found
+After running two China sessions (baseline + forked with 10.5x higher interest rate, stopped at iter 5):
+
+1. **Dopamine visually inert** — decay (-3) cancels action gains (+1/+2), net ~-1/iter. On bar charts looks stuck.
+2. **Infra/education hit 100% in 3 iterations** — `totalEconomyFiat` not passed to `executeBudget()`, GDP-scaled formula dead code.
+3. **Comparison narrative ignores config diffs** — prompt never included EconomyConfig parameters.
+4. **Narrative trends hallucinated** — LLM only sees single-iteration delta, invents multi-iteration trends.
+5. **Bank uses REST, STEAL, etc.** — `BANK_ACTIONS = [...BASE_ACTIONS, ...]` gives full citizen action set.
+6. **Bank narrates "starving on streets"** — citizen prompt template used for institutional agents.
+
+### Decisions
+
+| Issue | Decision | Rationale |
+|-------|----------|-----------|
+| Dopamine | Remove entirely | Redundant axis — cortisol covers stress, happiness covers positive. No policy insight value. |
+| Fiscal saturation | Wire `totalEconomyFiat` | One-line bug fix; GC3 calibration was correct but unreachable |
+| Comparison narrative | Inject config diffs + time-series + wealth distribution into prompt | Root cause is information starvation, not LLM misbehavior. Post-assertion is a band-aid. |
+| Per-iteration narrative | Expand telemetry digest from 1→4 iteration window | Single-iteration delta insufficient for trend claims |
+| Bank actions | Dedicated institutional action set | Banks don't rest, work, steal, or apply for jobs |
+| Bank prompt | Institutional persona override | "You are NOT a person" + mandate-based objectives |
+
+### Root Cause Analysis: Narrative Mismatch
+User asked: "What is a better way than post-generation assertion?"
+
+**Answer:** Feed the LLM the actual data. An LLM hallucinating is inversely proportional to the data provided. Three layers of information starvation:
+1. Per-iteration: only sees current vs previous (1 iter). Fix: show last 4 iterations.
+2. Comparison: only sees final snapshot + overview. Fix: inject config diffs, per-iter trajectory, wealth distribution.
+3. Post-mortem: similar to comparison. Fix: same enrichment approach.
+
+Post-generation assertions remain as defense-in-depth but the primary fix is data completeness.

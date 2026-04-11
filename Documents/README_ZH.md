@@ -92,7 +92,7 @@ npm run lint -w web
 ## 测试
 
 ```bash
-npm run test -w server   # 运行 195 个服务端测试（vitest）
+npm run test -w server   # 运行 300 个服务端测试（vitest）
 npm run lint -w web      # 前端代码检查
 ```
 

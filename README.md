@@ -72,7 +72,7 @@ web/
 - **LLM**: Multi-provider gateway (Anthropic, OpenAI, Google Gemini/Vertex, Ollama)
 - **Realtime**: Server-Sent Events for live simulation and bootstrap progress streaming
 - **Data**: World Bank Open Data API v2, Photon geocoder (OpenStreetMap)
-- **Testing**: Vitest (195 tests — SFC invariants, engine unit tests, data pipeline tests)
+- **Testing**: Vitest (300 tests — SFC invariants, engine unit tests, data pipeline tests)
 
 ## Development
 

@@ -54,7 +54,7 @@ export interface AgentStats {
   health: number;
   happiness: number;
   cortisol: number;    // 0-100, hidden stress level
-  dopamine: number;    // 0-100, hidden satisfaction
+  dopamine?: number;   // DEPRECATED — no longer computed or displayed
 }
 
 export interface Agent {
@@ -73,7 +73,7 @@ export interface Agent {
   isCentralAgent?: boolean;
   /** 'alive' | 'dead' | 'new' — raw DB value */
   status: string;
-  /** 'citizen' | 'central' — raw DB value */
+  /** 'citizen' | 'central' | 'bank' — raw DB value */
   type: string;
   bornAtIteration: number | null;
   diedAtIteration: number | null;
@@ -171,7 +171,6 @@ export interface IterationStats {
   giniHappiness?: number;
   /** Society-wide averages for hidden biological signals */
   avgCortisol?: number;
-  avgDopamine?: number;
 }
 
 export interface SocietyDesign {
@@ -271,8 +270,6 @@ export interface TelemetryLog {
   crimeRate?: number;
   /** Population mean cortisol (0–100) */
   averageCortisol?: number;
-  /** Population mean dopamine (0–100) */
-  averageDopamine?: number;
   /** Base money M0 (should be constant) */
   m0?: number;
   /** M1 = M0 + demand deposits created by lending */

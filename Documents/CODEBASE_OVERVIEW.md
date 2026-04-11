@@ -280,17 +280,17 @@ npm run dev                # Full app (server + web concurrently)
 npm run dev -w server      # Backend only
 npm run dev -w web         # Frontend only
 npm run build              # Build all packages in dependency order
-npm run test -w server     # Run server tests (vitest) — 195 tests
+npm run test -w server     # Run server tests (vitest) — 300 tests
 npm run lint -w web        # Lint frontend
 ```
 
 ## 11. Test Coverage
 
-**195 tests** across 18 test files (vitest):
-- Mechanics: banking (24), capital markets (20), fiscal (18), inflation (11), edge cases (15)
-- SFC integration: banking (6), capital markets (6), fiscal (20), inflation (9), AMM (14)
-- Data: bootstrap pipeline (7), Gini (8), location cache (3), World Bank API (7)
-- DB: agentRepo (3), economyConfig (16), scenario entry (8)
+**300 tests** across 24 test files (vitest):
+- Mechanics: banking (32), capital markets (20), fiscal (31), inflation (23), enterprise (16), edge cases (16)
+- SFC integration: banking (6), capital markets (6), fiscal (20), inflation (9), AMM (14), invariant (16)
+- Data: bootstrap pipeline (7), enterprise bootstrap (11), Gini (8), location cache (3), World Bank API (7)
+- DB/Other: agentRepo (3), economyConfig (16), scenario entry (8), LLM prompts (12), LLM load balancer (7), LLM narrative (9)
 
 **Not yet tested:** physicsEngine, allostaticEngine, skillSystem, all routes, all orchestration, all frontend stores. See `MODULE_MAP.md` Section 5 for the prioritized test plan.
 

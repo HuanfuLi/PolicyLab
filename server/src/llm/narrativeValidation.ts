@@ -12,21 +12,25 @@ export interface NarrativeValidation {
  * Builds a pre-interpreted telemetry digest that grounds the LLM's narrative
  * in concrete facts rather than raw numbers. Injected before the resolution prompt.
  *
+ * Accepts the last N iterations of telemetry (not just previous + current) so
+ * the LLM can see short-term trends instead of single-iteration deltas.
+ *
  * @param current  Current iteration's telemetry
- * @param previous Previous iteration's telemetry (null for first iteration)
+ * @param recentHistory  Last 3-5 iterations of telemetry (oldest first), excluding current. Empty for first iteration.
  * @param agentStats Live agent stat snapshots for mood calculation
  * @param agentsAlive Number of alive agents this iteration
  * @param agentsDied Number of agents who died this iteration
  */
 export function buildTelemetryDigest(
   current: TelemetryLog,
-  previous: TelemetryLog | null,
+  recentHistory: TelemetryLog[],
   agentStats: Array<{ health: number; happiness: number; cortisol: number; wealth: number }>,
   agentsAlive: number,
   agentsDied: number,
 ): string {
-  if (!previous) return 'First iteration -- no trend data available.';
+  if (recentHistory.length === 0) return 'First iteration -- no trend data available.';
 
+  const previous = recentHistory[recentHistory.length - 1];
   const giniDelta = (current.giniCoefficient ?? 0) - (previous.giniCoefficient ?? 0);
   const avgWealth = agentStats.length > 0
     ? agentStats.reduce((s, a) => s + a.wealth, 0) / agentStats.length
@@ -43,16 +47,26 @@ export function buildTelemetryDigest(
     : giniDelta < -0.01 ? 'improving (equality growing)'
     : 'stable';
 
+  // Build compact multi-iteration trend table so the LLM can see trajectory
+  const allIters = [...recentHistory, current];
+  const trendTable = allIters.map(t => {
+    const w = t.totalFiatSupply / Math.max(agentsAlive, 1);
+    return `  iter ${t.iterationNumber}: wealth=${w.toFixed(0)}, gini=${(t.giniCoefficient ?? 0).toFixed(3)}, cpi=${(t.cpi ?? 100).toFixed(1)}, food=${(t.ammSpotPrice_Food ?? 0).toFixed(2)}`;
+  }).join('\n');
+
   return `TELEMETRY DIGEST (you MUST ground your narrative in these facts):
-- Trend: ${trend}
-- Gini: ${(current.giniCoefficient ?? 0).toFixed(3)} (${giniDelta > 0 ? '+' : ''}${giniDelta.toFixed(3)})
+- Overall trend: ${trend}
+- Gini: ${(current.giniCoefficient ?? 0).toFixed(3)} (${giniDelta > 0 ? '+' : ''}${giniDelta.toFixed(3)} vs last iteration)
 - Avg wealth: ${avgWealth.toFixed(0)} fiat (${avgWealth > prevAvgWealth ? 'rising' : avgWealth < prevAvgWealth ? 'falling' : 'stable'})
 - CPI: ${(current.cpi ?? 100).toFixed(1)} (inflation ${(current.inflationRate ?? 0).toFixed(1)}%)
 - Food price: ${(current.ammSpotPrice_Food ?? 0).toFixed(2)} fiat/unit
 - Population mood: ${satisfiedPct}% satisfied, ${distressedPct}% in distress
 - Deaths this iteration: ${agentsDied}
 
-NARRATIVE RULE: Your prose MUST include at least 2 specific numbers from this digest. If metrics improve, narrate cautious optimism. If they decline, narrate crisis. Do NOT contradict these numbers.`;
+Recent trajectory (last ${allIters.length} iterations):
+${trendTable}
+
+NARRATIVE RULE: Your prose MUST include at least 2 specific numbers from this digest. Base trend claims on the trajectory table above — do NOT invent trends that contradict the data. If metrics improve, narrate cautious optimism. If they decline, narrate crisis.`;
 }
 
 /**

@@ -24,7 +24,7 @@ const testAgent = {
   role: 'farmer',
   background: 'A simple farmer from the eastern ridge.',
   personalityTraits: ['risk-averse'],
-  currentStats: { wealth: 50, health: 70, happiness: 60, cortisol: 20, dopamine: 50 },
+  currentStats: { wealth: 50, health: 70, happiness: 60, cortisol: 20 },
   type: 'citizen',
 } as any;
 

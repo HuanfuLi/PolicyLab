@@ -21,9 +21,9 @@ function makeTelemetry(overrides: Partial<TelemetryLog> = {}): TelemetryLog {
 }
 
 describe('buildTelemetryDigest', () => {
-  it('returns first-iteration message when no previous', () => {
+  it('returns first-iteration message when no history', () => {
     const current = makeTelemetry();
-    const result = buildTelemetryDigest(current, null, [], 20, 0);
+    const result = buildTelemetryDigest(current, [], [], 20, 0);
     expect(result).toContain('First iteration');
   });
 
@@ -34,7 +34,7 @@ describe('buildTelemetryDigest', () => {
       { health: 80, happiness: 60, cortisol: 20, wealth: 500 },
       { health: 40, happiness: 30, cortisol: 80, wealth: 300 },
     ];
-    const result = buildTelemetryDigest(current, prev, agents, 2, 0);
+    const result = buildTelemetryDigest(current, [prev], agents, 2, 0);
     expect(result).toContain('TELEMETRY DIGEST');
     expect(result).toContain('Gini');
     expect(result).toContain('Avg wealth');
@@ -43,19 +43,20 @@ describe('buildTelemetryDigest', () => {
     expect(result).toContain('NARRATIVE RULE');
     expect(result).toContain('satisfied');
     expect(result).toContain('distress');
+    expect(result).toContain('Recent trajectory');
   });
 
   it('shows "improving" trend when Gini decreases by >0.01', () => {
     const prev = makeTelemetry({ giniCoefficient: 0.40 });
     const current = makeTelemetry({ giniCoefficient: 0.38 });
-    const result = buildTelemetryDigest(current, prev, [], 2, 0);
+    const result = buildTelemetryDigest(current, [prev], [], 2, 0);
     expect(result).toContain('improving');
   });
 
   it('shows "declining" trend when Gini increases by >0.01', () => {
     const prev = makeTelemetry({ giniCoefficient: 0.35 });
     const current = makeTelemetry({ giniCoefficient: 0.37 });
-    const result = buildTelemetryDigest(current, prev, [], 2, 0);
+    const result = buildTelemetryDigest(current, [prev], [], 2, 0);
     expect(result).toContain('declining');
   });
 });

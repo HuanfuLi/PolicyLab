@@ -8,7 +8,6 @@ import TelemetryPanel from '../components/TelemetryPanel';
 
 // Chart color tokens (kept in sync with --chart-* CSS variables in index.css)
 const CHART_ORANGE = 'var(--chart-orange)';
-const CHART_VIOLET = 'var(--chart-violet)';
 
 const Simulation = () => {
   const navigate = useNavigate();
@@ -73,15 +72,20 @@ const Simulation = () => {
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     reset();
     // Initialization: load history first, then restore session state
     const init = async () => {
       await loadAgents(id);
+      if (cancelled) return;
       await loadHistory(id);
+      if (cancelled) return;
       await loadIntentHistory(id);
+      if (cancelled) return;
 
       try {
         const r = await fetch(`/api/sessions/${id}`);
+        if (cancelled) return;
         const s = (await r.json()) as { stage?: string; config?: { totalIterations?: number } | null };
         if (s.stage) setSessionStage(s.stage);
 
@@ -120,6 +124,8 @@ const Simulation = () => {
         }
       } catch { /* ignore fetch errors */ }
 
+      if (cancelled) return;
+
       // Connect SSE AFTER stage hydration to prevent race where SSE delivers
       // simulation-complete before sessionStage is set, causing auto-proceed
       // to check against stale empty sessionStage.
@@ -128,7 +134,10 @@ const Simulation = () => {
     };
 
     init();
-    return () => { sseCleanupRef.current?.(); };
+    return () => {
+      cancelled = true;
+      sseCleanupRef.current?.();
+    };
   }, [id]);
 
 
@@ -465,15 +474,6 @@ const Simulation = () => {
                     history={statsHistory.map(s => s.avgCortisol ?? 0)}
                   />
                 )}
-                {latestStats.avgDopamine !== undefined && (
-                  <StatCard
-                    label="Dopamine"
-                    color={CHART_VIOLET}
-                    icon={<Zap size={16} />}
-                    avg={latestStats.avgDopamine}
-                    history={statsHistory.map(s => s.avgDopamine ?? 0)}
-                  />
-                )}
                 <div style={{ background: 'var(--panel-alpha-05)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><Users size={16} /> Population</span>
@@ -520,7 +520,7 @@ const Simulation = () => {
                         cursor: 'pointer',
                         opacity: a.isAlive ? 1 : 0.3,
                       }}
-                      title={`${a.name} (${a.role}) — W:${a.currentStats.wealth} H:${a.currentStats.health} Hap:${a.currentStats.happiness}${!a.isAlive ? ' [dead]' : ''}`}
+                      title={`${a.name} (${a.role}) — W:${Math.round(a.currentStats.wealth)} H:${Math.round(a.currentStats.health)} Hap:${Math.round(a.currentStats.happiness)}${!a.isAlive ? ' [dead]' : ''}`}
                     />
                   ))}
                 </div>
@@ -944,12 +944,14 @@ function StatCard({ label, color, icon, avg, min, max, history }: StatCardProps)
   const maxHistory = 12;
   const recent = history.slice(-maxHistory);
   const peak = Math.max(...recent, 1);
+  // Display formatting: round for clean UI presentation
+  const fmtStat = (n: number) => Math.abs(n) >= 1000 ? Math.round(n).toLocaleString() : Math.round(n);
 
   return (
     <div style={{ background: 'var(--panel-alpha-05)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', color, marginBottom: '0.5rem' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>{icon} {label}</span>
-        <span>Avg: {avg}</span>
+        <span>Avg: {fmtStat(avg)}</span>
       </div>
       <div style={{ height: '30px', borderBottom: '1px dashed rgba(255,255,255,0.2)', display: 'flex', alignItems: 'flex-end', gap: '2px' }}>
         {recent.map((v, i) => (
@@ -958,7 +960,7 @@ function StatCard({ label, color, icon, avg, min, max, history }: StatCardProps)
       </div>
       {min !== undefined && max !== undefined && (
         <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', textAlign: 'right' as const, marginTop: '0.5rem' }}>
-          min {min} / max {max}
+          min {fmtStat(min)} / max {fmtStat(max)}
         </div>
       )}
     </div>

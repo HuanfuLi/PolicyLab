@@ -57,7 +57,6 @@ export interface PhysicsConfigValues {
   lowHealthCortisolPenalty: number;
   suppressionCortisolPenalty: number;
   suppressionHappinessPenalty: number;
-  dopamineDecay: number;
   starvationHealthInterrupt: number;
   mentalBreakdownCortisolInterrupt: number;
   satietyKcalPerPoint: number;
@@ -71,7 +70,7 @@ export interface PhysicsConfigValues {
 
 export interface TracePhysicsInput {
   role: string;
-  stats: { wealth: number; health: number; happiness: number; cortisol: number; dopamine: number };
+  stats: { wealth: number; health: number; happiness: number; cortisol: number };
   skills?: Record<string, { level: number; experience: number }>;
   actionCode: string;
   isSabotaged?: boolean;
@@ -83,7 +82,6 @@ export interface TracePhysicsOutput {
   healthDelta: number;
   happinessDelta: number;
   cortisolDelta: number;
-  dopamineDelta: number;
   trace: string[];
   finalHappiness: number;
   happinessClamped: boolean;

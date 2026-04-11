@@ -336,7 +336,7 @@ router.post('/trace-physics', (req, res) => {
   try {
     const body = req.body as {
       role?: string;
-      stats?: { wealth: number; health: number; happiness: number; cortisol: number; dopamine: number };
+      stats?: { wealth: number; health: number; happiness: number; cortisol: number };
       skills?: SkillMatrix;
       inventory?: Inventory;
       actionCode?: string;
@@ -344,7 +344,7 @@ router.post('/trace-physics', (req, res) => {
       isSuppressed?: boolean;
     };
 
-    const stats = body.stats ?? { wealth: 50, health: 70, happiness: 60, cortisol: 20, dopamine: 50 };
+    const stats = body.stats ?? { wealth: 50, health: 70, happiness: 60, cortisol: 20 };
     const role = (body.role ?? 'WORKER').toUpperCase();
     const actionCode = normalizeActionCode(body.actionCode ?? 'WORK');
 

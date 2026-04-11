@@ -44,4 +44,4 @@ Thumbs.db
 *.sw?
 
 # Simulation results
-SimulationResult/
+Results/

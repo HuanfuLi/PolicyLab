@@ -176,8 +176,7 @@ You MUST respond with ONLY valid JSON (no markdown, no preamble, no code fences)
         "wealth": 50,
         "health": 70,
         "happiness": 60,
-        "cortisol": 20,
-        "dopamine": 50
+        "cortisol": 20
       }
     }
   ],
@@ -203,7 +202,7 @@ Rules:
 - Every working agent should be either an enterprise owner or employee
 - All names must be unique and culturally consistent with the society
 - Roles should reflect the society's governance and economic models
-- Stats: 'health' and 'happiness' must be integers between 0 and 100. 'wealth' is starting fiat currency (integer, typically 10-100 for initial balance). 'cortisol' is baseline stress (0-100, default 20; higher for oppressed/dangerous roles like prisoners or soldiers). 'dopamine' is baseline satisfaction (0-100, default 50; higher for privileged/creative roles, lower for exploited roles).
+- Stats: 'health' and 'happiness' must be integers between 0 and 100. 'wealth' is starting fiat currency (integer, typically 10-100 for initial balance). 'cortisol' is baseline stress (0-100, default 20; higher for oppressed/dangerous roles like prisoners or soldiers).
 - Stats should vary realistically based on role and background
 - Each background MUST include an economic instinct: how this person relates to money, food, and risk. Examples: 'He hoards food instinctively after a childhood famine', 'She trusts no bank after her father lost his savings', 'He invests aggressively, chasing every opportunity'
 - Backgrounds should create natural economic diversity: some agents produce, some trade, some save, some spend freely
@@ -234,7 +233,7 @@ export function buildResolutionPrompt(
 ): LLMMessage[] {
   const agentList = intents.map(ai => {
     const agent = agents.find(a => a.id === ai.agentId);
-    const stats = agent?.currentStats ?? { wealth: 50, health: 70, happiness: 60, cortisol: 20, dopamine: 50 };
+    const stats = agent?.currentStats ?? { wealth: 50, health: 70, happiness: 60, cortisol: 20 };
     return `- ${ai.agentName} (${agent?.role ?? 'unknown'}): "${ai.intent}"
   Stats: W=${stats.wealth} H=${stats.health} Hap=${stats.happiness}`;
   }).join('\n');
@@ -366,7 +365,7 @@ export function buildGroupResolutionMessages(
 ): LLMMessage[] {
   const groupList = groupIntents.map(ai => {
     const agent = groupAgents.find(a => a.id === ai.agentId);
-    const stats = agent?.currentStats ?? { wealth: 50, health: 70, happiness: 60, cortisol: 20, dopamine: 50 };
+    const stats = agent?.currentStats ?? { wealth: 50, health: 70, happiness: 60, cortisol: 20 };
     return `- ${ai.agentName} (${agent?.role ?? 'unknown'}): "${ai.intent}"
   Stats: W=${stats.wealth} H=${stats.health} Hap=${stats.happiness}`;
   }).join('\n');

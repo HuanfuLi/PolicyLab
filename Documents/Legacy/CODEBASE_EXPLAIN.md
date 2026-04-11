@@ -1,5 +1,7 @@
 # Ideal World 项目代码库结构与技术架构解析
 
+> **⚠️ 历史文档 (LEGACY DOCUMENT):** 本文档描述的是 PolicyLab fork 之前的 "Ideal World" 架构，仅保留作历史参考。有关当前的 PolicyLab 架构，请参阅 `MODULE_MAP.md` 和 `CODEBASE_OVERVIEW.md`。
+
 本文档提供 Ideal World 项目的代码级架构指南，旨在说明系统的模块划分、核心算法（神经符号架构、MapReduce状态推演）以及底层数值计算与资源约束机制的设计实现。
 
 本文结合关键模块的源代码片段进行技术原理阐释。

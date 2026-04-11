@@ -76,7 +76,6 @@ Action meanings:
 
   // Dynamic suffix: agent-specific, changes every call
   const cortisol = agent.currentStats.cortisol ?? 20;
-  const dopamine = agent.currentStats.dopamine ?? 50;
 
   let stressModifier = '';
   if (cortisol > 80) {
@@ -122,8 +121,7 @@ Your current status:
 - Wealth: ${agent.currentStats.wealth} Wealth
 - Health: ${agent.currentStats.health}/100
 - Happiness: ${agent.currentStats.happiness}/100
-- Stress level: ${cortisol > 60 ? 'HIGH' : cortisol > 40 ? 'moderate' : 'low'}
-- Satisfaction: ${dopamine > 60 ? 'content' : dopamine > 30 ? 'neutral' : 'dissatisfied'}${economyBlock}
+- Stress level: ${cortisol > 60 ? 'HIGH' : cortisol > 40 ? 'moderate' : 'low'}${economyBlock}
 
 ${previousSummary ? `What happened last iteration:\n${previousSummary.slice(0, 600)}` : 'This is the first iteration.'}${stressModifier}`;
 
@@ -280,7 +278,6 @@ OUTPUT RULES (read carefully -- violations waste your action turn):
 
   // Dynamic suffix: agent-specific, changes every call
   const cortisol = agent.currentStats.cortisol ?? 20;
-  const dopamine = agent.currentStats.dopamine ?? 50;
   const health = agent.currentStats.health;
 
   let stressModifier = '';
@@ -299,7 +296,6 @@ OUTPUT RULES (read carefully -- violations waste your action turn):
   // Descriptors for the personal dashboard
   const healthDescriptor = health < 20 ? '-- critical' : health < 40 ? '-- weakening' : health < 70 ? '-- fair' : '-- strong';
   const stressDescriptor = cortisol > 80 ? '-- extreme, survival instincts dominant' : cortisol > 60 ? '-- elevated, risk tolerance impaired' : cortisol > 40 ? '-- moderate tension' : '-- calm';
-  const driveDescriptor = dopamine > 70 ? '-- energized, ambitious' : dopamine > 40 ? '-- baseline motivation' : '-- low drive, prone to conservative choices';
 
   // Phase 1: Economy context (C2: full inventory + full skill matrix)
   let economyBlock = '';
@@ -431,14 +427,38 @@ Next step: ${cognitiveContext.currentPlanStep}`;
     ? `\nPersonality: ${agent.personalityTraits.join(', ')}. These are deep-seated tendencies that colour your decisions -- a risk-tolerant agent may attempt daring moves; an empathetic agent might help others at personal cost. You are not bound rigidly by these traits, but they influence how you weigh choices.`
     : '';
 
-  const dynamicSuffix = `Your name is ${agent.name}. You are a ${agent.role}.
+  // ── Institutional agent override (bank / central_bank) ──────────────────
+  // Bank agents are institutions, not people. They don't have health, stress,
+  // personality, hunger, or personal narratives. Replace the citizen persona
+  // with an institutional mandate.
+  const isInstitutional = agent.type?.toLowerCase() === 'bank' || ['bank', 'central_bank'].includes(agent.role?.toLowerCase() ?? '');
+
+  const dynamicSuffix = isInstitutional
+    ? `You are ${agent.name}, an institutional agent (${agent.role}).
+You are NOT a person. You do not have health, hunger, emotions, or personal needs.
+You are a financial institution whose mandate is:
+- Maintain price stability and market liquidity
+- Manage reserves prudently
+- Set interest rates to balance inflation and economic growth
+- Support the financial system through open-market operations
+
+Institutional status:
+- Reserves: ${agent.currentStats.wealth} fiat${bankOperationsBlock}${citizenCapitalMarketBlock}${inflationBlock}${centralBankBlock}
+
+${iterationContext}${actionResultsBlock}
+
+${marketBoardBlock}
+
+IMPORTANT: Your narrative must be written from an institutional perspective (e.g. "The Central Bank adjusted rates..." not "I felt hungry..."). Never use personal emotions, physical sensations, or survival language.
+
+${actionDictionary}`
+    : `Your name is ${agent.name}. You are a ${agent.role}.
 ${agent.background}${traitsBlock}
 
 Your situation right now:
 - Wealth: ${agent.currentStats.wealth} fiat
 - Health: ${health}/100 ${healthDescriptor}
-- Stress: ${cortisol}/100 ${stressDescriptor}
-- Drive: ${dopamine}/100 ${driveDescriptor}${economyBlock}${marketDashboard}${cognitiveBlock}${agentNamesBlock}${citizenBankingBlock}${bankOperationsBlock}${citizenCapitalMarketBlock}${citizenFiscalBlock}${inflationBlock}${centralBankBlock}
+- Stress: ${cortisol}/100 ${stressDescriptor}${economyBlock}${marketDashboard}${cognitiveBlock}${agentNamesBlock}${citizenBankingBlock}${bankOperationsBlock}${citizenCapitalMarketBlock}${citizenFiscalBlock}${inflationBlock}${centralBankBlock}
 
 ${iterationContext}${capitalistIdentityBlock}${biologicalSubconscious}${stressModifier}${actionResultsBlock}
 ${marketIntelligenceBlock ?? ''}

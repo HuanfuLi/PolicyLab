@@ -11,7 +11,6 @@ export interface AgentWeekState {
   healthDelta: number;
   happinessDelta: number;
   cortisolDelta: number;
-  dopamineDelta: number;
   executedActions: QueuedActionInstruction[];
   interrupted: boolean;
   interruptedReason: 'starvation' | 'mental_breakdown' | null;
@@ -36,7 +35,6 @@ export function createAgentWeekState(econState?: AgentEconomyState): AgentWeekSt
     healthDelta: 0,
     happinessDelta: 0,
     cortisolDelta: 0,
-    dopamineDelta: 0,
     executedActions: [],
     interrupted: false,
     interruptedReason: null,

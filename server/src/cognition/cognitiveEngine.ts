@@ -69,7 +69,6 @@ export interface CognitivePostInput {
     healthDelta: number;
     happinessDelta: number;
     cortisolDelta: number;
-    dopamineDelta: number;
     economyEvents: string[];
     isStarving: boolean;
     narrativeSummary: string;

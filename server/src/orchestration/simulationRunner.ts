@@ -43,6 +43,7 @@ import {
   type CitizenCapitalMarketContext,
   type CitizenFiscalContext,
 } from '../llm/prompts/index.js';
+import { buildTelemetryDigest } from '../llm/narrativeValidation.js';
 import {
   parseResolutionStrict,
   parseGroupResolutionStrict,
@@ -363,7 +364,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             health: a.currentStats.health,
             happiness: a.currentStats.happiness,
             cortisol: a.currentStats.cortisol ?? 20,
-            dopamine: a.currentStats.dopamine ?? 50,
           }));
           sessionStateTreasury.set(sessionId, treasury - fundable);
           sqlite.transaction(() => { agentRepo.bulkUpdateStats(wealthFloorUpdates); })();
@@ -483,6 +483,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     // Snapshot economy state for controlled variable locking (skills/inventory)
     const lockedEconomySnapshot = new Map(agentEconomyMap);
 
+    // Initialize from current state so resumed sessions don't report all prior deaths as "this iteration"
+    let previousIterDeadCount = agents.filter(a => !a.isAlive).length;
     for (let iterNum = startIter; iterNum <= endIter; iterNum++) {
       // ── Abort/pause check (unified via lifecycle) ────────────────────────
       await lifecycle.checkContinue(iterNum);
@@ -794,8 +796,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             return true;
           });
           if (validatedActions.length === 0) {
-            console.warn(`[HALLUCINATION] ${agent.name} had no valid actions after filtering — defaulting to REST`);
-            validatedActions = [{ actionCode: 'REST' as ActionCode, parameters: {} }];
+            // Bank/institutional agents don't have REST — fall back to NONE instead.
+            const defaultAction: ActionCode = allowedSet.has('NONE') ? 'NONE' : 'REST';
+            console.warn(`[HALLUCINATION] ${agent.name} had no valid actions after filtering — defaulting to ${defaultAction}`);
+            validatedActions = [{ actionCode: defaultAction, parameters: {} }];
           }
           const validatedPrimary = validatedActions[0]!;
           const validatedPrimaryTarget = (() => {
@@ -1016,7 +1020,32 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       } else {
         // ── Standard path ────────────────────────────────────────────────
         // Bug #1 fix: pass aliveAgents only — dead agents must never appear in resolution
-        const resolutionMessages = buildResolutionPrompt(session, aliveAgents, intents, iterNum, previousSummary, prevIterMetrics, lockedVariables, prevPhysicsLog);
+
+        // Build telemetry digest with recent history (last 4 iterations) for trend grounding.
+        // Uses COMPLETED iterations' telemetry (current iteration hasn't resolved yet),
+        // which provides the LLM with trend context for its resolution decisions.
+        let iterTelemetryDigest: string | null = null;
+        {
+          const allTelemetry = sessionTelemetryLogs.get(sessionId) ?? [];
+          if (allTelemetry.length > 0) {
+            const currentTel = allTelemetry[allTelemetry.length - 1];
+            const recentHist = allTelemetry.slice(Math.max(0, allTelemetry.length - 5), allTelemetry.length - 1);
+            const agentSnapshots = aliveAgents.map(a => ({
+              health: a.currentStats.health,
+              happiness: a.currentStats.happiness,
+              cortisol: a.currentStats.cortisol ?? 20,
+              wealth: a.currentStats.wealth,
+            }));
+            // Deaths since last iteration: total dead now minus total dead at start of previous iteration.
+            // aliveAgents was filtered at the top of this iteration, so dead count = total - alive.
+            const totalDeadNow = agents.length - aliveAgents.length;
+            const deadPrevIter = previousIterDeadCount ?? 0;
+            const deadThisIter = Math.max(0, totalDeadNow - deadPrevIter);
+            iterTelemetryDigest = buildTelemetryDigest(currentTel, recentHist, agentSnapshots, aliveAgents.length, deadThisIter);
+          }
+        }
+
+        const resolutionMessages = buildResolutionPrompt(session, aliveAgents, intents, iterNum, previousSummary, prevIterMetrics, lockedVariables, prevPhysicsLog, iterTelemetryDigest);
         resolution = await retryWithHealing({
           provider,
           messages: resolutionMessages,
@@ -1073,7 +1102,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       }
       const orderBook = getOrderBook(sessionId);
 
-      const statUpdates: Array<{ id: string; wealth: number; health: number; happiness: number; cortisol: number; dopamine: number }> = [];
+      const statUpdates: Array<{ id: string; wealth: number; health: number; happiness: number; cortisol: number }> = [];
       const deaths: Array<{ id: string; iterationNumber: number }> = [];
       const actionRows: Array<typeof resolvedActions.$inferInsert> = [];
       const actionRowByAgentId = new Map<string, typeof resolvedActions.$inferInsert>();
@@ -1120,7 +1149,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         let runningHealth = agent.currentStats.health;
         let runningHappiness = agent.currentStats.happiness;
         let runningCortisol = agent.currentStats.cortisol ?? 20;
-        let runningDopamine = agent.currentStats.dopamine ?? 50;
+
 
         for (const [actionIndex, action] of queue.entries()) {
           const rawTarget = action.parameters?.target ?? action.parameters?.agent_id;
@@ -1167,7 +1196,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
                 health: runningHealth,
                 happiness: runningHappiness,
                 cortisol: runningCortisol,
-                dopamine: runningDopamine,
               },
             },
             actionCode: action.actionCode,
@@ -1244,19 +1272,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             sessionStateTreasury.set(sessionId, prevTreasury + investCost);
           }
 
-          // D2: REST recovery scaling by dopamine (anhedonia impairs recovery).
-          // High dopamine (≥70) → ×1.25 health recovery (motivated, well-rested).
-          // Low dopamine (≤30) → ×0.75 health recovery (anhedonic, impaired recovery).
-          let scaledHealthDelta = physics.healthDelta;
-          if (action.actionCode === 'REST' && physics.healthDelta > 0) {
-            const dopamineScaleMult = runningDopamine >= 70 ? 1.25 : runningDopamine <= 30 ? 0.75 : 1.0;
-            scaledHealthDelta = Math.round(physics.healthDelta * dopamineScaleMult);
-          }
-
-          weekState.healthDelta += scaledHealthDelta;
+          weekState.healthDelta += physics.healthDelta;
           weekState.happinessDelta += physics.happinessDelta;
           weekState.cortisolDelta += effectiveCortisolDelta;
-          weekState.dopamineDelta += physics.dopamineDelta;
 
           // Fix A: Zero-sum STEAL — deduct stolen amount from victim's weekState.
           // Use originalWealthDelta so enforcement seizure doesn't prevent victim debit.
@@ -1301,7 +1319,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           runningHealth = clampStat(runningHealth + physics.healthDelta);
           runningHappiness = clampStat(runningHappiness + physics.happinessDelta);
           runningCortisol = clampStat(runningCortisol + effectiveCortisolDelta);
-          runningDopamine = clampStat(runningDopamine + physics.dopamineDelta);
 
           const fiscalSkillMult = sessionFiscalMultipliers.get(sessionId);
           const skillGainMult = fiscalSkillMult ? 1 + fiscalSkillMult.skillGainBonus : 1.0;
@@ -1503,7 +1520,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         if (taxActions.length === 0) continue;
         const taxerState = weekStateMap.get(intent.agentId);
         const taxableAgents = aliveAgents.filter(a =>
-          !a.isCentralAgent && a.id !== intent.agentId && getRoleTier(a.role) !== 'elite'
+          !a.isCentralAgent && a.type !== 'bank' && a.id !== intent.agentId && getRoleTier(a.role) !== 'elite'
         );
         // SFC-safe: accumulate only what each agent can actually pay — no ghost minting.
         let actualTaxCollected = 0;
@@ -1674,12 +1691,15 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       }
 
       // ── MET Metabolism: replace flat -1 food with physiological depletion ─
+      // Skip institutional agents (bank/central_bank) — they don't eat or starve.
       for (const agent of aliveAgents) {
+        if (agent.type === 'bank') continue;
         const weekState = weekStateMap.get(agent.id)!;
         applyMETMetabolism(weekState, { ...agent, currentWealth: agent.currentStats.wealth }, sessionId, iterNum);
       }
 
       // ── Allostatic Load Pipeline: cortisol → strain → load → health ───────
+      // Skip institutional agents — they don't accumulate biological stress.
       {
         let sessionAlloStates = sessionAllostaticStates.get(sessionId);
         if (!sessionAlloStates) {
@@ -1687,13 +1707,12 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           sessionAllostaticStates.set(sessionId, sessionAlloStates);
         }
         for (const agent of aliveAgents) {
+          if (agent.type === 'bank') continue;
           const weekState = weekStateMap.get(agent.id)!;
           const currentCortisol = clampStat((agent.currentStats.cortisol ?? 20) + weekState.cortisolDelta);
-          const currentDopamine = clampStat((agent.currentStats.dopamine ?? 50) + weekState.dopamineDelta);
           const priorState = sessionAlloStates.get(agent.id) ?? { allostaticStrain: 0, allostaticLoad: 0 };
           const engine = new AllostaticEngine(priorState);
-          // D2: Pass dopamine so anhedonia (≤30) adds +4 cortisol feedback in the allostatic engine
-          const alloResult = engine.tick({ cortisol: currentCortisol, dopamine: currentDopamine });
+          const alloResult = engine.tick({ cortisol: currentCortisol });
           if (alloResult.healthDelta < 0) {
             weekState.healthDelta += alloResult.healthDelta;
             weekState.events.push(
@@ -1705,8 +1724,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       }
 
       // ── Demurrage UBI: 2% wealth tax → redistributed as equal UBI ─────────
+      // Institutional agents (banks) are exempt — their reserves are not personal wealth.
       {
-        const agentWealthList: AMMAgentWealth[] = aliveAgents.map(agent => ({
+        const citizenAgentsForUBI = aliveAgents.filter(a => a.type !== 'bank');
+        const agentWealthList: AMMAgentWealth[] = citizenAgentsForUBI.map(agent => ({
           agentId: agent.id,
           wealth: clampWealth(agent.currentStats.wealth + (weekStateMap.get(agent.id)?.wealthDelta ?? 0)),
         }));
@@ -1797,18 +1818,19 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         let newHealth = clampStat(agent.currentStats.health + weekState.healthDelta);
         let newHappiness = clampStat(agent.currentStats.happiness + weekState.happinessDelta);
         let newCortisol = clampStat((agent.currentStats.cortisol ?? 20) + weekState.cortisolDelta);
-        let newDopamine = clampStat((agent.currentStats.dopamine ?? 50) + weekState.dopamineDelta);
 
         // Task 1: Psychological clamping — cap Happiness based on physiological state.
         // Prevents LLM hallucinations of "100 Happiness" while starving to death.
         newHappiness = clampHappinessByPhysiology(newHappiness, newHealth, newCortisol);
 
-        const shouldDie = (outcome?.died === true) || newHealth <= 2;
+        // Institutional agents cannot die, be humiliated, or be seized.
+        // They only update their wealth (reserves) and persist.
+        const shouldDie = agent.type !== 'bank' && ((outcome?.died === true) || newHealth <= 2);
         const isBreakdownTrapped =
           weekState.interruptedReason === 'mental_breakdown' &&
           weekState.inventory.food.quantity <= 0 &&
           newWealth < physicsConfig.lowWealthThreshold;
-        const shouldHumiliate = !shouldDie && (
+        const shouldHumiliate = agent.type !== 'bank' && !shouldDie && (
           (newHealth < 20 && weekState.inventory.food.quantity <= 0) ||
           isBreakdownTrapped
         );
@@ -1852,7 +1874,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         if (lockedVariables.includes('health')) newHealth = agent.initialStats.health;
         if (lockedVariables.includes('happiness')) newHappiness = agent.initialStats.happiness;
         if (lockedVariables.includes('cortisol')) newCortisol = agent.initialStats.cortisol ?? 20;
-        if (lockedVariables.includes('dopamine')) newDopamine = agent.initialStats.dopamine ?? 50;
 
         statUpdates.push({
           id: agent.id,
@@ -1860,7 +1881,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           health: newHealth,
           happiness: newHappiness,
           cortisol: newCortisol,
-          dopamine: newDopamine,
         });
 
         // Task 4: Build action-result feedback for next iteration's prompt injection
@@ -2188,6 +2208,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // All capital market DB writes are batched in a single transaction.
       // SFC: bond/equity transactions are SFC-neutral transfers within the perimeter —
       // no escrow term needed; computeSystemFiatTotal is unchanged.
+      let telemetryBondYields: { governmentYield?: number; corporateYield?: number } | null = null;
       if (cmktEconomyConfig.capitalMarketsEnabled) {
         const equityPositions = capitalMarketRepo.getEquityPositionsBySession(scope);
         const bondHoldings = capitalMarketRepo.getActiveBondHoldingsBySession(scope);
@@ -2263,6 +2284,26 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         if (cmktDelta.trace.length > 0) {
           appendTrace(sessionId, cmktDelta.trace.join('\n'));
         }
+
+        // Compute weighted-average bond yields for telemetry
+        // Read post-tick active holdings so matured bonds are excluded.
+        const postTickBonds = capitalMarketRepo.getActiveBondHoldingsBySession(scope);
+        const govBonds = postTickBonds.filter(b => b.bondType === 'government');
+        const corpBonds = postTickBonds.filter(b => b.bondType === 'corporate');
+        const weightedAvgYield = (bonds: typeof postTickBonds) => {
+          const totalFace = bonds.reduce((s, b) => s + b.faceValue, 0);
+          return totalFace > 0
+            ? bonds.reduce((s, b) => s + b.couponRate * b.faceValue, 0) / totalFace
+            : undefined;
+        };
+        const govYield = weightedAvgYield(govBonds);
+        const corpYield = weightedAvgYield(corpBonds);
+        if (govYield !== undefined || corpYield !== undefined) {
+          telemetryBondYields = {
+            governmentYield: govYield,
+            corporateYield: corpYield,
+          };
+        }
       }
 
       // ── Fiscal policy tick ──────────────────────────────────────────────────
@@ -2270,10 +2311,15 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // updates public goods quality, applies welfare payments to agents.
       // SFC: all spending flows from treasury to agents (direct transfers).
       let fiscalPublicGoodsQuality: { infrastructureQuality: number; educationQuality: number; defenseQuality: number; welfareQuality: number } | null = null;
+      let fiscalCategorySpending: { infrastructure: number; education: number; defense: number; welfare: number } | null = null;
       if (economyConfig.fiscalEnabled) {
         const budgetAllocation = fiscalRepo.getActiveBudget(scope) ?? DEFAULT_BUDGET_ALLOCATION;
         const currentPublicGoods = fiscalRepo.getPublicGoodsState(scope);
         const treasuryBalance = sessionStateTreasury.get(sessionId) ?? 0;
+
+        // Compute total economy fiat for GDP-scaled public goods quality (GC3/GC5 fix).
+        // Without this, the GDP-scaling formula in fiscalEngine is dead code.
+        const fiscalTotalEconomyFiat = statUpdates.reduce((s, u) => s + u.wealth, 0) + treasuryBalance;
 
         const fiscalDelta = fiscalEngine.executeBudget({
           treasuryBalance,
@@ -2290,10 +2336,12 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             : { iterationNumber: 0, ...DEFAULT_PUBLIC_GOODS_INITIAL },
           aliveAgentIds: aliveAgents.map(a => a.id),
           iterationNumber: iterNum,
+          totalEconomyFiat: fiscalTotalEconomyFiat,
         });
 
-        // Lift quality scores to outer scope for iterTelemetry population
+        // Lift quality scores and spending to outer scope for iterTelemetry population
         fiscalPublicGoodsQuality = fiscalDelta.updatedPublicGoods;
+        fiscalCategorySpending = fiscalDelta.categorySpending;
 
         // Apply treasury delta (spending removed from treasury)
         sessionStateTreasury.set(sessionId, treasuryBalance + fiscalDelta.treasuryDelta);
@@ -2414,7 +2462,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
       const finalStatsByAgentId = new Map(statUpdates.map(u => [u.id, u]));
 
-      const cognitivePostInputs: CognitivePostInput[] = aliveAgents.map(agent => {
+      // Institutional agents (banks) skip cognitive post-processing — no experience memories.
+      const cognitivePostInputs: CognitivePostInput[] = aliveAgents.filter(a => a.type !== 'bank').map(agent => {
         const agentIntent = intentMap.get(agent.id);
         const weekState = weekStateMap.get(agent.id)!;
         const isHumiliated = humiliatedAgentIds.has(agent.id);
@@ -2430,7 +2479,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           healthDelta: isHumiliated ? -(agent.currentStats.health - 30) : weekState.healthDelta,
           happinessDelta: isHumiliated ? -20 : weekState.happinessDelta,
           cortisolDelta: isHumiliated ? 30 : weekState.cortisolDelta,
-          dopamineDelta: isHumiliated ? -20 : weekState.dopamineDelta,
           economyEvents: weekState.events,
           isStarving: weekState.inventory.food.quantity <= 0,
           narrativeSummary: resolution.narrativeSummary,
@@ -2540,9 +2588,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         const averageCortisol = statUpdates.length > 0
           ? Math.round(statUpdates.reduce((s, u) => s + u.cortisol, 0) / statUpdates.length)
           : 0;
-        const averageDopamine = statUpdates.length > 0
-          ? Math.round(statUpdates.reduce((s, u) => s + u.dopamine, 0) / statUpdates.length)
-          : 0;
 
         iterTelemetry = {
           iterationNumber: iterNum,
@@ -2559,7 +2604,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           trustIndex,
           crimeRate,
           averageCortisol,
-          averageDopamine,
           // Banking M0/M1 telemetry (zero when bankingEnabled is false)
           m0: totalFiatSupply,  // base money — constant under SFC (includes depositBalances + collateral)
           m1: totalFiatSupply + bankingLoansOutstanding,  // M1 = M0 + outstanding loan principals
@@ -2571,7 +2615,24 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             educationQuality: Math.round(fiscalPublicGoodsQuality.educationQuality * 100) / 100,
             defenseQuality: Math.round(fiscalPublicGoodsQuality.defenseQuality * 100) / 100,
             welfareQuality: Math.round(fiscalPublicGoodsQuality.welfareQuality * 100) / 100,
+            publicGoodsQuality: {
+              infrastructure: Math.round(fiscalPublicGoodsQuality.infrastructureQuality * 100) / 100,
+              education: Math.round(fiscalPublicGoodsQuality.educationQuality * 100) / 100,
+              defense: Math.round(fiscalPublicGoodsQuality.defenseQuality * 100) / 100,
+              welfare: Math.round(fiscalPublicGoodsQuality.welfareQuality * 100) / 100,
+            },
           } : {}),
+          // Fiscal per-category spending telemetry (absent when fiscalEnabled is false)
+          ...(fiscalCategorySpending ? {
+            fiscalSpending: {
+              infrastructure: Math.round(fiscalCategorySpending.infrastructure * 100) / 100,
+              education: Math.round(fiscalCategorySpending.education * 100) / 100,
+              defense: Math.round(fiscalCategorySpending.defense * 100) / 100,
+              welfare: Math.round(fiscalCategorySpending.welfare * 100) / 100,
+            },
+          } : {}),
+          // Bond yields telemetry (absent when capitalMarketsEnabled is false or no bonds issued)
+          ...(telemetryBondYields ? { bondYields: telemetryBondYields } : {}),
         };
         // Phase A: SFC drift check — warn if unaccounted fiat appears or disappears.
         // Keep a floor tolerance so extinction or tiny populations do not generate
@@ -2667,6 +2728,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
       // Reload agents after updates
       agents = await agentRepo.listBySession(scope);
+      // Update cumulative dead count for next iteration's telemetry digest delta
+      previousIterDeadCount = agents.filter(a => !a.isAlive).length;
 
       // ── SFC assertion: detect unexpected fiat creation or destruction ─────
       // The economy is fully closed-loop. Every transfer must be zero-sum.
@@ -2709,7 +2772,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // Wrapping the iterationsTable insert and the AMM snapshot insert in a single
       // sqlite transaction ensures that a crash between the two writes cannot leave
       // the DB with a dangling iteration record but a stale AMM state, or vice versa.
-      const stats = computeStats(agents, iterNum);
+      const stats = computeStats(agents.filter(a => a.type !== 'bank'), iterNum);
       // Embed telemetry in the statistics blob so it survives server restarts
       // and is available even when the in-memory map has been cleared.
       const statsWithTelemetry = iterTelemetry
@@ -2825,7 +2888,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     }
 
     // ── Final report ─────────────────────────────────────────────────────────
-    const finalStats = computeStats(agents, endIter);
+    const finalStats = computeStats(agents.filter(a => a.type !== 'bank'), endIter);
     const finalMessages = buildFinalReportPrompt(session, summaries, {
       aliveCount: finalStats.aliveCount,
       avgWealth: finalStats.avgWealth,

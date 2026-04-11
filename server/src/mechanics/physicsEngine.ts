@@ -39,7 +39,6 @@ export interface PhysicsInput {
   isSabotaged?: boolean;
   /** Phase 3: Whether this agent is under active SUPPRESS enforcement (+cortisol, -happiness). */
   isSuppressed?: boolean;
-  /** True only for the first action in the queue — dopamine decay fires once per week, not per action. */
   isFirstAction?: boolean;
   /**
    * Fiscal Policy: public goods multiplier effects from the previous iteration.
@@ -59,7 +58,6 @@ export interface PhysicsOutput {
   healthDelta: number;
   happinessDelta: number;
   cortisolDelta: number;
-  dopamineDelta: number;
   policyValue?: number;
   policyKey?: 'reserveRequirement' | 'baseLoanInterestRate';
   /**
@@ -141,7 +139,7 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
     isFirstAction,
     fiscalMultipliers,
   } = input;
-  let w = 0, h = 0, hap = 0, cor = 0, dop = 0;
+  let w = 0, h = 0, hap = 0, cor = 0;
   let policyValue: PhysicsOutput['policyValue'];
   let policyKey: PhysicsOutput['policyKey'];
   const trace: string[] = [];
@@ -168,13 +166,11 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = -2;
       hap = -1;
       cor = -3;
-      dop = 2;
       trace.push(`  Δwealth: roleIncome(${agent.role} = ${roleTierLabel(agent.role)}) = ${base} × productionMult(${productionMult.toFixed(3)}) × infraBoost(${infraBoost.toFixed(3)}) = ${w.toFixed(3)} (funded from state treasury)`);
       if (productivityBonus > 0) trace.push(`  [Fiscal] Infrastructure quality boost: +${(productivityBonus * 100).toFixed(2)}% productivity`);
       trace.push(`  Δhealth: -2 (labor cost)`);
       trace.push(`  Δhappiness: -1 (moderate work satisfaction)`);
       trace.push(`  Δcortisol: -3 (productive relief)`);
-      trace.push(`  Δdopamine: +2 (effort reward)`);
       break;
     }
     case 'WORK_AT_ENTERPRISE': {
@@ -184,12 +180,10 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = -2;
       hap = -1;
       cor = -3;
-      dop = 2;
       trace.push(`  Δwealth: 0 (wages settled by runner's enterprise system — roleIncome suppressed to prevent double income)`);
       trace.push(`  Δhealth: -2 (labor cost)`);
       trace.push(`  Δhappiness: -1 (moderate work satisfaction)`);
       trace.push(`  Δcortisol: -3 (productive relief)`);
-      trace.push(`  Δdopamine: +2 (effort reward)`);
       break;
     }
     case 'REST':
@@ -197,21 +191,17 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = 5;
       hap = 2;
       cor = -5;
-      dop = 1;
       trace.push(`  Δhealth: +5 (physical recovery)`);
       trace.push(`  Δhappiness: +2 (rest satisfaction)`);
       trace.push(`  Δcortisol: -5 (decompression)`);
-      trace.push(`  Δdopamine: +1 (calm reward)`);
       break;
     case 'STRIKE':
       w = 0;
       h = 0;
       hap = 5;
       cor = 5;
-      dop = 4;
       trace.push(`  Δhappiness: +5 (collective solidarity)`);
       trace.push(`  Δcortisol: +5 (tension from confrontation)`);
-      trace.push(`  Δdopamine: +4 (ideological energy)`);
       break;
     case 'STEAL': {
       const stolen = stealCalc(agent, allAgents, actionTarget);
@@ -220,7 +210,6 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = -5;
       hap = -3;
       cor = 10;
-      dop = 5;
       if (target) {
         trace.push(`  Δwealth: min(stealMax=${physicsConfig.stealMax}, ${target.currentStats.wealth} × ratio=${physicsConfig.stealRatio}) = ${stolen.toFixed(3)}`);
       } else {
@@ -229,7 +218,6 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       trace.push(`  Δhealth: -5 (physical risk)`);
       trace.push(`  Δhappiness: -3 (moral cost)`);
       trace.push(`  Δcortisol: +10 (legal anxiety)`);
-      trace.push(`  Δdopamine: +5 (adrenaline)`);
       break;
     }
     case 'HELP':
@@ -237,34 +225,28 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = 0;
       hap = 5;
       cor = -5;
-      dop = 5;
       trace.push(`  Δwealth: -5 (resources given)`);
       trace.push(`  Δhappiness: +5 (altruistic satisfaction)`);
       trace.push(`  Δcortisol: -5 (social bonding relief)`);
-      trace.push(`  Δdopamine: +5 (prosocial reward)`);
       break;
     case 'INVEST':
       w = -10;
       h = 0;
       hap = -2;
       cor = 3;
-      dop = 2;
       trace.push(`  Δwealth: -10 (capital deployed)`);
       trace.push(`  Δhappiness: -2 (deferred gratification)`);
       trace.push(`  Δcortisol: +3 (investment risk anxiety)`);
-      trace.push(`  Δdopamine: +2 (future-oriented reward)`);
       break;
     case 'PRODUCE_AND_SELL':
       w = 0;
       h = -3;
       hap = 1;
       cor = -2;
-      dop = 2;
       trace.push(`  Δwealth: 0 (real revenue flows through economy engine / AMM)`);
       trace.push(`  Δhealth: -3 (physical labor cost)`);
       trace.push(`  Δhappiness: +1 (self-sufficiency satisfaction)`);
       trace.push(`  Δcortisol: -2 (productive activity)`);
-      trace.push(`  Δdopamine: +2 (creative effort reward)`);
       break;
     case 'POST_BUY_ORDER':
     case 'POST_SELL_ORDER':
@@ -272,11 +254,9 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = 0;
       hap = 1;
       cor = -1;
-      dop = 1;
       trace.push(`  Δwealth: 0 (real flows through AMM / order book)`);
       trace.push(`  Δhappiness: +1 (market participation)`);
       trace.push(`  Δcortisol: -1 (economic agency)`);
-      trace.push(`  Δdopamine: +1 (market interaction)`);
       break;
     case 'FOUND_ENTERPRISE':
       // Fix: Founding cost is handled entirely by the economy engine (40 fiat → treasury).
@@ -285,11 +265,9 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = -1;
       hap = 3;
       cor = 5;
-      dop = 4;
       trace.push(`  Δwealth: 0 (founding cost handled by economy engine)`);
       trace.push(`  Δhappiness: +3 (entrepreneurial ambition)`);
       trace.push(`  Δcortisol: +5 (business risk)`);
-      trace.push(`  Δdopamine: +4 (ownership excitement)`);
       break;
     case 'POST_JOB_OFFER':
     case 'HIRE_EMPLOYEE':
@@ -298,27 +276,22 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = 0;
       hap = 2;
       cor = 2;
-      dop = 2;
       trace.push(`  Δhappiness: +2 (management action satisfaction)`);
       trace.push(`  Δcortisol: +2 (decision-making stress)`);
-      trace.push(`  Δdopamine: +2 (control reward)`);
       break;
     case 'APPLY_FOR_JOB':
       w = 0;
       h = 0;
       hap = 1;
       cor = 1;
-      dop = 1;
       trace.push(`  Δhappiness: +1 (hopeful)`);
       trace.push(`  Δcortisol: +1 (application anxiety)`);
-      trace.push(`  Δdopamine: +1 (anticipation)`);
       break;
     case 'QUIT_JOB':
       w = 0;
       h = 0;
       hap = -1;
       cor = 4;
-      dop = 0;
       trace.push(`  Δhappiness: -1 (loss of security)`);
       trace.push(`  Δcortisol: +4 (uncertainty of unemployment)`);
       break;
@@ -327,33 +300,27 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = -8;
       hap = 5;
       cor = 18;
-      dop = 7;
       trace.push(`  Δhealth: -8 (physical risk — injuries, confrontation)`);
       trace.push(`  Δhappiness: +5 (ideological satisfaction)`);
       trace.push(`  Δcortisol: +18 (high danger and legal anxiety)`);
-      trace.push(`  Δdopamine: +7 (adrenaline rush)`);
       break;
     case 'EMBEZZLE':
       w = 0; // SFC fix: no phantom fiat — wealth gain handled by runner from communal treasury pool
       h = 0;
       hap = 2;
       cor = 20;
-      dop = 8;
       trace.push(`  Δwealth: 0 (treasury deduction applied separately in runner)`);
       trace.push(`  Δhappiness: +2 (fleeting power satisfaction)`);
       trace.push(`  Δcortisol: +20 (extreme legal anxiety)`);
-      trace.push(`  Δdopamine: +8 (adrenaline of corruption)`);
       break;
     case 'ADJUST_TAX':
       w = 0; // SFC fix: no phantom fiat — wealth comes only from actual tax collected in runner
       h = 0;
       hap = 3;
       cor = 5;
-      dop = 4;
       trace.push(`  Δwealth: 0 (actual tax collected applied separately in runner)`);
       trace.push(`  Δhappiness: +3 (satisfaction from exercising control)`);
       trace.push(`  Δcortisol: +5 (fear of backlash)`);
-      trace.push(`  Δdopamine: +4 (political power reward)`);
       break;
     case 'SUPPRESS': {
       // Defense quality (enforcementBonus) increases suppression effectiveness.
@@ -363,11 +330,9 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = 0;
       hap = 4 + defenseConfidenceBonus * 10;  // defense quality amplifies domination satisfaction
       cor = 8;
-      dop = 6;
       trace.push(`  Note: target's penalty (+cortisol, -happiness) applied separately in runner`);
       trace.push(`  Δhappiness: +4 (satisfaction from domination)${defenseConfidenceBonus > 0 ? ` + ${(defenseConfidenceBonus * 10).toFixed(2)} (defense quality confidence boost)` : ''}`);
       trace.push(`  Δcortisol: +8 (stress from wielding coercive power)`);
-      trace.push(`  Δdopamine: +6 (domination reward)`);
       if (enforcementBonus > 0) trace.push(`  [Fiscal] Defense quality enforcement bonus: +${(enforcementBonus * 100).toFixed(2)}%`);
       break;
     }
@@ -380,11 +345,9 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = 0;
       hap = 1;
       cor = -2;
-      dop = 1;
       trace.push(`  Δwealth: 0 (deposit processed by bankingEngine — M1 accounting)`);
       trace.push(`  Δhappiness: +1 (financial security)`);
       trace.push(`  Δcortisol: -2 (savings provide stability)`);
-      trace.push(`  Δdopamine: +1 (prudent saving reward)`);
       trace.push(`  [BANK] ${agent.name} requested DEPOSIT`);
       break;
     case 'WITHDRAW':
@@ -392,7 +355,6 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = 0;
       hap = 0;
       cor = 1;
-      dop = 0;
       trace.push(`  Δwealth: 0 (withdrawal processed by bankingEngine)`);
       trace.push(`  Δcortisol: +1 (liquidity need signal)`);
       trace.push(`  [BANK] ${agent.name} requested WITHDRAW`);
@@ -402,11 +364,9 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = 0;
       hap = 2;
       cor = 5;
-      dop = 3;
       trace.push(`  Δwealth: 0 (loan principal credited as deposit by bankingEngine — M1 expansion)`);
       trace.push(`  Δhappiness: +2 (capital access)`);
       trace.push(`  Δcortisol: +5 (debt obligation anxiety)`);
-      trace.push(`  Δdopamine: +3 (investment opportunity reward)`);
       trace.push(`  [BANK] ${agent.name} requested TAKE_LOAN`);
       break;
     case 'REPAY_LOAN':
@@ -414,11 +374,9 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = 0;
       hap = 3;
       cor = -3;
-      dop = 2;
       trace.push(`  Δwealth: 0 (repayment debited from deposit by bankingEngine — M1 contraction)`);
       trace.push(`  Δhappiness: +3 (debt reduction relief)`);
       trace.push(`  Δcortisol: -3 (obligation decreasing)`);
-      trace.push(`  Δdopamine: +2 (progress reward)`);
       trace.push(`  [BANK] ${agent.name} requested REPAY_LOAN`);
       break;
     case 'ISSUE_LOAN':
@@ -426,11 +384,9 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = 0;
       hap = 2;
       cor = 3;
-      dop = 3;
       trace.push(`  Δwealth: 0 (loan issuance handled by bankingEngine — M1 expansion)`);
       trace.push(`  Δhappiness: +2 (banking purpose fulfillment)`);
       trace.push(`  Δcortisol: +3 (credit risk exposure)`);
-      trace.push(`  Δdopamine: +3 (lending business reward)`);
       trace.push(`  [BANK] ${agent.name} (bank agent) issued a loan`);
       break;
     case 'SET_INTEREST_RATE':
@@ -438,11 +394,9 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       h = 0;
       hap = 1;
       cor = 2;
-      dop = 2;
       trace.push(`  Δwealth: 0 (rate adjustment — no immediate fiat change)`);
       trace.push(`  Δhappiness: +1 (monetary policy agency)`);
       trace.push(`  Δcortisol: +2 (policy decision stress)`);
-      trace.push(`  Δdopamine: +2 (control reward)`);
       trace.push(`  [BANK] ${agent.name} (bank agent) set interest rate`);
       break;
     case 'SET_RESERVE_RATIO': {
@@ -458,13 +412,11 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       const clamped = Math.max(0.05, Math.min(0.50, requestedValue));
       hap = 1;
       cor = 2;
-      dop = 2;
       policyKey = 'reserveRequirement';
       policyValue = clamped;
       trace.push(`  Δwealth: 0 (reserve ratio change is a config update, not immediate fiat movement)`);
       trace.push(`  Δhappiness: +1 (monetary policy agency)`);
       trace.push(`  Δcortisol: +2 (policy decision stress)`);
-      trace.push(`  Δdopamine: +2 (control reward)`);
       trace.push(`  Central bank set reserve ratio to ${clamped} (requested ${requestedValue})`);
       break;
     }
@@ -481,13 +433,11 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       const clamped = Math.max(0.001, Math.min(0.05, requestedValue));
       hap = 1;
       cor = 2;
-      dop = 2;
       policyKey = 'baseLoanInterestRate';
       policyValue = clamped;
       trace.push(`  Δwealth: 0 (base rate change is a config update, not immediate fiat movement)`);
       trace.push(`  Δhappiness: +1 (monetary policy agency)`);
       trace.push(`  Δcortisol: +2 (policy decision stress)`);
-      trace.push(`  Δdopamine: +2 (control reward)`);
       trace.push(`  Central bank set base rate to ${clamped} (requested ${requestedValue})`);
       break;
     }
@@ -497,54 +447,54 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
     // The physics engine only records trace and provides emotional effects.
     case 'BUY_SHARES':
       w = 0;
-      h = 0; hap = 1; cor = 0; dop = 1;
+      h = 0; hap = 1; cor = 0;
       trace.push(`  Δwealth: 0 (share purchase deferred to capitalMarketEngine.processIteration())`);
       trace.push(`  Δhappiness: +1 (investment optimism)`);
-      trace.push(`  Δdopamine: +1 (ownership anticipation)`);
       trace.push(`  [CMKT] ${agent.name} requested BUY_SHARES - deferred to capitalMarketEngine.processIteration()`);
       break;
 
     case 'SELL_SHARES':
       w = 0;
-      h = 0; hap = -1; cor = 1; dop = -1;
+      h = 0; hap = -1; cor = 1;
       trace.push(`  Δwealth: 0 (share sale deferred to capitalMarketEngine.processIteration())`);
       trace.push(`  Δhappiness: -1 (liquidation reluctance)`);
       trace.push(`  Δcortisol: +1 (exit anxiety)`);
-      trace.push(`  Δdopamine: -1 (relinquishing ownership)`);
       trace.push(`  [CMKT] ${agent.name} requested SELL_SHARES - deferred to capitalMarketEngine.processIteration()`);
       break;
 
     case 'BUY_BOND':
       w = 0;
-      h = 0; hap = 1; cor = -1; dop = 1;
+      h = 0; hap = 1; cor = -1;
       trace.push(`  Δwealth: 0 (bond purchase deferred to capitalMarketEngine.processIteration())`);
       trace.push(`  Δhappiness: +1 (financial security via fixed income)`);
       trace.push(`  Δcortisol: -1 (guaranteed return reduces anxiety)`);
-      trace.push(`  Δdopamine: +1 (prudent investment reward)`);
       trace.push(`  [CMKT] ${agent.name} requested BUY_BOND - deferred to capitalMarketEngine.processIteration()`);
       break;
 
     case 'ISSUE_GOV_BOND':
       w = 0;
-      h = 0; hap = 0; cor = -2; dop = 1;
+      h = 0; hap = 0; cor = -2;
       trace.push(`  Δwealth: 0 (government bond issuance deferred to capitalMarketEngine.processIteration())`);
       trace.push(`  Δcortisol: -2 (treasury financing provides fiscal stability)`);
-      trace.push(`  Δdopamine: +1 (fiscal policy agency)`);
       trace.push(`  [CMKT] Treasury/enterprise ISSUE_GOV_BOND - deferred to capitalMarketEngine.processIteration()`);
       break;
 
     case 'NONE':
-    default:
-      w = 0;
-      h = -1;
-      hap = -1;
-      cor = 2;
-      dop = -2;
-      trace.push(`  Δhealth: -1 (idle deterioration)`);
-      trace.push(`  Δhappiness: -1 (purposelessness)`);
-      trace.push(`  Δcortisol: +2 (unfulfilled potential anxiety)`);
-      trace.push(`  Δdopamine: -2 (lack of stimulation)`);
+    default: {
+      // Institutional agents (bank/central_bank) don't suffer personal idle penalties
+      const isInstitutionalAgent = agent.type?.toLowerCase() === 'bank' ||
+        ['bank', 'central_bank'].includes(agent.role?.toLowerCase() ?? '');
+      if (isInstitutionalAgent) {
+        w = 0; h = 0; hap = 0; cor = 0;
+        trace.push(`  Institutional idle — no personal stat changes`);
+      } else {
+        w = 0; h = -1; hap = -1; cor = 2;
+        trace.push(`  Δhealth: -1 (idle deterioration)`);
+        trace.push(`  Δhappiness: -1 (purposelessness)`);
+        trace.push(`  Δcortisol: +2 (unfulfilled potential anxiety)`);
+      }
       break;
+    }
   }
 
   // ── Layer economy deltas on top ──────────────────────────────────────
@@ -577,37 +527,27 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
     trace.push(`⚠ Suppression active: Δcortisol +${physicsConfig.suppressionCortisolPenalty}, Δhappiness ${physicsConfig.suppressionHappinessPenalty}`);
   }
 
-  // ── Dopamine decay (hedonic adaptation) — once per week, not per action ─
-  // isFirstAction guards this so multi-action queues don't multiply the decay.
-  if (isFirstAction !== false) {
-    dop += physicsConfig.dopamineDecay;
-    trace.push(`Hedonic adaptation: Δdopamine ${physicsConfig.dopamineDecay} (decay)`);
-  }
-
   // ── Pre-clamp summary ────────────────────────────────────────────────
-  trace.push(`Pre-clamp: Δwealth=${w.toFixed(3)}, Δhealth=${h.toFixed(3)}, Δhappiness=${hap.toFixed(3)}, Δcortisol=${cor.toFixed(3)}, Δdopamine=${dop.toFixed(3)}`);
+  trace.push(`Pre-clamp: Δwealth=${w.toFixed(3)}, Δhealth=${h.toFixed(3)}, Δhappiness=${hap.toFixed(3)}, Δcortisol=${cor.toFixed(3)}`);
 
   // ── Clamp and report ─────────────────────────────────────────────────
   const cw = clampDelta(w);
   const ch = clampDelta(h);
   const chap = clampDelta(hap);
   const ccor = clampDelta(cor);
-  const cdop = clampDelta(dop);
   const max = physicsConfig.clampDeltaMax;
   if (cw !== w)   trace.push(`⚠ Δwealth clamped: ${w.toFixed(3)} → ${cw.toFixed(3)} (limit ±${max})`);
   if (ch !== h)   trace.push(`⚠ Δhealth clamped: ${h.toFixed(3)} → ${ch.toFixed(3)} (limit ±${max})`);
   if (chap !== hap) trace.push(`⚠ Δhappiness clamped: ${hap.toFixed(3)} → ${chap.toFixed(3)} (limit ±${max})`);
   if (ccor !== cor) trace.push(`⚠ Δcortisol clamped: ${cor.toFixed(3)} → ${ccor.toFixed(3)} (limit ±${max})`);
-  if (cdop !== dop) trace.push(`⚠ Δdopamine clamped: ${dop.toFixed(3)} → ${cdop.toFixed(3)} (limit ±${max})`);
 
-  trace.push(`→ Final: Δwealth=${cw.toFixed(3)}, Δhealth=${ch.toFixed(3)}, Δhappiness=${chap.toFixed(3)}, Δcortisol=${ccor.toFixed(3)}, Δdopamine=${cdop.toFixed(3)}`);
+  trace.push(`→ Final: Δwealth=${cw.toFixed(3)}, Δhealth=${ch.toFixed(3)}, Δhappiness=${chap.toFixed(3)}, Δcortisol=${ccor.toFixed(3)}`);
 
   return {
     wealthDelta: cw,
     healthDelta: ch,
     happinessDelta: chap,
     cortisolDelta: ccor,
-    dopamineDelta: cdop,
     policyValue,
     policyKey,
     trace,

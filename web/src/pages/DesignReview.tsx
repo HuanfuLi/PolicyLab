@@ -13,7 +13,6 @@ const LOCKABLE_VARIABLES = [
   { key: 'health', label: 'Health' },
   { key: 'happiness', label: 'Happiness' },
   { key: 'cortisol', label: 'Cortisol' },
-  { key: 'dopamine', label: 'Dopamine' },
   { key: 'role', label: 'Role' },
   { key: 'skills', label: 'Skills' },
   { key: 'inventory', label: 'Inventory' },

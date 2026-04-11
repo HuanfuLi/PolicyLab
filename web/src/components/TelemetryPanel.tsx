@@ -526,15 +526,11 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
             {/* Chart 6: Population Psychology */}
             {logs.some(l => l.averageCortisol != null) && (
               <div style={sectionStyle}>
-                <div style={sectionTitleStyle}>Chart 6 — Population Psychology</div>
+                <div style={sectionTitleStyle}>Chart 6 — Population Stress</div>
                 <SVGLineChart
                   data={logs.filter(l => l.averageCortisol != null).map(l => ({ x: l.iterationNumber, y: l.averageCortisol! }))}
                   color={CHART_CORAL}
                   label="Avg Cortisol"
-                  data2={logs.filter(l => l.averageDopamine != null).map(l => ({ x: l.iterationNumber, y: l.averageDopamine! }))}
-                  color2={CHART_BLUE}
-                  label2="Avg Dopamine"
-                  sharedYAxis={true}
                   width={860}
                   height={170}
                 />
@@ -557,7 +553,6 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
                       <th style={thStyle}>Trust</th>
                       <th style={thStyle}>Crime</th>
                       <th style={thStyle}>Cortisol</th>
-                      <th style={thStyle}>Dopamine</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -571,7 +566,6 @@ export default function TelemetryPanel({ sessionId, onClose, macroHistory }: Tel
                       <td style={tdStyle}>{latest.trustIndex?.toFixed(2) ?? '—'}</td>
                       <td style={tdStyle}>{latest.crimeRate?.toFixed(2) ?? '—'}</td>
                       <td style={tdStyle}>{latest.averageCortisol ?? '—'}</td>
-                      <td style={tdStyle}>{latest.averageDopamine ?? '—'}</td>
                     </tr>
                   </tbody>
                 </table>

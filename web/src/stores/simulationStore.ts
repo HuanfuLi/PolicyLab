@@ -326,7 +326,11 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
               feed = feed.map(f =>
                 f.number === event.iteration ? { ...f, stats: event.stats } : f
               );
-              statsHistory = [...statsHistory, event.stats];
+              // Deduplicate by iteration number to guard against duplicate SSE
+              // delivery (e.g. StrictMode double-mount, reconnect overlap).
+              if (!statsHistory.some(s => s.iterationNumber === event.stats.iterationNumber)) {
+                statsHistory = [...statsHistory, event.stats];
+              }
               pendingIntents = {};
               needAgentReload = true;
               needMacroReload = true;

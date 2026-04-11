@@ -321,11 +321,12 @@ const Reflection = () => {
                       <LineChart
                         series={[
                           { label: 'Wealth', color: 'var(--warning)', data: displayStats.map(s => s.avgWealth) },
-                          { label: 'Health', color: 'var(--success)', data: displayStats.map(s => s.avgHealth) },
-                          { label: 'Happiness', color: 'var(--chart-indigo)', data: displayStats.map(s => s.avgHappiness) },
+                          { label: 'Health', color: 'var(--success)', data: displayStats.map(s => s.avgHealth), yRange: [0, 100] },
+                          { label: 'Happiness', color: 'var(--chart-indigo)', data: displayStats.map(s => s.avgHappiness), yRange: [0, 100] },
                         ]}
                         xLabels={displayStats.map(s => String(s.iterationNumber))}
-                        height={200}
+                        height={240}
+                        splitAxes
                       />
                     </div>
                   </>
@@ -409,11 +410,12 @@ const Reflection = () => {
                         <LineChart
                           series={[
                             { label: 'Wealth', color: 'var(--warning)', data: agentHistory.map(h => h.wealth) },
-                            { label: 'Health', color: 'var(--success)', data: agentHistory.map(h => h.health) },
-                            { label: 'Happiness', color: 'var(--chart-indigo)', data: agentHistory.map(h => h.happiness) },
+                            { label: 'Health', color: 'var(--success)', data: agentHistory.map(h => h.health), yRange: [0, 100] },
+                            { label: 'Happiness', color: 'var(--chart-indigo)', data: agentHistory.map(h => h.happiness), yRange: [0, 100] },
                           ]}
                           xLabels={agentHistory.map(h => String(h.iter))}
-                          height={160}
+                          height={200}
+                          splitAxes
                         />
                       </div>
                     ) : isExpanded ? (

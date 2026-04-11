@@ -94,8 +94,8 @@ function makeAgent(id: string, role: string): Agent {
     name: `Agent-${id}`,
     role,
     background: 'Sandbox agent.',
-    initialStats: { wealth: INITIAL_WEALTH, health: 80, happiness: 60, cortisol: 20, dopamine: 50 },
-    currentStats: { wealth: INITIAL_WEALTH, health: 80, happiness: 60, cortisol: 20, dopamine: 50 },
+    initialStats: { wealth: INITIAL_WEALTH, health: 80, happiness: 60, cortisol: 20 },
+    currentStats: { wealth: INITIAL_WEALTH, health: 80, happiness: 60, cortisol: 20 },
     isAlive: true,
     status: 'alive',
     type: 'citizen',
@@ -189,7 +189,6 @@ for (let iter = 1; iter <= TOTAL_ITERATIONS; iter++) {
     agent.currentStats.health = Math.max(0, Math.min(100, agent.currentStats.health + physics.healthDelta));
     agent.currentStats.happiness = Math.max(0, Math.min(100, agent.currentStats.happiness + physics.happinessDelta));
     agent.currentStats.cortisol = Math.max(0, Math.min(100, (agent.currentStats.cortisol ?? 20) + physics.cortisolDelta));
-    agent.currentStats.dopamine = Math.max(0, Math.min(100, (agent.currentStats.dopamine ?? 50) + physics.dopamineDelta));
 
     // Economy: PRODUCE_AND_SELL routes wealth through AMM; all others use resolveAction wealthDelta
     if (effectiveAction === 'PRODUCE_AND_SELL') {

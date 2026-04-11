@@ -263,17 +263,6 @@ export interface AllostaticTickInput {
    * this engine does NOT generate Cortisol, only responds to it.
    */
   cortisol: number;
-  /**
-   * D2: Current dopamine level (0–100).
-   * When ≤ 30, adds +4 cortisol feedback (anhedonia→anxiety loop):
-   * chronic low-reward state amplifies stress, modelling poverty/disengagement.
-   */
-  dopamine?: number;
-  /**
-   * Guard flag: set to true if dopamine feedback was already applied this iteration
-   * (e.g., in a retry scenario). Prevents indefinite stacking of the cortisol bonus.
-   */
-  dopamineFeedbackApplied?: boolean;
 }
 
 export interface AllostaticTickOutput {
@@ -327,19 +316,9 @@ export class AllostaticEngine {
    * PURE COMPUTATION per call — mutation is isolated to this instance.
    */
   tick(input: AllostaticTickInput): AllostaticTickOutput {
-    const { cortisol, dopamine, dopamineFeedbackApplied } = input;
+    const { cortisol } = input;
 
-    // D2: Dopamine anhedonia feedback — low drive amplifies cortisol.
-    // When an agent is chronically under-rewarded (dopamine ≤ 30), their
-    // stress system remains elevated even without external stressors.
-    // Guard: skip if already applied this iteration to prevent stacking in retries.
-    const effectiveCortisol = (
-      !dopamineFeedbackApplied &&
-      dopamine !== undefined &&
-      dopamine <= 30
-    )
-      ? Math.min(100, cortisol + 4)
-      : cortisol;
+    const effectiveCortisol = cortisol;
 
     // ── Step 1: Reversible Strain ──────────────────────────────────────────
     // Leaky integrator: effectiveCortisol is the forcing signal, 0.15 is the decay rate.
