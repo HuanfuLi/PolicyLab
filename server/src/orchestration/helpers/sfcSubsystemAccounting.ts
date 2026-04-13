@@ -61,6 +61,26 @@ export function accountSubsystem<T>(
 }
 
 /**
+ * Async variant of accountSubsystem — awaits the block before snapshotting after.
+ * Same accumulation semantics; same exception safety (accumulator unchanged on throw).
+ *
+ * Use for subsystem ticks that perform async work (e.g., the fiscal tick which
+ * persists session.config via await sessionRepo.updateConfig).
+ */
+export async function accountSubsystemAsync<T>(
+  subsystem: SubsystemKey,
+  snapshot: () => number,
+  block: () => Promise<T>,
+  sfcBySubsystem: SfcBySubsystem,
+): Promise<T> {
+  const before = snapshot();
+  const result = await block();
+  const after = snapshot();
+  sfcBySubsystem[subsystem] += (after - before);
+  return result;
+}
+
+/**
  * Log a structured drift line when |total drift| exceeds threshold.
  * Does NOT pause the simulation per D-23.
  *
