@@ -44,26 +44,63 @@ Examples of good proposals:
 - Wealthy merchant → propose lower tax_rate (0.02 → 0.01)
 - Starving population → propose higher ubi_allocation
 
-RESPOND WITH ONLY VALID JSON (no markdown):
+## Proposal Types (Phase 11 D-18)
+
+Politicians may propose ONE of two kinds. Pick the kind that best expresses your concern.
+
+A. **Scalar policy change** — adjust one of {tax_rate, ubi_allocation, enforcement_level}:
 {"proposal": {"field": "tax_rate", "value": 0.03, "reasoning": "brief reason"}}
+
+B. **Law amendment** (law_amendment) — replace a specific paragraph in the existing law text with new wording. Use this for governance innovations that scalars cannot capture (franchise rules, property rights, judicial process, etc.). The oldParagraph MUST match a paragraph in the current law verbatim (whitespace and smart quotes are normalized before matching):
+{"proposal": {"oldParagraph": "<verbatim existing paragraph>", "newParagraph": "<proposed replacement>", "reasoning": "brief reason"}}
+
+RESPOND WITH ONLY VALID JSON (no markdown). Use the shape matching your chosen kind.
 OR if you have no urgent concern: {"proposal": null}`;
 
   return [{ role: 'system', content: systemPrompt }];
 }
 
 /**
+ * Raw proposal shape accepted by buildBallotPrompt.
+ * Phase 11 D-18: includes policy (scalar) and law_amendment (paragraph) kinds.
+ */
+export type RawProposalForBallot =
+  | {
+      name: string;
+      role: string;
+      proposal: GovernancePolicyProposal & { kind: 'policy' };
+    }
+  | {
+      name: string;
+      role: string;
+      proposal: {
+        kind: 'law_amendment';
+        oldParagraph: string;
+        newParagraph: string;
+        reasoning: string;
+      };
+    };
+
+/**
  * Asks the Central Agent (Speaker of the House) to synthesize raw proposals
  * into a formal Legislative Ballot with at most 3 deduplicated items.
  *
- * Returns: { ballot: [{ field, proposedValue, description }] }
+ * Phase 11 D-18: ballot items may be 'policy' or 'law_amendment' kind.
+ *
+ * Returns: { ballot: [ ...policy or law_amendment items... ] }
  */
 export function buildBallotPrompt(
-  proposals: Array<{ name: string; role: string; proposal: GovernancePolicyProposal }>,
+  proposals: RawProposalForBallot[],
   currentPolicy: SessionPolicy,
   societyContext: string,
 ): LLMMessage[] {
   const proposalLines = proposals
-    .map(p => `- ${p.name} (${p.role}): change ${p.proposal.field} to ${p.proposal.value} — "${p.proposal.reasoning}"`)
+    .map(p => {
+      if (p.proposal.kind === 'law_amendment') {
+        return `- ${p.name} (${p.role}): amend law — replace "${p.proposal.oldParagraph.slice(0, 120)}" with "${p.proposal.newParagraph.slice(0, 120)}" — "${p.proposal.reasoning}"`;
+      }
+      return `- ${p.name} (${p.role}): change ${p.proposal.field} to ${p.proposal.value} — "${p.proposal.reasoning}"`;
+    })
     .join('\n');
 
   const systemPrompt = `You are the Speaker of the Legislative Assembly.
@@ -88,6 +125,16 @@ Rules:
 - Write a one-sentence "impactForecast" for each item: a concrete economic prediction of the likely effect (e.g. "System Projection: Raising the tax rate will increase the UBI pool by ~40% but may reduce merchant reinvestment.").
 - If all proposals are trivial or contradictory, return an empty ballot.
 
+## Ballot Item Types (Phase 11 D-18)
+
+Each ballot item emits ONE of two JSON shapes:
+
+A. **Scalar policy change** (preferred when the change fits tax_rate / ubi_allocation / enforcement_level):
+{"field": "tax_rate", "proposedValue": 0.03, "description": "...", "impactForecast": "..."}
+
+B. **Law amendment** (paragraph-level text replacement). Use when a proposed governance innovation cannot be expressed as a scalar. oldParagraph must match an existing paragraph in the current law verbatim (whitespace and smart quotes are normalized before matching):
+{"oldParagraph": "<verbatim existing paragraph>", "newParagraph": "<replacement>", "description": "...", "impactForecast": "..."}
+
 RESPOND WITH ONLY VALID JSON (no markdown):
 {"ballot": [{"field": "tax_rate", "proposedValue": 0.03, "description": "Raise demurrage tax to fund larger UBI", "impactForecast": "System Projection: Higher tax will widen the redistribution pool but reduce disposable wealth for high earners."}]}`;
 
@@ -96,6 +143,7 @@ RESPOND WITH ONLY VALID JSON (no markdown):
 
 /**
  * Asks a citizen agent (politician) to vote YES or NO on a specific ballot item.
+ * Phase 11 D-18: supports both 'policy' (scalar) and 'law_amendment' (paragraph diff) kinds.
  *
  * Returns: { vote: "YES" | "NO", reason: "one sentence" }
  */
@@ -104,22 +152,32 @@ export function buildVotePrompt(
   ballotItem: GovernanceBallotItem,
   currentPolicy: SessionPolicy,
 ): LLMMessage[] {
-  const fieldLabels: Record<string, string> = {
-    tax_rate: 'wealth demurrage tax rate',
-    ubi_allocation: 'fraction of tax redistributed as Universal Basic Income',
-    enforcement_level: 'law enforcement / theft deterrence multiplier',
-  };
-  const label = fieldLabels[ballotItem.field] ?? ballotItem.field;
-  const direction = ballotItem.proposedValue > (currentPolicy[ballotItem.field] ?? 0) ? 'INCREASE' : 'DECREASE';
-
   const forecastBlock = ballotItem.impactForecast
     ? `\n\n${ballotItem.impactForecast}`
     : '';
 
+  let proposalBlock: string;
+  if (ballotItem.kind === 'policy') {
+    const fieldLabels: Record<string, string> = {
+      tax_rate: 'wealth demurrage tax rate',
+      ubi_allocation: 'fraction of tax redistributed as Universal Basic Income',
+      enforcement_level: 'law enforcement / theft deterrence multiplier',
+    };
+    const label = fieldLabels[ballotItem.field] ?? ballotItem.field;
+    const direction = ballotItem.proposedValue > (currentPolicy[ballotItem.field] ?? 0) ? 'INCREASE' : 'DECREASE';
+    proposalBlock = `Proposal: ${direction} the ${label} from ${currentPolicy[ballotItem.field]} to ${ballotItem.proposedValue}.`;
+  } else {
+    // law_amendment kind — paragraph-level text replacement.
+    proposalBlock =
+      `Proposal: amend the law by replacing an existing paragraph with new wording.\n` +
+      `Current paragraph: "${ballotItem.oldParagraph.slice(0, 400)}"\n` +
+      `Proposed replacement: "${ballotItem.newParagraph.slice(0, 400)}"`;
+  }
+
   const systemPrompt = `You are ${agent.name}, a ${agent.role} voting in a Legislative Session.
 
 Ballot item: "${ballotItem.description}"
-Proposal: ${direction} the ${label} from ${currentPolicy[ballotItem.field]} to ${ballotItem.proposedValue}.${forecastBlock}
+${proposalBlock}${forecastBlock}
 
 Your current situation:
 - Wealth: ${agent.currentStats.wealth.toFixed(1)}

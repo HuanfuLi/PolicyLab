@@ -29,6 +29,7 @@ import { parseJSON } from '../parsers/json.js';
 import type { ChatMessage, DesignProgressEvent, BrainstormChecklist, SessionConfig, TaxPolicy } from '@policylab/shared';
 import { DEFAULT_ECONOMY_CONFIG, DEFAULT_BUDGET_ALLOCATION } from '@policylab/shared';
 import { validateTaxPolicy } from '../mechanics/economyConfigUtils.js';
+import { applyParagraphDiff } from '../orchestration/helpers/lawDiff.js';
 
 interface BrainstormResult {
   reply: string;
@@ -428,8 +429,11 @@ export async function refine(
     }
     if (lc.modify?.length) {
       for (const m of lc.modify) {
-        if (m.original && m.replacement && currentLaw.includes(m.original)) {
-          currentLaw = currentLaw.replace(m.original, m.replacement);
+        if (!m.original || !m.replacement) continue;
+        // Phase 11 D-19: shared paragraph-diff helper (smart-quote / whitespace normalized).
+        const result = applyParagraphDiff(currentLaw, m.original, m.replacement);
+        if (result.applied) {
+          currentLaw = result.law;
           changed = true;
         } else {
           console.warn(`[refine] lawChanges.modify: could not find exact match for: "${m.original?.slice(0, 80)}..."`);

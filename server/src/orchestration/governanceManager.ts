@@ -11,7 +11,13 @@
  * If fewer than 2 politicians can be selected, the cycle is skipped entirely.
  */
 
-import type { Agent, Session, SessionPolicy } from '@policylab/shared';
+import type {
+  Agent,
+  Session,
+  SessionPolicy,
+  GovernanceBallotItem,
+  LawAmendmentHistoryEntry,
+} from '@policylab/shared';
 import type { LLMProvider } from '../llm/types.js';
 import {
   buildProposalPrompt,
@@ -19,8 +25,9 @@ import {
   buildVotePrompt,
   buildFranchiseSizePrompt,
 } from '../llm/prompts/index.js';
-import type { GovernancePolicyProposal, GovernanceBallotItem } from '../llm/prompts/index.js';
+import type { GovernancePolicyProposal } from '../llm/prompts/index.js';
 import { sessionRepo } from '../db/repos/sessionRepo.js';
+import { applyParagraphDiff } from './helpers/lawDiff.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -44,8 +51,11 @@ export function getSessionPolicy(raw: unknown): SessionPolicy {
   };
 }
 
+/** Narrow helper: policy-kind ballot field (scalar fields only). */
+type PolicyField = 'tax_rate' | 'ubi_allocation' | 'enforcement_level';
+
 /** Validate and clamp a proposed policy value to its allowed range. */
-function clampPolicyValue(field: GovernancePolicyProposal['field'], value: number): number {
+function clampPolicyValue(field: PolicyField, value: number): number {
   if (!isFinite(value)) return NaN;
   switch (field) {
     case 'tax_rate':        return Math.max(0, Math.min(0.25, value));
@@ -150,7 +160,19 @@ export async function runGovernanceCycle(params: {
   }
 
   // ── Step 2: Collect proposals ────────────────────────────────────────────
-  const rawProposals: Array<{ name: string; role: string; proposal: GovernancePolicyProposal }> = [];
+  // Phase 11 D-18: proposals may be scalar policy changes OR law_amendment
+  // (paragraph-level text diffs). Both shapes land in `rawProposals` below.
+  type LawAmendmentProposal = {
+    kind: 'law_amendment';
+    oldParagraph: string;
+    newParagraph: string;
+    reasoning: string;
+  };
+  type PolicyProposal = GovernancePolicyProposal & { kind: 'policy' };
+  type RawProposal =
+    | { name: string; role: string; proposal: PolicyProposal }
+    | { name: string; role: string; proposal: LawAmendmentProposal };
+  const rawProposals: RawProposal[] = [];
 
   await Promise.allSettled(politicians.map(async (agent) => {
     try {
@@ -158,13 +180,46 @@ export async function runGovernanceCycle(params: {
       const raw = await citizenProv.chat(messages, {
         model: citizenModel
       });
-      const parsed = safeJson(raw) as { proposal?: GovernancePolicyProposal | null } | null;
-      if (!parsed?.proposal) return;
-      const { field, value, reasoning } = parsed.proposal;
+      const parsed = safeJson(raw) as { proposal?: Record<string, unknown> | null } | null;
+      const proposal = parsed?.proposal;
+      if (!proposal || typeof proposal !== 'object') return;
+
+      // law_amendment kind (detected by paragraph fields)
+      if (typeof proposal.oldParagraph === 'string' && typeof proposal.newParagraph === 'string') {
+        const oldPara = (proposal.oldParagraph as string).trim();
+        const newPara = (proposal.newParagraph as string).trim();
+        if (!oldPara || !newPara) return;
+        rawProposals.push({
+          name: agent.name,
+          role: agent.role,
+          proposal: {
+            kind: 'law_amendment',
+            oldParagraph: oldPara,
+            newParagraph: newPara,
+            reasoning: String(proposal.reasoning ?? '').slice(0, 200),
+          },
+        });
+        return;
+      }
+
+      // Legacy scalar policy kind
+      const field = proposal.field as string | undefined;
+      const value = proposal.value as number | undefined;
+      const reasoning = proposal.reasoning as string | undefined;
+      if (!field || typeof value !== 'number') return;
       if (!['tax_rate', 'ubi_allocation', 'enforcement_level'].includes(field)) return;
-      const clamped = clampPolicyValue(field as GovernancePolicyProposal['field'], value);
+      const clamped = clampPolicyValue(field as PolicyField, value);
       if (!isFinite(clamped)) return;
-      rawProposals.push({ name: agent.name, role: agent.role, proposal: { field, value: clamped, reasoning: String(reasoning).slice(0, 200) } });
+      rawProposals.push({
+        name: agent.name,
+        role: agent.role,
+        proposal: {
+          kind: 'policy',
+          field: field as PolicyField,
+          value: clamped,
+          reasoning: String(reasoning ?? '').slice(0, 200),
+        },
+      });
     } catch {
       // Non-fatal: skip this politician's proposal
     }
@@ -187,18 +242,50 @@ export async function runGovernanceCycle(params: {
     const raw = await provider.chat(messages, {
       model
     });
-    const parsed = safeJson(raw) as { ballot?: GovernanceBallotItem[] } | null;
+    const parsed = safeJson(raw) as { ballot?: Array<Record<string, unknown>> } | null;
     if (Array.isArray(parsed?.ballot)) {
-      ballot = parsed.ballot
-        .filter(item => item && typeof item.field === 'string' && typeof item.proposedValue === 'number')
-        .slice(0, 3)
-        .map(item => ({
-          field: item.field as GovernanceBallotItem['field'],
-          proposedValue: clampPolicyValue(item.field as GovernanceBallotItem['field'], item.proposedValue),
-          description: String(item.description ?? '').slice(0, 200),
-          impactForecast: typeof item.impactForecast === 'string' ? item.impactForecast.slice(0, 300) : undefined,
-        }))
-        .filter(item => isFinite(item.proposedValue));
+      const items: GovernanceBallotItem[] = [];
+      for (const rawItem of parsed.ballot.slice(0, 3)) {
+        if (!rawItem || typeof rawItem !== 'object') continue;
+        const impactForecast = typeof rawItem.impactForecast === 'string'
+          ? (rawItem.impactForecast as string).slice(0, 300)
+          : undefined;
+        const description = String(rawItem.description ?? '').slice(0, 200);
+
+        // Phase 11 D-18: law_amendment kind (detected by presence of paragraph fields).
+        if (typeof rawItem.oldParagraph === 'string' && typeof rawItem.newParagraph === 'string') {
+          const oldPara = (rawItem.oldParagraph as string).trim();
+          const newPara = (rawItem.newParagraph as string).trim();
+          if (!oldPara || !newPara) continue;
+          items.push({
+            kind: 'law_amendment',
+            oldParagraph: oldPara,
+            newParagraph: newPara,
+            description,
+            impactForecast,
+          });
+          continue;
+        }
+
+        // Legacy 'policy' kind (detected by scalar field + proposedValue).
+        if (typeof rawItem.field === 'string' && typeof rawItem.proposedValue === 'number') {
+          const field = rawItem.field as string;
+          if (field !== 'tax_rate' && field !== 'ubi_allocation' && field !== 'enforcement_level') continue;
+          const clamped = clampPolicyValue(field, rawItem.proposedValue as number);
+          if (!isFinite(clamped)) continue;
+          items.push({
+            kind: 'policy',
+            field: field as PolicyField,
+            proposedValue: clamped,
+            description,
+            impactForecast,
+          });
+          continue;
+        }
+
+        console.warn('[GOVERNANCE] Ballot item with unrecognized shape; skipping');
+      }
+      ballot = items;
     }
   } catch {
     // Non-fatal: empty ballot
@@ -243,26 +330,67 @@ export async function runGovernanceCycle(params: {
   const ratifiedItems: GovernanceBallotItem[] = [];
   const rejectedItems: GovernanceBallotItem[] = [];
   const newPolicy: SessionPolicy = { ...currentPolicy };
+  let updatedLaw: string | null = null;
+  const sessionConfigRoot = (session.config as Record<string, unknown> | null) ?? {};
+  const amendmentHistory: LawAmendmentHistoryEntry[] = Array.isArray(
+    sessionConfigRoot.lawAmendmentHistory,
+  )
+    ? ([...(sessionConfigRoot.lawAmendmentHistory as LawAmendmentHistoryEntry[])])
+    : [];
+  let workingLaw: string = session.law ?? '';
 
   for (const { item, yesCount, noCount } of voteResults) {
     const passes = yesCount > noCount; // Strict majority required; ties and abstentions reject the item.
-    if (passes) {
+    if (!passes) {
+      rejectedItems.push(item);
+      continue;
+    }
+
+    if (item.kind === 'policy') {
       newPolicy[item.field] = item.proposedValue;
       ratifiedItems.push(item);
+      continue;
+    }
+
+    // Phase 11 D-18: law_amendment — apply paragraph-level diff to session.law.
+    const diffResult = applyParagraphDiff(workingLaw, item.oldParagraph, item.newParagraph);
+    if (diffResult.applied) {
+      workingLaw = diffResult.law;
+      updatedLaw = diffResult.law;
+      amendmentHistory.push({
+        iteration: iterNum,
+        old: item.oldParagraph,
+        new: item.newParagraph,
+        description: item.description,
+      });
+      ratifiedItems.push(item);
+      console.log(`[GOVERNANCE] Law amendment ratified at iter ${iterNum}: ${item.description}`);
     } else {
+      console.warn('[GOVERNANCE] Law amendment not applied: oldParagraph not found verbatim');
       rejectedItems.push(item);
     }
   }
 
   const policyChanged = ratifiedItems.length > 0;
 
-  // Persist ratified policy to DB
+  // Persist ratified policy / law / history to DB
   if (policyChanged) {
     try {
-      await sessionRepo.updateConfig(sessionId, {
-        ...(session.config ?? {}),
+      const updatedConfig: Record<string, unknown> = {
+        ...sessionConfigRoot,
         policy: newPolicy,
-      });
+      };
+      if (amendmentHistory.length > 0) {
+        updatedConfig.lawAmendmentHistory = amendmentHistory;
+      }
+      await sessionRepo.updateConfig(sessionId, updatedConfig);
+      // Mutate in-memory session so downstream iterations see the updated config.
+      session.config = updatedConfig as typeof session.config;
+
+      if (updatedLaw !== null) {
+        await sessionRepo.updateLaw(sessionId, updatedLaw);
+        session.law = updatedLaw;
+      }
     } catch (err) {
       console.error(`[GOVERNANCE] Failed to persist policy for session ${sessionId}:`, err);
     }
@@ -270,12 +398,12 @@ export async function runGovernanceCycle(params: {
 
   // ── Build summary narrative ──────────────────────────────────────────────
   const politicianNames = politicians.map(p => `${p.name} (${p.role})`).join(', ');
-  const ratifiedLines = ratifiedItems.map(i =>
-    `  ✅ **${i.field}** → ${i.proposedValue} — "${i.description}"`
-  );
-  const rejectedLines = rejectedItems.map(i =>
-    `  ❌ **${i.field}** → ${i.proposedValue} (rejected)`
-  );
+  const describeItem = (i: GovernanceBallotItem): string =>
+    i.kind === 'policy'
+      ? `**${i.field}** → ${i.proposedValue} — "${i.description}"`
+      : `**law amendment** — "${i.description}"`;
+  const ratifiedLines = ratifiedItems.map(i => `  ✅ ${describeItem(i)}`);
+  const rejectedLines = rejectedItems.map(i => `  ❌ ${describeItem(i)} (rejected)`);
 
   let summary: string;
   if (!policyChanged) {
