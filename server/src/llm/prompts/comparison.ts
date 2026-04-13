@@ -63,11 +63,15 @@ SCORING RUBRIC (apply consistently to both societies):
 
 Calibrate against this rubric: a small, non-collapsed policy sim with a functioning economy should land 40-60 on most dimensions, not 0-20. Use the full 0-100 range.
 
+DATA SUFFICIENCY: For dimensions whose meaning depends on time-series evolution (Long-term Stability, Economic Growth trend, Social Cohesion drift), if either session ran fewer than 10 iterations, score within ±10 of 50 and explicitly note "iteration count insufficient for confident long-horizon judgment" in that dimension's analysis field. The iteration counts for both sessions are stated near the top of the user message.
+
 CRITICAL RULES:
 - If configuration differences are listed below, your narrative MUST explicitly explain how those parameter changes caused or contributed to observed outcome differences.
 - If per-iteration time series data is provided, base your trend claims on the ACTUAL numbers. Do NOT invent trends that contradict the data.
 - If wealth distribution data is provided, use it to ground inequality claims.
 - Do NOT cluster all scores at the low end. If the evidence only supports "both bad", still produce a numerical gap on each dimension that reflects which session was less bad. The output is displayed as a side-by-side bar chart, so flat identical scores hide the actual comparison.
+- Every numeric claim in the narrative MUST cite its source iteration window inline, e.g. "(iter 1-5)" or "(final iter)" or "(avg over iter 1-10)". Do not state averages, deltas, or trends without an iteration anchor.
+- Self-consistency check before finalizing: for each dimension, verify the narrative's directional claim about that dimension matches the score sign — if Society B scores higher on Economic Growth, every paragraph mentioning growth must show B with the higher number, and no paragraph elsewhere may state the opposite. Contradictions between paragraphs are forbidden; re-read your own narrative before returning the JSON.
 
 Respond with ONLY valid JSON, no markdown, no preamble.`;
 
@@ -131,13 +135,17 @@ Evaluation verdict: ${s.verdict ?? '(none)'}`;
     return `\nSociety ${label} wealth distribution: Bottom 25% avg=${dist.bottom25Avg.toFixed(0)}, Median=${dist.median.toFixed(0)}, Top 25% avg=${dist.top25Avg.toFixed(0)}`;
   };
 
+  const iterCountA = timeSeries1?.length ?? 0;
+  const iterCountB = timeSeries2?.length ?? 0;
+  const iterationCountBlock = `\n\n=== ITERATION COUNTS ===\nSociety A: ${iterCountA} iterations\nSociety B: ${iterCountB} iterations\n(Apply the DATA SUFFICIENCY rule from the system prompt if either count is below 10.)`;
+
   const userPrompt = `${fmt(session1, 'A')}${fmtWealthDist(wealthDist1, 'A')}
 
-${fmt(session2, 'B')}${fmtWealthDist(wealthDist2, 'B')}${configDiffBlock}${fmtTimeSeries(timeSeries1, 'A')}${fmtTimeSeries(timeSeries2, 'B')}
+${fmt(session2, 'B')}${fmtWealthDist(wealthDist2, 'B')}${iterationCountBlock}${configDiffBlock}${fmtTimeSeries(timeSeries1, 'A')}${fmtTimeSeries(timeSeries2, 'B')}
 
 Compare these two societies. Return JSON:
 {
-  "narrative": "<3-5 paragraph prose comparison>",
+  "narrative": "<3-5 paragraph prose comparison. Every numeric claim must include an iteration-window citation, e.g. '(iter 1-5)' or '(final iter)'. Re-read for contradictions before returning.>",
   "dimensions": [
     { "name": "Economic Equality", "score1": 0, "score2": 0, "analysis": "..." },
     { "name": "Citizen Wellbeing", "score1": 0, "score2": 0, "analysis": "..." },
@@ -148,7 +156,7 @@ Compare these two societies. Return JSON:
     { "name": "Fiscal Effectiveness", "score1": 0, "score2": 0, "analysis": "..." },
     { "name": "Economic Growth", "score1": 0, "score2": 0, "analysis": "..." }
   ],
-  "verdict": "<1-2 sentence overall takeaway>"
+  "verdict": "<1-2 sentences. If one society wins >=6 of 8 dimensions, lead with 'Society X is the clearly stronger configuration on this run' and briefly state why. Use symmetric tradeoff framing ('A favors X, B favors Y') only when win counts differ by <=2 dimensions.>"
 }`;
 
   return [
