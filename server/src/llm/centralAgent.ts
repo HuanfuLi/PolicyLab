@@ -26,8 +26,9 @@ import {
   buildRefineMessages,
 } from './prompts/index.js';
 import { parseJSON } from '../parsers/json.js';
-import type { ChatMessage, DesignProgressEvent, BrainstormChecklist, SessionConfig } from '@policylab/shared';
+import type { ChatMessage, DesignProgressEvent, BrainstormChecklist, SessionConfig, TaxPolicy } from '@policylab/shared';
 import { DEFAULT_ECONOMY_CONFIG, DEFAULT_BUDGET_ALLOCATION } from '@policylab/shared';
+import { validateTaxPolicy } from '../mechanics/economyConfigUtils.js';
 
 interface BrainstormResult {
   reply: string;
@@ -168,6 +169,7 @@ export async function generateDesign(
   // Step 2: Law
   onProgress({ type: 'step_start', step: 'law', stepIndex: 1, totalSteps: 3 });
 
+  // Phase 11 D-13: law step also yields taxPolicy — schema extended in buildLawMessages.
   const lawData = await withRetry(async () => {
     const raw = await provider.chat(
       buildLawMessages(
@@ -177,13 +179,17 @@ export async function generateDesign(
         overviewData.economicModel
       )
     );
-    return parseJSON<{ law: string }>(raw);
+    return parseJSON<{ law: string; taxPolicy?: unknown }>(raw);
   });
 
   await db
     .update(sessions)
     .set({ law: lawData.law, updatedAt: now() })
     .where(eq(sessions.id, session.id));
+
+  // Phase 11 D-13: extract + validate taxPolicy from LLM JSON. Malformed /
+  // missing shapes fall back to the flat baseline via validateTaxPolicy.
+  const llmTaxPolicy: TaxPolicy = validateTaxPolicy(lawData.taxPolicy);
 
   onProgress({ type: 'step_done', step: 'law', stepIndex: 1 });
 
@@ -274,7 +280,10 @@ export async function generateDesign(
     try { existingConfig = JSON.parse(session.config); } catch { /* ignore */ }
   }
   if (!existingConfig.economyConfig) {
-    const economyConfig = { ...DEFAULT_ECONOMY_CONFIG };
+    // Phase 11 D-13: creative-mode sessions adopt the LLM-chosen taxPolicy
+    // (validated above). Malformed/missing LLM output already fell back to
+    // flat 15/10/15 via validateTaxPolicy, so this is always a valid shape.
+    const economyConfig = { ...DEFAULT_ECONOMY_CONFIG, taxPolicy: llmTaxPolicy };
     const budgetAllocation = { ...DEFAULT_BUDGET_ALLOCATION };
     const updatedConfig = JSON.stringify({
       ...existingConfig,

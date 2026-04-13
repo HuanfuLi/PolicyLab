@@ -127,11 +127,20 @@ export function buildLawMessages(
   governanceModel: string,
   economicModel: string
 ): LLMMessage[] {
+  // Phase 11 D-13: Central Agent also emits `taxPolicy` alongside `law`
+  // so the simulation starts with a scenario-appropriate tax shape instead
+  // of the flat 15/10/15 baseline. Validation + clamping happens server-side
+  // in validateTaxPolicy — the prompt just has to communicate the schema.
   const systemPrompt = `You are drafting the foundational law for a simulated society.
 
 You MUST respond with ONLY valid JSON (no markdown, no preamble, no code fences):
 {
-  "law": "string - 8-12 numbered articles in markdown format"
+  "law": "string - 8-12 numbered articles in markdown format",
+  "taxPolicy": {
+    "kind": "flat" | "progressive",
+    "rates": { "income": N, "vat": N, "capitalGains": N },
+    "brackets": [{ "upto": T, "rate": R }, ...]   // progressive only — omit for flat
+  }
 }
 
 The law should cover:
@@ -144,13 +153,52 @@ The law should cover:
 - Economic participation rules
 - Conflict resolution mechanisms
 
-Format each article as: "**Article N: Title**\\nContent..."`;
+Format each article as: "**Article N: Title**\\nContent..."
+
+## Tax Policy (Phase 11 D-13)
+
+Alongside the law, emit a \`taxPolicy\` object describing how this society collects revenue. Pick ONE of two fixed shapes — no other tax kinds are supported this phase:
+
+- **flat**: \`{ "kind": "flat", "rates": { "income": N, "vat": N, "capitalGains": N } }\`
+  Use when the society values simplicity, low administrative overhead, or when
+  wealth distribution is relatively even (e.g. egalitarian communes, libertarian
+  cities, early-stage frontier economies).
+
+- **progressive**: \`{ "kind": "progressive", "rates": { "income": N, "vat": N, "capitalGains": N }, "brackets": [{ "upto": T1, "rate": R1 }, { "upto": T2, "rate": R2 }, ...] }\`
+  Use when the society explicitly values redistribution (social democracies,
+  welfare states, reformist unions). Brackets MUST be strictly increasing by
+  \`upto\`. The top marginal rate falls back to \`rates.income\` for income
+  above the final bracket cap.
+
+Rate semantics:
+- \`income\` applies to wage income (WORK, enterprise wages) and AMM sell proceeds from PRODUCE_AND_SELL (withheld at point of earning)
+- \`vat\` is a consumption tax added on top of AMM buy trades
+- \`capitalGains\` applies to SELL_SHARES proceeds, matured bond payouts, dividends, and coupon income
+All rates MUST be in [0, 0.5]. Malformed shapes (unknown kind, empty / non-increasing brackets, out-of-range rates) are coerced server-side to the flat baseline \`{ income: 0.15, vat: 0.10, capitalGains: 0.15 }\` — so when in doubt, emit a clean flat policy rather than a malformed progressive one.
+
+Example flat emission:
+\`\`\`json
+{ "kind": "flat", "rates": { "income": 0.15, "vat": 0.10, "capitalGains": 0.15 } }
+\`\`\`
+
+Example progressive emission:
+\`\`\`json
+{
+  "kind": "progressive",
+  "rates": { "income": 0.25, "vat": 0.10, "capitalGains": 0.20 },
+  "brackets": [
+    { "upto": 500, "rate": 0.10 },
+    { "upto": 2000, "rate": 0.20 },
+    { "upto": 10000, "rate": 0.25 }
+  ]
+}
+\`\`\``;
 
   return [
     { role: 'system', content: systemPrompt },
     {
       role: 'user',
-      content: `Society seed idea: ${seedIdea}\n\nGovernance model: ${governanceModel}\nEconomic model: ${economicModel}\n\nSociety overview:\n${overview}\n\nGenerate the law JSON.`,
+      content: `Society seed idea: ${seedIdea}\n\nGovernance model: ${governanceModel}\nEconomic model: ${economicModel}\n\nSociety overview:\n${overview}\n\nGenerate the law + taxPolicy JSON.`,
     },
   ];
 }
