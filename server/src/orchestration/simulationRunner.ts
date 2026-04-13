@@ -111,6 +111,7 @@ import { applyStructuralPressures } from './helpers/structuralPressures.js';
 import { normalizeItemType, industryToItemType, getAgentPeakSkill, distributeProRata } from './helpers/physicsUtils.js';
 import { getInflationBasketPrices, buildInflationContext, applyInflationFeedback } from './helpers/inflationUtils.js';
 import { applyMETMetabolism } from './helpers/metabolismRunner.js';
+import { computeWithholding } from './helpers/taxWithholding.js';
 import { applyEnterpriseAction } from './enterpriseActionDispatch.js';
 import {
   type EnterpriseRecord,
@@ -1275,13 +1276,34 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           // D1: Deduct standalone WORK income from the state treasury (SFC-compliant).
           // Use originalWealthDelta (pre-enforcement) so enforcement seizure doesn't
           // prevent the treasury debit — the seized gain is already in seizedWealthPool.
+          //
+          // Phase 11 D-12/D-14: Withhold income tax at point-of-payment. Employer
+          // (treasury) debits gross; employee receives (gross − tax); treasury
+          // credits tax. SFC-neutral: wealthDelta + treasury delta = 0 net.
           if (action.actionCode === 'WORK' && originalWealthDelta > 0) {
             const treasury = sessionStateTreasury.get(sessionId) ?? 0;
+            let grossPaid = originalWealthDelta;
             if (treasury < originalWealthDelta) {
               weekState.wealthDelta -= (originalWealthDelta - treasury);
+              grossPaid = treasury;
               sessionStateTreasury.set(sessionId, 0);
             } else {
               sessionStateTreasury.set(sessionId, treasury - originalWealthDelta);
+            }
+            // Tax withholding applied to the actually-paid gross (not the
+            // nominal originalWealthDelta) so treasury-limited payouts don't
+            // over-withhold.
+            const wageTax = computeWithholding(grossPaid, 'wage', iterEconomyConfig.taxPolicy);
+            if (wageTax > 0) {
+              weekState.wealthDelta -= wageTax;
+              sessionStateTreasury.set(
+                sessionId,
+                (sessionStateTreasury.get(sessionId) ?? 0) + wageTax,
+              );
+              appendTrace(
+                sessionId,
+                `[TAX] Withheld ${wageTax.toFixed(2)} from WORK income ${grossPaid.toFixed(2)} (agent ${agent.id})`,
+              );
             }
           }
 
@@ -1452,13 +1474,26 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
           if (ownerAvailableWealth >= totalWageObligation) {
             // ── Solvent: pay all employees in full ──
+            // Phase 11 D-12/D-14: withhold income tax at point-of-payment.
+            // Owner debits gross; employee credits (gross − tax); treasury credits tax.
             for (const employment of workers) {
               const employeeState = weekStateMap.get(employment.employeeId);
               if (!employeeState) continue;
+              const wageTax = computeWithholding(employment.wage, 'wage', iterEconomyConfig.taxPolicy);
               ownerState.wealthDelta -= employment.wage;
               ownerState.events.push(`Paid wage ${employment.wage} to ${employment.employeeId}`);
-              employeeState.wealthDelta += employment.wage;
+              employeeState.wealthDelta += (employment.wage - wageTax);
               employeeState.events.push(`Received wage ${employment.wage} from ${enterpriseId}`);
+              if (wageTax > 0) {
+                sessionStateTreasury.set(
+                  sessionId,
+                  (sessionStateTreasury.get(sessionId) ?? 0) + wageTax,
+                );
+                appendTrace(
+                  sessionId,
+                  `[TAX] Withheld ${wageTax.toFixed(2)} from enterprise wage ${employment.wage.toFixed(2)} (${enterpriseId} -> ${employment.employeeId})`,
+                );
+              }
             }
             // Phase B: record total wages in ledger
             {
@@ -1498,9 +1533,21 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               const employeeState = weekStateMap.get(employment.employeeId);
               if (!employeeState) continue;
               if (partialPay > 0) {
+                // Phase 11 D-12/D-14: withhold tax on the partial wage that's actually paid.
+                const wageTax = computeWithholding(partialPay, 'wage', iterEconomyConfig.taxPolicy);
                 ownerState.wealthDelta -= partialPay;
-                employeeState.wealthDelta += partialPay;
+                employeeState.wealthDelta += (partialPay - wageTax);
                 employeeState.events.push(`Partial wage ${partialPay}/${employment.wage} from bankrupt enterprise ${enterpriseId}`);
+                if (wageTax > 0) {
+                  sessionStateTreasury.set(
+                    sessionId,
+                    (sessionStateTreasury.get(sessionId) ?? 0) + wageTax,
+                  );
+                  appendTrace(
+                    sessionId,
+                    `[TAX] Withheld ${wageTax.toFixed(2)} from enterprise wage ${partialPay.toFixed(2)} (${enterpriseId} -> ${employment.employeeId}, partial/bankruptcy)`,
+                  );
+                }
               } else {
                 employeeState.events.push(`Wage unpaid — enterprise ${enterpriseId} declared bankruptcy`);
               }
