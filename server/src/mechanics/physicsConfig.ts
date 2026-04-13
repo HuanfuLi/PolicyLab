@@ -68,6 +68,42 @@ export interface PhysicsConfigValues {
   loadAccumulationRate: number;
   /** Rate at which surplus load (above disease threshold) decays structural health per tick. */
   healthDecayRate: number;
+
+  // ── Phase 11: Stat clamps (D-03, D-08) ───────────────────────────────
+  /** Upper clamp on cortisol at stat commit sites. @see Phase 11 D-03 */
+  cortisolCeiling: number;
+  /** Lower clamp on cortisol at stat commit sites (retained from Phase 10 GC3). @see Phase 11 D-03 */
+  cortisolFloor: number;
+  /** Upper clamp on happiness at stat commit sites. @see Phase 11 D-08 */
+  happinessCeiling: number;
+  /** Lower clamp on happiness at stat commit sites. @see Phase 11 D-08 */
+  happinessFloor: number;
+
+  // ── Phase 11: Gini stress activation (D-02, D-07) ────────────────────
+  /** Gini coefficient above which bottom-quintile inequality stress activates. @see Phase 11 D-02 */
+  giniStressThreshold: number;
+
+  // ── Phase 11: Structural cortisol pressure coefficients (D-02, D-05) ──
+  /** Cortisol per unit of CPI-growth surprise (percentage points). @see Phase 11 D-02 */
+  k_inflation_cor: number;
+  /** Cortisol per unit of (Gini - threshold) for bottom-quintile citizens. @see Phase 11 D-02 */
+  k_gini_cor: number;
+  /** Cortisol per tick when agent is unemployed AND wealth < lowWealthThreshold. @see Phase 11 D-02 */
+  k_unemp_cor: number;
+  /** Cortisol per tick scaled by (1 - min(infra, edu, welfare)/50). @see Phase 11 D-02 */
+  k_pg_cor: number;
+
+  // ── Phase 11: Structural happiness pressure coefficients (D-07, D-09) ──
+  /** Happiness lost per citizen death this tick (applied to all citizens). @see Phase 11 D-07 */
+  k_peer_death_hap: number;
+  /** Happiness lost per unit of (Gini - threshold) for bottom-quintile citizens. @see Phase 11 D-07 */
+  k_gini_hap: number;
+  /** Happiness lost per tick when agent is unemployed AND wealth < lowWealthThreshold. @see Phase 11 D-07 */
+  k_unemp_hap: number;
+  /** Happiness lost per tick scaled by (1 - welfareQuality/50). @see Phase 11 D-07 */
+  k_welfare_hap: number;
+  /** Happiness lost per unit of CPI-growth surprise (percentage points). @see Phase 11 D-07 */
+  k_inflation_hap: number;
 }
 
 const DEFAULTS: PhysicsConfigValues = {
@@ -80,9 +116,10 @@ const DEFAULTS: PhysicsConfigValues = {
   stealRatio: 0.15,
   stealMax: 15,
   stealFallback: 0,
-  lowWealthThreshold: 20,
+  // Phase 11 D-04: thresholds raised so middle-class agents feel financial anxiety.
+  lowWealthThreshold: 50,
   lowWealthCortisolPenalty: 10,
-  lowHealthThreshold: 30,
+  lowHealthThreshold: 60,
   lowHealthCortisolPenalty: 8,
   suppressionCortisolPenalty: 15,
   suppressionHappinessPenalty: -8,
@@ -95,6 +132,30 @@ const DEFAULTS: PhysicsConfigValues = {
   strainDecay: 0.15,
   loadAccumulationRate: 0.05,
   healthDecayRate: 0.02,
+
+  // Phase 11: stat clamps (D-03, D-08)
+  cortisolCeiling: 95,
+  cortisolFloor: 3,
+  happinessCeiling: 95,
+  happinessFloor: 5,
+
+  // Phase 11: Gini stress activation (D-02)
+  giniStressThreshold: 0.35,
+
+  // Phase 11: structural cortisol pressure coefficients (D-02, D-05)
+  // See 11-RESEARCH.md §10 — combined bad-society max ≈ 10.4 cortisol/tick.
+  k_inflation_cor: 0.3,
+  k_gini_cor: 8.0,
+  k_unemp_cor: 3.0,
+  k_pg_cor: 2.0,
+
+  // Phase 11: structural happiness pressure coefficients (D-07, D-09)
+  // See 11-RESEARCH.md §10 — combined bad-society max ≈ 12 happiness/tick.
+  k_peer_death_hap: 2.0,
+  k_gini_hap: 6.0,
+  k_unemp_hap: 2.5,
+  k_welfare_hap: 2.5,
+  k_inflation_hap: 0.25,
 };
 
 /** Live physics configuration — mutated by updatePhysicsConfig at runtime. */
