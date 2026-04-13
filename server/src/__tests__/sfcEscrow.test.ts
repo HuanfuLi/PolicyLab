@@ -235,6 +235,69 @@ describe('fiscal escrow accounting (Phase 11 D-10, D-11)', () => {
     expect(delta.multiplierEffects.enforcementBonus).toBeGreaterThan(0);
   });
 
+  it('M0 constant ±0.001 over 5 iterations with session-level escrow accumulation', () => {
+    // Replay the runner contract: apply treasury delta + wealth deltas + escrow credit
+    // per iteration and verify computeSystemFiatTotal stays flat. Simulates the
+    // runner's per-tick flow minus DB writes.
+    const agents = agentIds.map(id => makeAgent(id, 250));
+    let treasury = 5000;
+    const escrow = { infrastructure: 0, education: 0, defense: 0 };
+    const initialPublicGoods = makePublicGoods(50);
+
+    const m0Initial = computeSystemFiatTotal(
+      agents,
+      undefined,
+      undefined,
+      treasury,
+      undefined,
+      0,
+      0,
+      0,
+    );
+
+    let publicGoods = initialPublicGoods;
+    const wealthByAgent = new Map(agents.map(a => [a.id, a.currentStats.wealth]));
+
+    for (let iter = 1; iter <= 5; iter++) {
+      const delta = executeBudget({
+        treasuryBalance: treasury,
+        budgetAllocation: { infrastructure: 0.3, education: 0.3, defense: 0.2, welfare: 0.2 },
+        economyConfig: makeEconomyConfig(),
+        currentPublicGoods: publicGoods,
+        aliveAgentIds: agentIds,
+        iterationNumber: iter,
+      });
+
+      // Apply runner-style updates
+      treasury += delta.treasuryDelta;
+      for (const [id, payment] of delta.agentPayments) {
+        wealthByAgent.set(id, (wealthByAgent.get(id) ?? 0) + payment);
+      }
+      escrow.infrastructure += delta.escrowDeltas.infrastructure;
+      escrow.education += delta.escrowDeltas.education;
+      escrow.defense += delta.escrowDeltas.defense;
+      publicGoods = delta.updatedPublicGoods;
+
+      // Assert M0 stays constant every iteration
+      const m0After = computeSystemFiatTotal(
+        agents,
+        undefined,
+        undefined,
+        treasury,
+        wealthByAgent,
+        0,
+        0,
+        escrow.infrastructure + escrow.education + escrow.defense,
+      );
+      expect(m0After).toBeCloseTo(m0Initial, 3);
+    }
+
+    // After 5 iterations, escrow strictly positive in all 3 categories
+    expect(escrow.infrastructure).toBeGreaterThan(0);
+    expect(escrow.education).toBeGreaterThan(0);
+    expect(escrow.defense).toBeGreaterThan(0);
+  });
+
   it('multiple consecutive ticks: escrowDeltas are per-tick (accumulation happens at caller)', () => {
     // fiscalEngine returns per-tick escrow deltas; the session-level accumulation
     // is handled by simulationRunner. Verify deltas match spending this tick.
