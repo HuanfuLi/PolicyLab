@@ -165,12 +165,13 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       w = base * productionMult * infraBoost;
       h = -2;
       hap = -1;
-      cor = -3;
+      // Phase 11 D-01: per-action cortisol relief removed; structural pressures apply at tick end.
+      cor = 0;
       trace.push(`  Δwealth: roleIncome(${agent.role} = ${roleTierLabel(agent.role)}) = ${base} × productionMult(${productionMult.toFixed(3)}) × infraBoost(${infraBoost.toFixed(3)}) = ${w.toFixed(3)} (funded from state treasury)`);
       if (productivityBonus > 0) trace.push(`  [Fiscal] Infrastructure quality boost: +${(productivityBonus * 100).toFixed(2)}% productivity`);
       trace.push(`  Δhealth: -2 (labor cost)`);
       trace.push(`  Δhappiness: -1 (moderate work satisfaction)`);
-      trace.push(`  Δcortisol: -3 (productive relief)`);
+      trace.push(`  Δcortisol: 0 (per-action relief removed; structural pressures apply at tick end)`);
       break;
     }
     case 'WORK_AT_ENTERPRISE': {
@@ -179,21 +180,23 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
       w = 0;
       h = -2;
       hap = -1;
-      cor = -3;
+      // Phase 11 D-01: per-action cortisol relief removed; structural pressures apply at tick end.
+      cor = 0;
       trace.push(`  Δwealth: 0 (wages settled by runner's enterprise system — roleIncome suppressed to prevent double income)`);
       trace.push(`  Δhealth: -2 (labor cost)`);
       trace.push(`  Δhappiness: -1 (moderate work satisfaction)`);
-      trace.push(`  Δcortisol: -3 (productive relief)`);
+      trace.push(`  Δcortisol: 0 (per-action relief removed; structural pressures apply at tick end)`);
       break;
     }
     case 'REST':
       w = 0;
       h = 5;
-      hap = 2;
-      cor = -5;
+      // Phase 11 D-06/D-01: per-action happiness reward + cortisol relief removed.
+      hap = 0;
+      cor = 0;
       trace.push(`  Δhealth: +5 (physical recovery)`);
-      trace.push(`  Δhappiness: +2 (rest satisfaction)`);
-      trace.push(`  Δcortisol: -5 (decompression)`);
+      trace.push(`  Δhappiness: 0 (per-action reward removed; structural pressures apply at tick end)`);
+      trace.push(`  Δcortisol: 0 (per-action relief removed; structural pressures apply at tick end)`);
       break;
     case 'STRIKE':
       w = 0;
@@ -223,11 +226,13 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
     case 'HELP':
       w = -5;
       h = 0;
+      // Phase 11 D-06: altruistic +5 happiness retained (outcome-driven).
       hap = 5;
-      cor = -5;
+      // Phase 11 D-01: per-action cortisol relief removed; structural pressures apply at tick end.
+      cor = 0;
       trace.push(`  Δwealth: -5 (resources given)`);
-      trace.push(`  Δhappiness: +5 (altruistic satisfaction)`);
-      trace.push(`  Δcortisol: -5 (social bonding relief)`);
+      trace.push(`  Δhappiness: +5 (altruistic satisfaction — outcome-driven, retained)`);
+      trace.push(`  Δcortisol: 0 (per-action relief removed; structural pressures apply at tick end)`);
       break;
     case 'INVEST':
       w = -10;
@@ -241,22 +246,24 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
     case 'PRODUCE_AND_SELL':
       w = 0;
       h = -3;
-      hap = 1;
-      cor = -2;
+      // Phase 11 D-06/D-01: per-action happiness reward + cortisol relief removed.
+      hap = 0;
+      cor = 0;
       trace.push(`  Δwealth: 0 (real revenue flows through economy engine / AMM)`);
       trace.push(`  Δhealth: -3 (physical labor cost)`);
-      trace.push(`  Δhappiness: +1 (self-sufficiency satisfaction)`);
-      trace.push(`  Δcortisol: -2 (productive activity)`);
+      trace.push(`  Δhappiness: 0 (per-action reward removed; structural pressures apply at tick end)`);
+      trace.push(`  Δcortisol: 0 (per-action relief removed; structural pressures apply at tick end)`);
       break;
     case 'POST_BUY_ORDER':
     case 'POST_SELL_ORDER':
       w = 0;
       h = 0;
-      hap = 1;
-      cor = -1;
+      // Phase 11 D-06/D-01: per-action happiness reward + cortisol relief removed.
+      hap = 0;
+      cor = 0;
       trace.push(`  Δwealth: 0 (real flows through AMM / order book)`);
-      trace.push(`  Δhappiness: +1 (market participation)`);
-      trace.push(`  Δcortisol: -1 (economic agency)`);
+      trace.push(`  Δhappiness: 0 (per-action reward removed; structural pressures apply at tick end)`);
+      trace.push(`  Δcortisol: 0 (per-action relief removed; structural pressures apply at tick end)`);
       break;
     case 'FOUND_ENTERPRISE':
       // Fix: Founding cost is handled entirely by the economy engine (40 fiat → treasury).
@@ -343,11 +350,12 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
     case 'DEPOSIT':
       w = 0;
       h = 0;
-      hap = 1;
-      cor = -2;
+      // Phase 11 D-06/D-01: per-action happiness reward + cortisol relief removed.
+      hap = 0;
+      cor = 0;
       trace.push(`  Δwealth: 0 (deposit processed by bankingEngine — M1 accounting)`);
-      trace.push(`  Δhappiness: +1 (financial security)`);
-      trace.push(`  Δcortisol: -2 (savings provide stability)`);
+      trace.push(`  Δhappiness: 0 (per-action reward removed; structural pressures apply at tick end)`);
+      trace.push(`  Δcortisol: 0 (per-action relief removed; structural pressures apply at tick end)`);
       trace.push(`  [BANK] ${agent.name} requested DEPOSIT`);
       break;
     case 'WITHDRAW':
@@ -372,11 +380,12 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
     case 'REPAY_LOAN':
       w = 0;
       h = 0;
-      hap = 3;
-      cor = -3;
+      // Phase 11 D-06/D-01: per-action happiness reward + cortisol relief removed.
+      hap = 0;
+      cor = 0;
       trace.push(`  Δwealth: 0 (repayment debited from deposit by bankingEngine — M1 contraction)`);
-      trace.push(`  Δhappiness: +3 (debt reduction relief)`);
-      trace.push(`  Δcortisol: -3 (obligation decreasing)`);
+      trace.push(`  Δhappiness: 0 (per-action reward removed; structural pressures apply at tick end)`);
+      trace.push(`  Δcortisol: 0 (per-action relief removed; structural pressures apply at tick end)`);
       trace.push(`  [BANK] ${agent.name} requested REPAY_LOAN`);
       break;
     case 'ISSUE_LOAN':
@@ -447,9 +456,10 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
     // The physics engine only records trace and provides emotional effects.
     case 'BUY_SHARES':
       w = 0;
-      h = 0; hap = 1; cor = 0;
+      // Phase 11 D-06: per-action happiness reward removed (baseline cortisol preserved at 0).
+      h = 0; hap = 0; cor = 0;
       trace.push(`  Δwealth: 0 (share purchase deferred to capitalMarketEngine.processIteration())`);
-      trace.push(`  Δhappiness: +1 (investment optimism)`);
+      trace.push(`  Δhappiness: 0 (per-action reward removed; structural pressures apply at tick end)`);
       trace.push(`  [CMKT] ${agent.name} requested BUY_SHARES - deferred to capitalMarketEngine.processIteration()`);
       break;
 
@@ -464,18 +474,20 @@ export function resolveAction(input: PhysicsInput): PhysicsOutput {
 
     case 'BUY_BOND':
       w = 0;
-      h = 0; hap = 1; cor = -1;
+      // Phase 11 D-06/D-01: per-action happiness reward + cortisol relief removed.
+      h = 0; hap = 0; cor = 0;
       trace.push(`  Δwealth: 0 (bond purchase deferred to capitalMarketEngine.processIteration())`);
-      trace.push(`  Δhappiness: +1 (financial security via fixed income)`);
-      trace.push(`  Δcortisol: -1 (guaranteed return reduces anxiety)`);
+      trace.push(`  Δhappiness: 0 (per-action reward removed; structural pressures apply at tick end)`);
+      trace.push(`  Δcortisol: 0 (per-action relief removed; structural pressures apply at tick end)`);
       trace.push(`  [CMKT] ${agent.name} requested BUY_BOND - deferred to capitalMarketEngine.processIteration()`);
       break;
 
     case 'ISSUE_GOV_BOND':
       w = 0;
-      h = 0; hap = 0; cor = -2;
+      // Phase 11 D-01: per-action cortisol relief removed; structural pressures apply at tick end.
+      h = 0; hap = 0; cor = 0;
       trace.push(`  Δwealth: 0 (government bond issuance deferred to capitalMarketEngine.processIteration())`);
-      trace.push(`  Δcortisol: -2 (treasury financing provides fiscal stability)`);
+      trace.push(`  Δcortisol: 0 (per-action relief removed; structural pressures apply at tick end)`);
       trace.push(`  [CMKT] Treasury/enterprise ISSUE_GOV_BOND - deferred to capitalMarketEngine.processIteration()`);
       break;
 
