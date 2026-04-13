@@ -44,7 +44,7 @@ function computeDeltas(
     const tabVal = fullTab[key];
     // Normalize feature flag booleans: treat undefined as false to avoid
     // undefined vs false asymmetry (e.g. capitalMarketsEnabled may be absent on older configs).
-    const defaultIsBoolean = typeof (DEFAULT_ECONOMY_CONFIG as Record<string, unknown>)[key] === 'boolean';
+    const defaultIsBoolean = typeof (DEFAULT_ECONOMY_CONFIG as unknown as Record<string, unknown>)[key] === 'boolean';
     const normalizedBase = defaultIsBoolean && baseVal === undefined ? false : baseVal;
     const normalizedTab = defaultIsBoolean && tabVal === undefined ? false : tabVal;
     if (

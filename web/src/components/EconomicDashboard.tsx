@@ -7,6 +7,7 @@ import {
   XAxis, YAxis,
   CartesianGrid, Tooltip, Legend,
 } from 'recharts';
+import { AlertTriangle } from 'lucide-react';
 import type { TelemetryLog, FiscalCategory } from '@policylab/shared';
 
 // ── Chart color tokens (kept in sync with --chart-* CSS variables in index.css)
@@ -259,15 +260,122 @@ function BondYieldChart({ data }: { data: TelemetryLog[] }) {
   );
 }
 
+// ── Panel 5: SFC Drift — Subsystem Balance ────────────────────────────────────
+// Phase 11 D-21: surfaces per-subsystem sfcDriftBySubsystem from TelemetryLog.
+
+function SfcDriftChart({ data }: { data: TelemetryLog[] }) {
+  const chartData = data
+    .filter(d => d.sfcDriftBySubsystem)
+    .map(d => ({
+      iteration: d.iterationNumber,
+      banking: d.sfcDriftBySubsystem!.banking,
+      capmkt: d.sfcDriftBySubsystem!.capmkt,
+      fiscal: d.sfcDriftBySubsystem!.fiscal,
+      enforcement: d.sfcDriftBySubsystem!.enforcement,
+      trade: d.sfcDriftBySubsystem!.trade,
+      physicsActions: d.sfcDriftBySubsystem!.physicsActions,
+      total: d.sfcDrift ?? 0,
+    }));
+
+  if (chartData.length === 0) {
+    return (
+      <div id="sfc-drift-panel" style={sectionStyle}>
+        <div style={sectionTitleStyle}>SFC DRIFT — SUBSYSTEM BALANCE</div>
+        <div style={emptyStateStyle}>
+          No drift data yet — start a simulation to observe subsystem balance.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div id="sfc-drift-panel" style={sectionStyle}>
+      <div style={sectionTitleStyle}>SFC DRIFT — SUBSYSTEM BALANCE</div>
+      <div style={{ fontSize: '0.82rem', color: 'var(--text-dim)', marginBottom: '8px' }}>
+        Per-iteration fiat delta by subsystem. All values should approach zero.
+      </div>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
+          <XAxis dataKey="iteration" stroke="var(--text-dim)" tick={{ fill: 'var(--text-dim)', fontSize: 10 }} />
+          <YAxis stroke="var(--text-dim)" tick={{ fill: 'var(--text-dim)', fontSize: 10 }} width={48} />
+          <Tooltip
+            formatter={(value, name) => [`${Number(value).toFixed(3)} fiat`, String(name)]}
+            contentStyle={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', fontSize: '0.78rem', color: 'var(--text-main)' }}
+            labelStyle={{ color: 'var(--text-muted)' }}
+          />
+          <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} />
+          <Line type="monotone" dataKey="banking" name="Banking" stroke="var(--chart-blue)" dot={false} />
+          <Line type="monotone" dataKey="capmkt" name="Capital Mkt" stroke="var(--chart-violet)" dot={false} />
+          <Line type="monotone" dataKey="fiscal" name="Fiscal" stroke="var(--chart-green)" dot={false} />
+          <Line type="monotone" dataKey="enforcement" name="Enforcement" stroke="var(--chart-orange)" dot={false} />
+          <Line type="monotone" dataKey="trade" name="Trade/AMM" stroke="var(--chart-teal)" dot={false} />
+          <Line type="monotone" dataKey="physicsActions" name="Physics" stroke="var(--chart-yellow)" dot={false} />
+          <Line type="monotone" dataKey="total" name="Total (overlay)" stroke="var(--chart-red)" strokeDasharray="5 3" dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ── SFC Drift Alert Banner ───────────────────────────────────────────────────
+// Phase 11 D-23: renders above the dashboard whenever |sfcDrift| exceeds 0.1.
+
+function SfcDriftBanner({ data }: { data: TelemetryLog[] }) {
+  const latest = data[data.length - 1];
+  if (!latest || latest.sfcDrift === undefined) return null;
+  const absDrift = Math.abs(latest.sfcDrift);
+  if (absDrift <= 0.1) return null;
+
+  return (
+    <div
+      role="alert"
+      aria-live="polite"
+      style={{
+        padding: '8px 12px',
+        marginBottom: '16px',
+        borderRadius: '8px',
+        background: 'var(--panel-alpha-10)',
+        border: '1px solid var(--color-red)',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '8px',
+      }}
+    >
+      <AlertTriangle size={16} color="var(--color-red)" aria-hidden="true" />
+      <div>
+        <div style={{ fontSize: '0.82rem', fontWeight: 500, color: 'var(--text-main)' }}>
+          SFC drift over threshold
+        </div>
+        <div style={{ fontSize: '0.82rem', color: 'var(--text-main)' }}>
+          Iteration {latest.iterationNumber}: total drift is {latest.sfcDrift.toFixed(2)} fiat (threshold 0.10). The simulation has not been paused; review the drift panel below to identify the leaking subsystem.
+        </div>
+        <a
+          href="#sfc-drift-panel"
+          onClick={(e) => {
+            e.preventDefault();
+            document.getElementById('sfc-drift-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          style={{ fontSize: '0.82rem', color: 'var(--text-main)' }}
+        >
+          Jump to drift panel →
+        </a>
+      </div>
+    </div>
+  );
+}
+
 // ── EconomicDashboard (default export) ───────────────────────────────────────
 
 export default function EconomicDashboard({ data }: EconomicDashboardProps) {
   return (
     <div>
+      <SfcDriftBanner data={data} />
       <CpiChart data={data} />
       <MoneySupplyChart data={data} />
       <FiscalChart data={data} />
       <BondYieldChart data={data} />
+      <SfcDriftChart data={data} />
     </div>
   );
 }
