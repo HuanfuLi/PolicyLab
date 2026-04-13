@@ -70,11 +70,29 @@ export interface MultiplierEffects {
 export interface FiscalDelta {
   /** Negative: total spending deducted from treasury this iteration */
   treasuryDelta: number;
-  /** agentId → total payment received (sum of all budget categories distributed equally) */
+  /**
+   * agentId → welfare payment received this iteration.
+   *
+   * Phase 11 D-10: Only welfare allocation distributes fiat as direct per-agent
+   * transfers. Infrastructure / education / defense are parked in escrowDeltas
+   * (see below) instead, then counted in computeSystemFiatTotal so M0 stays
+   * constant.
+   */
   agentPayments: Map<string, number>;
+  /**
+   * Fiscal spending on non-welfare categories this iteration. The caller credits
+   * these amounts to the per-session publicGoodsEscrow ledger (fiat stays inside
+   * the SFC perimeter, never reaches citizen wealth).
+   * @see Phase 11 D-10, D-11
+   */
+  escrowDeltas: {
+    infrastructure: number;
+    education: number;
+    defense: number;
+  };
   /** Updated public goods quality scores after spending and decay */
   updatedPublicGoods: Omit<PublicGoodsState, 'id' | 'sessionId'>;
-  /** Multiplier effects derived from updated quality scores */
+  /** Multiplier effects derived from updated quality scores (quality pipeline unchanged by escrow redirect) */
   multiplierEffects: MultiplierEffects;
   /** Per-category spending amounts for telemetry */
   categorySpending: { infrastructure: number; education: number; defense: number; welfare: number };
@@ -281,6 +299,7 @@ export function executeBudget(params: {
     return {
       treasuryDelta: 0,
       agentPayments,
+      escrowDeltas: { infrastructure: 0, education: 0, defense: 0 },
       updatedPublicGoods,
       multiplierEffects,
       categorySpending: { infrastructure: 0, education: 0, defense: 0, welfare: 0 },
@@ -368,24 +387,38 @@ export function executeBudget(params: {
     welfareQuality,
   };
 
-  // ── Step 5: Distribute ALL spending equally to alive agents (SFC) ────────
-  // Government spending in this model simulates employment and transfers:
-  // all budget categories distribute fiat to agents rather than destroying money.
+  // ── Step 5: Distribute welfare to agents; park infra/edu/def in escrow ────
+  // Phase 11 D-10/D-11: Only the welfare allocation distributes fiat as direct
+  // per-agent transfers. Infrastructure, education, and defense fiat moves to
+  // the publicGoodsEscrow ledger (returned as escrowDeltas). Escrow fiat stays
+  // inside the SFC perimeter — computeSystemFiatTotal in the runner sums it so
+  // M0 remains constant. Quality-score side effects (productivity, skill,
+  // enforcement multipliers) are unchanged — spending still buys quality.
   const agentCount = aliveAgentIds.length;
 
   let welfarePerAgent = 0;
+  let escrowDeltas = { infrastructure: 0, education: 0, defense: 0 };
 
   if (agentCount > 0) {
-    const paymentPerAgent = totalSpending / agentCount;
     welfarePerAgent = welfareSpend / agentCount;
 
     for (const agentId of aliveAgentIds) {
-      agentPayments.set(agentId, paymentPerAgent);
+      agentPayments.set(agentId, welfarePerAgent);
     }
 
+    escrowDeltas = {
+      infrastructure: infraSpend,
+      education: educSpend,
+      defense: defSpend,
+    };
+
     trace.push(
-      `[Fiscal] Distributed ${totalSpending.toFixed(2)} fiat to ${agentCount} agents ` +
-      `(${paymentPerAgent.toFixed(2)} each); welfare portion ${welfarePerAgent.toFixed(4)}/agent`
+      `[Fiscal] Welfare distributed to ${agentCount} agents ` +
+      `(${welfarePerAgent.toFixed(4)} each; total ${welfareSpend.toFixed(2)})`
+    );
+    trace.push(
+      `[FISCAL] Escrow parked: infrastructure=${infraSpend.toFixed(2)} ` +
+      `education=${educSpend.toFixed(2)} defense=${defSpend.toFixed(2)}`
     );
   } else {
     // No alive agents — do NOT spend treasury (SFC: money cannot be destroyed).
@@ -414,6 +447,7 @@ export function executeBudget(params: {
   return {
     treasuryDelta,
     agentPayments,
+    escrowDeltas,
     updatedPublicGoods,
     multiplierEffects,
     categorySpending: {
