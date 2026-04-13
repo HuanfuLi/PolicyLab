@@ -1,4 +1,25 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+
+// Measure a DOM element's rendered width via ResizeObserver. Used to render
+// SVG charts at 1:1 with their actual pixel container, so nothing scales
+// vertically when the parent widens — which would otherwise overflow any
+// fixed-height wrapper (e.g. the maxHeight cap in Reflection.tsx).
+function useMeasuredWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setWidth(el.getBoundingClientRect().width);
+    const ro = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (entry) setWidth(Math.floor(entry.contentRect.width));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, width];
+}
 
 interface Series {
   label: string;
@@ -65,7 +86,7 @@ function MiniChart({ s, width, height, xLabels, pointCount }: {
         <div style={{ width: 10, height: 3, background: s.color, borderRadius: 1 }} />
         <span style={{ fontSize: '0.72rem', color: s.color, fontWeight: 600 }}>{s.label}</span>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto' }}>
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block' }}>
         {/* Grid */}
         <line x1={padding.left} x2={width - padding.right} y1={toY(minVal)} y2={toY(minVal)}
           stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
@@ -95,10 +116,24 @@ function MiniChart({ s, width, height, xLabels, pointCount }: {
  * When `splitAxes` is true, each series is rendered as a stacked mini-chart
  * with its own Y axis — useful when series have very different value ranges.
  */
-export function LineChart({ series, width = 400, height = 180, xLabels, splitAxes }: LineChartProps) {
+export function LineChart({ series, width: widthProp, height = 180, xLabels, splitAxes }: LineChartProps) {
+  const [containerRef, measuredWidth] = useMeasuredWidth<HTMLDivElement>();
+
   if (series.length === 0 || series[0].data.length === 0) {
-    return <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>No data</div>;
+    return (
+      <div ref={containerRef} style={{ color: 'var(--text-dim)', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>
+        No data
+      </div>
+    );
   }
+
+  // Render width: prefer the measured container width so the SVG renders 1:1
+  // with its actual pixel container (no aspect-ratio scaling that would make
+  // the chart grow vertically when the parent widens). Falls back to caller-
+  // supplied width or a sensible default during the throwaway first render
+  // (useLayoutEffect updates measuredWidth before paint, so the user sees
+  // only the corrected render).
+  const width = measuredWidth || widthProp || 400;
 
   const pointCount = series[0].data.length;
 
@@ -122,14 +157,14 @@ export function LineChart({ series, width = 400, height = 180, xLabels, splitAxe
     const toX = (i: number) => padding.left + i * xStep;
 
     return (
-      <div style={{ width: '100%' }}>
+      <div ref={containerRef} style={{ width: '100%' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: `${gap}px` }}>
           {series.map((s, si) => (
             <MiniChart key={si} s={s} width={width} height={miniH} xLabels={xLabels} pointCount={pointCount} />
           ))}
         </div>
         {/* Shared x-axis */}
-        <svg viewBox={`0 0 ${width} ${xAxisHeight}`} style={{ width: '100%', height: 'auto' }}>
+        <svg width={width} height={xAxisHeight} viewBox={`0 0 ${width} ${xAxisHeight}`} style={{ display: 'block' }}>
           {xTicks.map(i => (
             <text key={`x-${i}`} x={toX(i)} y={14} textAnchor="middle"
               fill="rgba(255,255,255,0.35)" fontSize={9}>{xLabels ? xLabels[i] : i + 1}</text>
@@ -165,8 +200,8 @@ export function LineChart({ series, width = 400, height = 180, xLabels, splitAxe
   if (xTicks[xTicks.length - 1] !== pointCount - 1) xTicks.push(pointCount - 1);
 
   return (
-    <div style={{ width: '100%' }}>
-      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto' }}>
+    <div ref={containerRef} style={{ width: '100%' }}>
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block' }}>
         {/* Grid lines */}
         {yTicks.map((v, i) => (
           <line key={`grid-${i}`} x1={padding.left} x2={width - padding.right} y1={toY(v)} y2={toY(v)}
