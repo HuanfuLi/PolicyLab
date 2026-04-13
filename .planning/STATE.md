@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 11-01-PLAN.md (Wave 0 foundation)
-last_updated: "2026-04-13T19:40:34.756Z"
+stopped_at: Completed 11-02-PLAN.md
+last_updated: "2026-04-13T19:53:51.279Z"
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 62
-  completed_plans: 49
+  completed_plans: 50
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 11 (simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure) — EXECUTING
-Plan: 2 of 10
+Plan: 3 of 10
 
 ## Performance Metrics
 
@@ -90,6 +90,7 @@ Plan: 2 of 10
 | Phase 10-fix-simulation-realism PGC2 | 6 | 2 tasks | 2 files |
 | Phase 10-fix-simulation-realism PGC3 | 8 | 2 tasks | 3 files |
 | Phase 11 P01 | 5 min | 5 tasks tasks | 16 files files |
+| Phase 11 P02 | 8 min | 2 tasks tasks | 7 files files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -209,6 +210,10 @@ Recent decisions affecting current work:
 - [Phase 11]: [Phase 11-01]: DEFAULT_ECONOMY_CONFIG ships flat 15/10/15 tax + governanceEnabled=true; publicGoodsEscrow intentionally absent (materializes at fiscal tick runtime)
 - [Phase 11]: [Phase 11-01]: 13 scaffold files (plan said 14 — 14th was a roll-up verification gate, not a file); 11 real assertions in physicsConfig.thresholds.test.ts, 95 it.todo placeholders await downstream waves
 - [Phase 11]: [Phase 11-01]: seed coefficients (10 k_*) anchored to 11-RESEARCH.md §10, not literature — matches D-05/D-09 conservative-defaults decision; hot-swappable via PUT /api/settings/physics-config
+- [Phase 11]: [Phase 11-02]: Structural pressure logic extracted to helpers/structuralPressures.ts as pure delta-return helper (matches bankingEngine/capitalMarketEngine pattern) — unit-testable without mounting simulationRunner
+- [Phase 11]: [Phase 11-02]: Institutional-agent exclusion uses TWO predicates (agent.type==='bank' OR agent.role?.toLowerCase()==='central_bank') — bootstrap bank and central bank use different discriminators, both needed
+- [Phase 11]: [Phase 11-02]: Cortisol/happiness clamps applied at BOTH initial stat commit (lines 1820-1822) AND post-pressure re-clamp in helper — defense-in-depth so Phase-11 bounds apply even when structural pressure loop skips
+- [Phase 11]: [Phase 11-02]: HELP action strips cortisol to 0 (D-01) but RETAINS happiness +5 (altruistic outcome per D-06) — reworded trace line to clarify intent
 
 ### Roadmap Evolution
 
@@ -232,6 +237,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T19:40:25.945Z
-Stopped at: Completed 11-01-PLAN.md (Wave 0 foundation)
+Last session: 2026-04-13T19:53:40.373Z
+Stopped at: Completed 11-02-PLAN.md
 Resume file: None
