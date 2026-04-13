@@ -115,6 +115,13 @@ import { SimulationLifecycle, SimulationAbortedError } from './simulationLifecyc
 // ── Extracted helper modules ──────────────────────────────────────────────────
 import { gini, computeStats } from './helpers/statsUtils.js';
 import { computeSystemFiatTotal } from './helpers/sfcAudit.js';
+import {
+  accountSubsystem,
+  accountSubsystemAsync,
+  initializeSfcBySubsystem,
+  reportDriftIfOverThreshold,
+  type SfcBySubsystem,
+} from './helpers/sfcSubsystemAccounting.js';
 import { buildMarketBoardEntries, buildEmploymentBoardEntries, buildPersonalStatus, updatePriceHistory } from './helpers/marketBoard.js';
 import { type AgentWeekState, createAgentWeekState, clampStat, clampWealth } from './helpers/weekState.js';
 import { applyStructuralPressures } from './helpers/structuralPressures.js';
@@ -605,6 +612,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         iteration: iterNum,
         total: endIter,
       });
+
+      // Phase 11 D-20/D-21: per-iteration SFC subsystem accumulator. Resets each
+      // iteration (no carry-over). snapshotTotal() is defined further down in this
+      // iteration after statUpdates and the banking totals are declared.
+      const sfcBySubsystem: SfcBySubsystem = initializeSfcBySubsystem();
 
       // Phase 2/3: Decay status effect registries at the start of each iteration
       for (const [agentId, remaining] of sabotageRegistry) {
@@ -1264,6 +1276,37 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       const enterpriseLedgerMap = new Map<string, EnterpriseLedger>();
       // Phase Sheriff C: accumulated seized wealth to redistribute as UBI at end of iteration
       let seizedWealthPool = 0;
+      // Phase 11 D-20/D-21: forward-declare banking totals so snapshotTotal() (below)
+      // can read them when wrapping the physics-action subsystem block. They are
+      // assigned for real inside the banking tick (search for "Banking tick").
+      let bankingTotalDeposits = 0;
+      let bankingCollateralEscrow = 0;
+      let bankingLoansOutstanding = 0;
+      // Phase 11 D-20/D-21: snapshotTotal() — canonical fiat-total closure used to
+      // bracket each subsystem block via accountSubsystem(). Argument list mirrors
+      // the existing computeSystemFiatTotal call sites in this iteration loop
+      // (telemetry @ ~2754 and SFC audit @ ~2948); it reads the live in-memory
+      // statUpdates wealth and runtime banking accumulators so subsystem deltas
+      // reflect mid-iteration M0 state, not the pre-iteration agent.currentStats.
+      const snapshotTotal = (): number =>
+        computeSystemFiatTotal(
+          agents,
+          sessionAMMRegistry.get(sessionId),
+          sessionMultiAMMRegistry.get(sessionId),
+          sessionStateTreasury.get(sessionId) ?? 0,
+          new Map(statUpdates.map(u => [u.id, u.wealth])),
+          bankingTotalDeposits,
+          bankingCollateralEscrow,
+          getTotalEscrow(sessionId),
+        );
+
+      // Phase 11 D-20/D-21: snapshot before the physics action resolution block.
+      // We use a snapshot pair (rather than accountSubsystem) because the block
+      // is large and contains async/await flow + multiple early-exit paths.
+      // physicsActions bundles trade and enforcement sub-subsystems for Phase 11
+      // (per planner discretion in 11-07-PLAN.md §Task 2 step 4); a future phase
+      // can split them with intermediate snapshots if drift localizes here.
+      const physicsBefore = snapshotTotal();
 
       // ── Ghost Enterprise Cleanup: dissolve enterprises whose owner died in a prior iteration ──
       // weekStateMap only contains alive agents; if an owner is absent, they are dead.
@@ -2393,6 +2436,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
       }
 
+      // Phase 11 D-20/D-21: snapshot after the physics action resolution block
+      // (incl. trade, enforcement, wage settlement, demurrage UBI, seized-wealth
+      // redistribution). Drift accumulates into sfcBySubsystem.physicsActions.
+      sfcBySubsystem.physicsActions += (snapshotTotal() - physicsBefore);
+
       // ── Banking action accumulation ──────────────────────────────────────
       // Gather pending DEPOSIT/WITHDRAW/TAKE_LOAN/REPAY_LOAN actions from intents.
       // Physics engine records emotional deltas (w=0) but does NOT create deposits/loans.
@@ -2543,10 +2591,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // ── Banking tick ──────────────────────────────────────────────────────
       // Runs after all agent action resolutions so agent wealth is settled before
       // interest accrual and default checks. All banking DB writes are batched here.
+      // Phase 11 D-20: bankingTotalDeposits/Collateral/LoansOutstanding are
+      // forward-declared near statUpdates so snapshotTotal() can read them; they
+      // are assigned below from bankingRepo if banking is enabled.
       const economyConfig = getEconomyConfig(session.config as Record<string, unknown> | null);
-      let bankingTotalDeposits = 0;
-      let bankingCollateralEscrow = 0;
-      let bankingLoansOutstanding = 0;
       let inflationTelemetry: Pick<TelemetryLog, 'cpi' | 'inflationRate' | 'inflationExpectations'> | null = null;
       // [H4] Hoisted out of the financial-block transaction so they remain
       // in scope for telemetry assembly after the transaction closes. We use
@@ -2583,6 +2631,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       //    divergent state that survives into the next iteration.
       sqlite.transaction(() => {
       if (economyConfig.bankingEnabled) {
+        // Phase 11 D-20/D-21: wrap banking tick to accumulate per-iteration drift
+        // into sfcBySubsystem.banking. A clean tick is 0; non-zero localizes a leak.
+        accountSubsystem('banking', snapshotTotal, () => {
         const bankAgents = agents.filter(a => a.type === 'bank' && a.isAlive);
         const bankAgent = bankAgents[0]; // Primary bank for deposit/loan routing
 
@@ -2697,46 +2748,46 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         const allDeposits = bankingRepo.getDepositsBySession(scope);
         const deposits = allDeposits.filter(d => d.createdAtIteration !== iterNum);
 
-        const bankingDelta = bankingEngine.processIteration({
-          sessionId,
-          bankAgents,
-          allAgents: agents,
-          loans,
-          deposits,
-          economyConfig,
-          iterationNumber: iterNum,
-        });
+          const bankingDelta = bankingEngine.processIteration({
+            sessionId,
+            bankAgents,
+            allAgents: agents,
+            loans,
+            deposits,
+            economyConfig,
+            iterationNumber: iterNum,
+          });
 
-        // Apply all banking DB writes in a single synchronous transaction to avoid
-        // SQLITE_BUSY and ensure atomicity. Banking runs once per iteration (not per-agent)
-        // so the write volume is small and a direct transaction is safe here.
-        sqlite.transaction(() => {
-          for (const upd of bankingDelta.depositUpdates) {
-            bankingRepo.updateDepositBalance(upd.accountId, upd.newBalance, upd.iteration);
+          // Apply all banking DB writes in a single synchronous transaction to avoid
+          // SQLITE_BUSY and ensure atomicity. Banking runs once per iteration (not per-agent)
+          // so the write volume is small and a direct transaction is safe here.
+          sqlite.transaction(() => {
+            for (const upd of bankingDelta.depositUpdates) {
+              bankingRepo.updateDepositBalance(upd.accountId, upd.newBalance, upd.iteration);
+            }
+            for (const upd of bankingDelta.loanUpdates) {
+              bankingRepo.updateLoan(upd.loanId, upd.updates);
+            }
+            for (const loan of bankingDelta.newLoans) {
+              bankingRepo.insertLoan(loan);
+            }
+            for (const dep of bankingDelta.newDeposits) {
+              bankingRepo.upsertDeposit(dep);
+            }
+            for (const sheet of bankingDelta.balanceSheetSnapshots) {
+              bankingRepo.insertBalanceSheet(sheet);
+            }
+          })();
+          // Apply wealth deltas (interest income, collateral seizure) — in-memory only,
+          // will be persisted with the rest of statUpdates below.
+          for (const [agentId, delta] of bankingDelta.wealthDeltas) {
+            const agentUpdate = statUpdates.find(u => u.id === agentId);
+            if (agentUpdate) agentUpdate.wealth += delta;
           }
-          for (const upd of bankingDelta.loanUpdates) {
-            bankingRepo.updateLoan(upd.loanId, upd.updates);
+          // Append banking traces to physics trace log
+          if (bankingDelta.trace.length > 0) {
+            appendTrace(sessionId, bankingDelta.trace.join('\n'));
           }
-          for (const loan of bankingDelta.newLoans) {
-            bankingRepo.insertLoan(loan);
-          }
-          for (const dep of bankingDelta.newDeposits) {
-            bankingRepo.upsertDeposit(dep);
-          }
-          for (const sheet of bankingDelta.balanceSheetSnapshots) {
-            bankingRepo.insertBalanceSheet(sheet);
-          }
-        })();
-        // Apply wealth deltas (interest income, collateral seizure) — in-memory only,
-        // will be persisted with the rest of statUpdates below.
-        for (const [agentId, delta] of bankingDelta.wealthDeltas) {
-          const agentUpdate = statUpdates.find(u => u.id === agentId);
-          if (agentUpdate) agentUpdate.wealth += delta;
-        }
-        // Append banking traces to physics trace log
-        if (bankingDelta.trace.length > 0) {
-          appendTrace(sessionId, bankingDelta.trace.join('\n'));
-        }
 
         // ── Liquidity injection: central bank lender-of-last-resort ────────
         // When actual reserve ratio drops below threshold, inject fiat to prevent
@@ -2763,6 +2814,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         bankingTotalDeposits = bankingRepo.getTotalDeposits(scope);
         bankingCollateralEscrow = bankingRepo.getTotalCollateral(scope);
         bankingLoansOutstanding = bankingRepo.getTotalLoansOutstanding(scope);
+        }, sfcBySubsystem);
       }
 
       // ── Capital market tick ───────────────────────────────────────────────
@@ -2772,97 +2824,101 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // no escrow term needed; computeSystemFiatTotal is unchanged.
       // (telemetryBondYields hoisted out of this scope for [H4] outer transaction)
       if (cmktEconomyConfig.capitalMarketsEnabled) {
-        const equityPositions = capitalMarketRepo.getEquityPositionsBySession(scope);
-        const bondHoldings = capitalMarketRepo.getActiveBondHoldingsBySession(scope);
+        // Phase 11 D-20/D-21: wrap capital-market tick (incl. capital-gains withholding
+        // applied to positive cmkt deltas) so any treasury/wealth/escrow leak in this
+        // subsystem accumulates into sfcBySubsystem.capmkt.
+        accountSubsystem('capmkt', snapshotTotal, () => {
+          const equityPositions = capitalMarketRepo.getEquityPositionsBySession(scope);
+          const bondHoldings = capitalMarketRepo.getActiveBondHoldingsBySession(scope);
 
-        // Build agent snapshots with current running wealth (post-banking deltas applied)
-        const agentsWithRunningWealth = aliveAgents.map(a => {
-          const upd = statUpdates.find(u => u.id === a.id);
-          return upd
-            ? { ...a, currentStats: { ...a.currentStats, wealth: upd.wealth } }
-            : a;
-        });
+          // Build agent snapshots with current running wealth (post-banking deltas applied)
+          const agentsWithRunningWealth = aliveAgents.map(a => {
+            const upd = statUpdates.find(u => u.id === a.id);
+            return upd
+              ? { ...a, currentStats: { ...a.currentStats, wealth: upd.wealth } }
+              : a;
+          });
 
-        const cmktDelta = capitalMarketEngine.processIteration({
-          sessionId,
-          allAgents: agentsWithRunningWealth,
-          equityPositions,
-          bondHoldings,
-          economyConfig: cmktEconomyConfig,
-          iterationNumber: iterNum,
-          pendingSharePurchases: cmktPendingSharePurchases,
-          pendingShareSales: cmktPendingShareSales,
-          pendingGovBondPurchases: cmktPendingGovBondPurchases,
-          pendingCorpBondIssuances: cmktPendingCorpBondIssuances,
-        });
+          const cmktDelta = capitalMarketEngine.processIteration({
+            sessionId,
+            allAgents: agentsWithRunningWealth,
+            equityPositions,
+            bondHoldings,
+            economyConfig: cmktEconomyConfig,
+            iterationNumber: iterNum,
+            pendingSharePurchases: cmktPendingSharePurchases,
+            pendingShareSales: cmktPendingShareSales,
+            pendingGovBondPurchases: cmktPendingGovBondPurchases,
+            pendingCorpBondIssuances: cmktPendingCorpBondIssuances,
+          });
 
-        // Apply all capital market DB writes in a single synchronous transaction
-        // (once-per-iteration frequency — same rationale as banking tick)
-        sqlite.transaction(() => {
-          for (const pos of cmktDelta.upsertEquityPositions) {
-            capitalMarketRepo.upsertEquityPosition(pos);
-          }
-          for (const holding of cmktDelta.upsertBondHoldings) {
-            capitalMarketRepo.upsertBondHolding(holding);
-          }
-          for (const id of cmktDelta.deleteBondHoldingIds) {
-            capitalMarketRepo.deleteBondHolding(id);
-          }
-        })();
-
-        // SFC fix V3: Pro-rate gov-bond payouts when treasury cannot cover obligations.
-        // Scale positive wealthDeltas (gov-bond coupon/maturity receipts) before applying
-        // them so no fiat is created from nothing when the treasury runs dry.
-        const currentTreasury = sessionStateTreasury.get(sessionId) ?? 0;
-        const newTreasury = currentTreasury + cmktDelta.treasuryDelta;
-        if (newTreasury < 0 && cmktDelta.treasuryDelta < 0) {
-          const scaleFactor = currentTreasury > 0
-            ? currentTreasury / Math.abs(cmktDelta.treasuryDelta)
-            : 0;
-          for (const [agentId, delta] of cmktDelta.wealthDeltas) {
-            if (delta > 0) {
-              cmktDelta.wealthDeltas.set(agentId, Math.floor(delta * scaleFactor));
+          // Apply all capital market DB writes in a single synchronous transaction
+          // (once-per-iteration frequency — same rationale as banking tick)
+          sqlite.transaction(() => {
+            for (const pos of cmktDelta.upsertEquityPositions) {
+              capitalMarketRepo.upsertEquityPosition(pos);
             }
-          }
-          sessionStateTreasury.set(sessionId, 0);
-        } else {
-          sessionStateTreasury.set(sessionId, Math.max(0, newTreasury));
-        }
-
-        // Apply (possibly scaled) wealth deltas in-memory (persisted with statUpdates).
-        //
-        // Phase 11 D-12/D-14: capital-gains withholding on positive cmkt deltas
-        // (SELL_SHARES proceeds, matured-bond payouts, coupon + dividend income).
-        // Applied uniformly to every positive delta for symmetry — treasury collects,
-        // holder nets (delta − tax). Negative deltas (share purchases, corp-bond
-        // issuance cost) flow through untaxed.
-        for (const [agentId, delta] of cmktDelta.wealthDeltas) {
-          const agentUpdate = statUpdates.find(u => u.id === agentId);
-          if (!agentUpdate) continue;
-          if (delta > 0) {
-            const tax = computeWithholding(delta, 'capital_gains', cmktEconomyConfig.taxPolicy);
-            agentUpdate.wealth += (delta - tax);
-            if (tax > 0) {
-              sessionStateTreasury.set(
-                sessionId,
-                (sessionStateTreasury.get(sessionId) ?? 0) + tax,
-              );
-              appendTrace(
-                sessionId,
-                `[TAX] Withheld ${tax.toFixed(2)} from capital market income ${delta.toFixed(2)} (${agentId})`,
-              );
+            for (const holding of cmktDelta.upsertBondHoldings) {
+              capitalMarketRepo.upsertBondHolding(holding);
             }
+            for (const id of cmktDelta.deleteBondHoldingIds) {
+              capitalMarketRepo.deleteBondHolding(id);
+            }
+          })();
+
+          // SFC fix V3: Pro-rate gov-bond payouts when treasury cannot cover obligations.
+          // Scale positive wealthDeltas (gov-bond coupon/maturity receipts) before applying
+          // them so no fiat is created from nothing when the treasury runs dry.
+          const currentTreasury = sessionStateTreasury.get(sessionId) ?? 0;
+          const newTreasury = currentTreasury + cmktDelta.treasuryDelta;
+          if (newTreasury < 0 && cmktDelta.treasuryDelta < 0) {
+            const scaleFactor = currentTreasury > 0
+              ? currentTreasury / Math.abs(cmktDelta.treasuryDelta)
+              : 0;
+            for (const [agentId, delta] of cmktDelta.wealthDeltas) {
+              if (delta > 0) {
+                cmktDelta.wealthDeltas.set(agentId, Math.floor(delta * scaleFactor));
+              }
+            }
+            sessionStateTreasury.set(sessionId, 0);
           } else {
-            agentUpdate.wealth += delta;
+            sessionStateTreasury.set(sessionId, Math.max(0, newTreasury));
           }
-        }
 
-        // Apply enterprise treasury deltas: corporate bond coupon/maturity payments come from
-        // enterprise owner agent wealth. Route through statUpdates so they persist with agents.
-        for (const [enterpriseOwnerId, delta] of cmktDelta.enterpriseTreasuryDeltas) {
-          const agentUpdate = statUpdates.find(u => u.id === enterpriseOwnerId);
-          if (agentUpdate) agentUpdate.wealth += delta;
-        }
+          // Apply (possibly scaled) wealth deltas in-memory (persisted with statUpdates).
+          //
+          // Phase 11 D-12/D-14: capital-gains withholding on positive cmkt deltas
+          // (SELL_SHARES proceeds, matured-bond payouts, coupon + dividend income).
+          // Applied uniformly to every positive delta for symmetry — treasury collects,
+          // holder nets (delta − tax). Negative deltas (share purchases, corp-bond
+          // issuance cost) flow through untaxed.
+          for (const [agentId, delta] of cmktDelta.wealthDeltas) {
+            const agentUpdate = statUpdates.find(u => u.id === agentId);
+            if (!agentUpdate) continue;
+            if (delta > 0) {
+              const tax = computeWithholding(delta, 'capital_gains', cmktEconomyConfig.taxPolicy);
+              agentUpdate.wealth += (delta - tax);
+              if (tax > 0) {
+                sessionStateTreasury.set(
+                  sessionId,
+                  (sessionStateTreasury.get(sessionId) ?? 0) + tax,
+                );
+                appendTrace(
+                  sessionId,
+                  `[TAX] Withheld ${tax.toFixed(2)} from capital market income ${delta.toFixed(2)} (${agentId})`,
+                );
+              }
+            } else {
+              agentUpdate.wealth += delta;
+            }
+          }
+
+          // Apply enterprise treasury deltas: corporate bond coupon/maturity payments come from
+          // enterprise owner agent wealth. Route through statUpdates so they persist with agents.
+          for (const [enterpriseOwnerId, delta] of cmktDelta.enterpriseTreasuryDeltas) {
+            const agentUpdate = statUpdates.find(u => u.id === enterpriseOwnerId);
+            if (agentUpdate) agentUpdate.wealth += delta;
+          }
 
         // Append capital market traces to physics trace log
         if (cmktDelta.trace.length > 0) {
@@ -2888,6 +2944,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             corporateYield: corpYield,
           };
         }
+        }, sfcBySubsystem);
       }
 
       // ── Fiscal policy tick ──────────────────────────────────────────────────
@@ -2896,6 +2953,13 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // SFC: all spending flows from treasury to agents (direct transfers).
       // (fiscalPublicGoodsQuality and fiscalCategorySpending hoisted for [H4] outer tx)
       if (economyConfig.fiscalEnabled) {
+        // Phase 11 D-20/D-21: manual before-snapshot for fiscal drift telemetry.
+        // The refactored outer [H4] sqlite.transaction prevents us from using the
+        // accountSubsystemAsync wrapper (which would nest an async await inside the
+        // synchronous sqlite.transaction callback). We snapshot manually and close
+        // out sfcBySubsystem.fiscal at the end of the fiscal block.
+        const _fiscalBefore = snapshotTotal();
+
         const budgetAllocation = fiscalRepo.getActiveBudget(scope) ?? DEFAULT_BUDGET_ALLOCATION;
         const currentPublicGoods = fiscalRepo.getPublicGoodsState(scope);
 
@@ -2966,9 +3030,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         escrow.defense += fiscalDelta.escrowDeltas.defense;
         sessionPublicGoodsEscrow.set(sessionId, escrow);
 
-        // Persist escrow snapshot to session.config.economyConfig.publicGoodsEscrow
-        // so pause/resume and server restart restore the ledger. Mirrors the
-        // cpiBasePrices snapshot pattern used above.
+        // Update session.config in-memory with escrow snapshot so pause/resume
+        // and server restart restore the ledger. The DB persistence call is
+        // hoisted out of the [H4] sync sqlite.transaction wrapper (see below).
         {
           const cfgRoot = (session.config as Record<string, unknown> | null) ?? {};
           const existingEcon = (cfgRoot.economyConfig as Record<string, unknown> | undefined) ?? {};
@@ -2979,7 +3043,6 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               publicGoodsEscrow: { ...escrow },
             },
           };
-          await sessionRepo.updateConfig(sessionId, session.config as Record<string, unknown>);
         }
 
         // Apply welfare payments to statUpdates (in-memory, persisted below).
@@ -3007,8 +3070,18 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         if (fiscalDelta.trace.length > 0) {
           appendTrace(sessionId, fiscalDelta.trace.join('\n'));
         }
+
+        // Phase 11 D-20/D-21: close out fiscal SFC drift snapshot.
+        sfcBySubsystem.fiscal += (snapshotTotal() - _fiscalBefore);
       }
       })(); // [H4] close outer financial transaction (banking + cmkt + fiscal)
+
+      // Persist escrow snapshot to DB (hoisted out of the [H4] sync transaction
+      // because sessionRepo.updateConfig is async). The in-memory session.config
+      // was already updated inside the fiscal tick above.
+      if (economyConfig.fiscalEnabled) {
+        await sessionRepo.updateConfig(sessionId, session.config as Record<string, unknown>);
+      }
 
       // Phase 11 D-02: hoist inflation signal so structural pressure loop (below)
       // can read the surprise component without re-computing inflation.
@@ -3365,16 +3438,21 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           // Bond yields telemetry (absent when capitalMarketsEnabled is false or no bonds issued)
           ...(phaseOut.telemetryBondYields ? { bondYields: phaseOut.telemetryBondYields } : {}),
         };
-        // Phase A: SFC drift check — warn if unaccounted fiat appears or disappears.
-        // Keep a floor tolerance so extinction or tiny populations do not generate
-        // meaningless warnings from sub-cent floating-point noise.
+        // Phase 11 D-20/D-21: per-iteration SFC drift telemetry. Top-level sfcDrift
+        // is the total system-fiat delta vs the previous iteration; sfcDriftBySubsystem
+        // decomposes it into the 6 per-subsystem buckets so leaks are forensically
+        // localized. Drift > 0.1 triggers reportDriftIfOverThreshold which logs a
+        // structured console.error per D-23 (no auto-correction, simulation continues).
         if (sfcPrevTotalFiat !== null) {
           const sfcDrift = totalFiatSupply - sfcPrevTotalFiat;
-          const tolerance = Math.max(0.1, aliveAgents.length * 0.01);
-          if (Math.abs(sfcDrift) > tolerance) {
-            const agentNote = aliveAgents.length === 0 ? 'with 0 alive agents' : `with ${aliveAgents.length} alive agents`;
-            console.warn(`[SFC] iter=${iterNum}: drift=${sfcDrift.toFixed(6)} ${agentNote} — possible unaccounted fiat creation or destruction`);
-          }
+          iterTelemetry.sfcDrift = sfcDrift;
+          iterTelemetry.sfcDriftBySubsystem = { ...sfcBySubsystem };
+          reportDriftIfOverThreshold(iterNum, sfcDrift, sfcBySubsystem, 0.1);
+        } else {
+          // First iteration of the run: no prior baseline, but still emit the
+          // breakdown so dashboards can render an unbroken series.
+          iterTelemetry.sfcDrift = 0;
+          iterTelemetry.sfcDriftBySubsystem = { ...sfcBySubsystem };
         }
         sfcPrevTotalFiat = totalFiatSupply;
 

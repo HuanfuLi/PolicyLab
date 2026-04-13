@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   initializeSfcBySubsystem,
   accountSubsystem,
+  accountSubsystemAsync,
   reportDriftIfOverThreshold,
   type SfcBySubsystem,
   type SubsystemKey,
@@ -77,6 +78,38 @@ describe('sfcSubsystemAccounting helper (Phase 11 D-20, D-21, D-22, D-23)', () =
       const snapshot = () => total;
       accountSubsystem('physicsActions', snapshot, () => { /* no fiat change */ }, acc);
       expect(acc.physicsActions).toBe(0);
+    });
+  });
+
+  describe('accountSubsystemAsync', () => {
+    it('awaits the block before snapshotting after', async () => {
+      const acc = initializeSfcBySubsystem();
+      let total = 100;
+      const snapshot = () => total;
+      await accountSubsystemAsync('fiscal', snapshot, async () => {
+        await new Promise<void>(resolve => setTimeout(resolve, 1));
+        total = 110;
+      }, acc);
+      expect(acc.fiscal).toBeCloseTo(10, 6);
+    });
+
+    it('does NOT update accumulator when async block rejects', async () => {
+      const acc = initializeSfcBySubsystem();
+      let total = 100;
+      const snapshot = () => total;
+      await expect(
+        accountSubsystemAsync('fiscal', snapshot, async () => {
+          total = 999;
+          throw new Error('async boom');
+        }, acc),
+      ).rejects.toThrow('async boom');
+      expect(acc.fiscal).toBe(0);
+    });
+
+    it('passes through async block return value', async () => {
+      const acc = initializeSfcBySubsystem();
+      const result = await accountSubsystemAsync('banking', () => 0, async () => 42, acc);
+      expect(result).toBe(42);
     });
   });
 
