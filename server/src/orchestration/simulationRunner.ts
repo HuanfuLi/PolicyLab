@@ -2850,11 +2850,18 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             sessionPolicy = govResult.newPolicy;
           }
           if (govResult.summary) {
+            // Persist governance summary by appending to the iteration's
+            // stateSummary so it survives page reloads. The separator is a
+            // markdown HR + bold header that renders cleanly in MarkdownText.
+            const govBlock = `\n\n---\n\n**Governance Session (iter ${iterNum})**\n\n${govResult.summary}`;
+            sqlite.prepare(
+              `UPDATE iterations SET state_summary = state_summary || ? WHERE id = ?`
+            ).run(govBlock, iterationId);
+
             simulationManager.broadcast(sessionId, {
-              type: 'resolution',
+              type: 'governance-summary',
               iteration: iterNum,
-              narrativeSummary: govResult.summary,
-              lifecycleEvents: [],
+              summary: govResult.summary,
             });
           }
         } catch (err) {

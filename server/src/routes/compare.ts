@@ -272,6 +272,19 @@ router.post('/', async (req, res) => {
     });
     const parsed = parseJSON<{ narrative: string; dimensions: ComparisonResult['dimensions']; verdict: string }>(raw);
 
+    // Diagnostic: if the LLM collapsed most dimensions into the "severe failure"
+    // band for both sessions, log a warning so we can catch prompt-calibration
+    // regressions. The UI's relative-spread bars still render correctly, but
+    // low absolute scores suggest the rubric isn't being respected.
+    const bothLowCount = parsed.dimensions.filter(d => d.score1 < 20 && d.score2 < 20).length;
+    if (parsed.dimensions.length >= 8 && bothLowCount >= 5) {
+      console.warn(
+        `[compare] LLM scored ${bothLowCount}/${parsed.dimensions.length} dimensions < 20 for both sessions ${id1} vs ${id2}. ` +
+        `Check comparison rubric calibration. Raw dimensions:`,
+        parsed.dimensions.map(d => ({ name: d.name, score1: d.score1, score2: d.score2 })),
+      );
+    }
+
     const comparison: ComparisonResult = {
       session1Id: id1,
       session2Id: id2,

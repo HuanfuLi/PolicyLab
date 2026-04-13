@@ -37,6 +37,7 @@ export type SimulationEvent =
       actions?: Array<{ actionCode: string; parameters: Record<string, unknown> }>;
     }
   | { type: 'resolution'; iteration: number; narrativeSummary: string; lifecycleEvents: Array<{ type: string; agentId: string; detail: string }> }
+  | { type: 'governance-summary'; iteration: number; summary: string }
   | { type: 'iteration-complete'; iteration: number; stats: Record<string, unknown> & { aliveCount?: number; averageWealth?: number } }
   | { type: 'simulation-complete'; finalReport: string }
   | { type: 'paused'; iteration: number }
