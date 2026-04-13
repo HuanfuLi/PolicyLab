@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 11-08-PLAN.md
-last_updated: "2026-04-13T21:04:58.554Z"
+stopped_at: Completed 11-09-PLAN.md
+last_updated: "2026-04-13T23:05:23.973Z"
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 62
-  completed_plans: 56
+  completed_plans: 57
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 11 (simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure) — EXECUTING
-Plan: 8 of 10
+Plan: 9 of 10
 
 ## Performance Metrics
 
@@ -97,6 +97,7 @@ Plan: 8 of 10
 | Phase 11 P06 | 8 min | 2 tasks tasks | 9 files files |
 | Phase 11 P07 | 7 min | 2 tasks tasks | 4 files files |
 | Phase 11 P08 | 6 min | 2 tasks | 5 files |
+| Phase 11 P09 | ~2h | 3 tasks tasks | 7 files files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -243,6 +244,12 @@ Recent decisions affecting current work:
 - [Phase 11-08]: Bang-assertion (getActiveBudget(scope)!) at consumer sites instead of redundant guards: startup gate guarantees invariant, runtime TypeError surfaces immediately if invariant ever breaks vs silent stub data flowing into fiscal tick
 - [Phase 11-08]: Structured-result idiom for route guards: assertPutConfigFiscalFlip returns {ok|status|error} rather than throwing — caller decides whether to throw inside transaction (rolls back) or short-circuit response, helper stays pure
 - [Phase 11-08]: Source-grep contract tests for invariants the type system cannot enforce (no '?? DEFAULT_BUDGET_ALLOCATION' must reappear in runner): fs.readFile + import.meta.url assertions fail loudly on regression with zero infrastructure to maintain
+- [Phase 11]: [Phase 11-09]: GovernanceToggle + TaxPolicyReadout wired inline in EconomyTab directly above Fiscal section; TaxPolicyReadout is non-interactive (observation-only card), reuses DataConfidenceBadge(source=llm, confidence=medium), explicit empty-state for Phase-11-pre sessions
+- [Phase 11]: [Phase 11-09]: SfcDriftChart at 220px height (10% taller than default 200px to fit 7 series); total-overlay uses strokeDasharray='5 3' mirroring CpiChart EWMA convention; --chart-* token palette only, zero hex literals
+- [Phase 11]: [Phase 11-09]: SfcDriftBanner observation-only (not pause signal) per D-23 — banner body explicitly says 'The simulation has not been paused'; role='alert' + aria-live='polite'; smooth-scroll CTA to #sfc-drift-panel anchor
+- [Phase 11]: [Phase 11-09]: UAT-fix in band (commit ee38f0e) — DataConfidenceBadge tooltip background switched from translucent --bg-card to opaque --bg-color for readability in both themes; single-file single-token swap scoped tight enough to avoid gap-closure plan
+- [Phase 11]: [Phase 11-09]: isPastCheckpoint prop threaded DesignReview -> ScenarioTabs -> EconomyTab so governance toggle lock state works identically across creative-mode and location-bootstrap mounts
+- [Phase 11]: [Phase 11-09]: Two UAT findings deferred as out-of-scope — duplicate agent names and all-Hanzi names on China bootstrap — logged to deferred-items.md for a future roster-generation hardening phase, do not touch Phase 11 stress/fiscal/SFC contract surface
 
 ### Roadmap Evolution
 
@@ -266,6 +273,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T21:04:58.550Z
-Stopped at: Completed 11-08-PLAN.md
+Last session: 2026-04-13T23:05:05.825Z
+Stopped at: Completed 11-09-PLAN.md
 Resume file: None
