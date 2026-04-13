@@ -18,6 +18,7 @@ export interface EnterpriseRecord {
   ownerId: string;
   ownerName: string;
   industry: string;
+  sector: import('@policylab/shared').EnterpriseSector;
   employees: Set<string>;
   applicants: Set<string>;
   wage: number;

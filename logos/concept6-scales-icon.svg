@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="c6i-title">
+  <title id="c6i-title">PolicyLab Icon - Balance Scales</title>
+  <defs>
+    <linearGradient id="c6i-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(32, 6)">
+    <rect x="-2" y="10" width="4" height="40" rx="2" fill="url(#c6i-grad)" opacity="0.7"/>
+    <rect x="-12" y="48" width="24" height="4" rx="2" fill="#6366f1" opacity="0.6"/>
+    <circle cx="0" cy="10" r="4" fill="#818cf8" opacity="0.9"/>
+    <circle cx="0" cy="10" r="2" fill="#e0e7ff"/>
+
+    <line x1="-24" y1="17" x2="0" y2="12" stroke="#6366f1" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+    <line x1="0" y1="12" x2="24" y2="15" stroke="#6366f1" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+
+    <path d="M-30,19 Q-24,25 -18,19" stroke="#a5b4fc" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <line x1="-24" y1="17" x2="-30" y2="19" stroke="#818cf8" stroke-width="0.8" opacity="0.5"/>
+    <line x1="-24" y1="17" x2="-18" y2="19" stroke="#818cf8" stroke-width="0.8" opacity="0.5"/>
+
+    <path d="M18,17 Q24,23 30,17" stroke="#a5b4fc" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <line x1="24" y1="15" x2="18" y2="17" stroke="#818cf8" stroke-width="0.8" opacity="0.5"/>
+    <line x1="24" y1="15" x2="30" y2="17" stroke="#818cf8" stroke-width="0.8" opacity="0.5"/>
+
+    <circle cx="-26" cy="21" r="1.5" fill="#c7d2fe" opacity="0.7"/>
+    <circle cx="-22" cy="22" r="1" fill="#e0e7ff" opacity="0.6"/>
+    <circle cx="24" cy="19" r="1.5" fill="#c7d2fe" opacity="0.6"/>
+  </g>
+</svg>

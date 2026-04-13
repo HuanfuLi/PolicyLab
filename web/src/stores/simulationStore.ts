@@ -6,6 +6,7 @@ type SSEEvent =
   | { type: 'iteration-start'; iteration: number; total: number }
   | {
       type: 'agent-intent';
+      iterationNumber: number;
       agentId: string;
       agentName: string;
       intent: string;
@@ -279,17 +280,29 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
                 actionTarget: event.actionTarget,
                 actions: event.actions ?? [],
               };
+              // Use iteration number from the event itself — robust to a missed
+              // iteration-start (e.g. when SSE connects after the server has
+              // already broadcast iteration-start with no clients listening).
+              // Falls back to currentIteration for older server versions that
+              // don't include the field.
+              const eventIter = event.iterationNumber ?? currentIteration;
+              // Sync currentIteration so the rest of the UI reflects reality
+              // even if iteration-start was missed for the very first iteration.
+              if (eventIter > currentIteration) {
+                currentIteration = eventIter;
+                isRunning = true;
+              }
               // Accumulate in history (deduplicate by agentId + iterationNumber)
               // Ring-buffer cap: keep at most 500 entries per agent to prevent
               // unbounded memory growth during long-running simulations (BUG-10).
               const INTENT_HISTORY_CAP = 500;
               const agentHistory = agentIntentHistory[event.agentId] ?? [];
-              const alreadyRecorded = agentHistory.some(r => r.iterationNumber === currentIteration);
-              if (!alreadyRecorded && currentIteration > 0) {
+              const alreadyRecorded = agentHistory.some(r => r.iterationNumber === eventIter);
+              if (!alreadyRecorded && eventIter > 0) {
                 const newRecord: AgentIntentRecord = {
                   agentId: event.agentId,
                   agentName: event.agentName,
-                  iterationNumber: currentIteration,
+                  iterationNumber: eventIter,
                   actionCode: event.actionCode,
                   actionTarget: event.actionTarget,
                   actions: event.actions ?? [],

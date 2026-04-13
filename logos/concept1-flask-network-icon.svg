@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="c1i-title">
+  <title id="c1i-title">PolicyLab Icon - Flask Network</title>
+  <defs>
+    <linearGradient id="c1i-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="24" y="4" width="16" height="18" rx="2" fill="url(#c1i-grad)" opacity="0.9"/>
+  <rect x="20" y="2" width="24" height="5" rx="2.5" fill="#818cf8"/>
+  <path d="M24,22 L6,52 Q4,56 8,58 L56,58 Q60,56 58,52 L40,22 Z" fill="url(#c1i-grad)" opacity="0.85"/>
+  <path d="M14,44 L50,44 L56,52 Q58,56 54,58 L10,58 Q6,56 8,52 Z" fill="#4f46e5" opacity="0.45"/>
+
+  <circle cx="22" cy="48" r="3" fill="#a5b4fc"/>
+  <circle cx="36" cy="40" r="3.5" fill="#c7d2fe"/>
+  <circle cx="42" cy="50" r="2.5" fill="#a5b4fc"/>
+  <circle cx="28" cy="38" r="2" fill="#e0e7ff"/>
+
+  <line x1="22" y1="48" x2="36" y2="40" stroke="#c7d2fe" stroke-width="0.8" opacity="0.6"/>
+  <line x1="36" y1="40" x2="42" y2="50" stroke="#c7d2fe" stroke-width="0.8" opacity="0.6"/>
+  <line x1="22" y1="48" x2="42" y2="50" stroke="#a5b4fc" stroke-width="0.8" opacity="0.4"/>
+  <line x1="28" y1="38" x2="36" y2="40" stroke="#e0e7ff" stroke-width="0.8" opacity="0.5"/>
+
+  <circle cx="30" cy="30" r="1.5" fill="#c7d2fe" opacity="0.5"/>
+  <circle cx="34" cy="25" r="1" fill="#e0e7ff" opacity="0.4"/>
+</svg>

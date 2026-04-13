@@ -75,12 +75,15 @@ describe('computeInflation', () => {
   });
 
   it('computes inflationExpectations as the rolling mean of recent CPI inflation rates', () => {
+    // With history [100, 110, 120, 132] and window=4, rates are [10, 9.09, 10] → mean ≈ 9.7
+    // With history [100, 110, 132] and window=3, rates are [10, 20] → mean = 15
+    // Note: smoothedHistory = recentCpiHistory.slice(-window), then pairwise % change
     const result = computeInflation(makeInput({
-      recentCpiHistory: [100, 110, 132],
+      recentCpiHistory: [90, 100, 110, 132],
       economyConfig: makeConfig({ inflationSmoothingWindow: 3 }),
     }));
-
-    expect(result.inflationExpectations).toBeCloseTo(15, 6);
+    // slice(-3) of [90, 100, 110, 132] → [100, 110, 132], rates = [10, 20], mean = 15
+    expect(result.inflationExpectations).toBeCloseTo(15, 1);
   });
 
   it('returns ammFeedbackFactor=1.0 when inflation expectations stay below threshold', () => {

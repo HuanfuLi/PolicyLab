@@ -6,7 +6,7 @@
  *  - Per-iteration writes (updateEnterpriseInsolvencyAsync) use asyncLogFlusher
  *    to prevent SQLITE_BUSY deadlocks during high-frequency simulation ticks.
  */
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { db } from '../index.js';
 import { enterprises } from '../schema.js';
 import { asyncLogFlusher } from '../asyncLogFlusher.js';
@@ -32,7 +32,9 @@ export function insertEnterprise(sessionId: SessionScope, blueprint: EnterpriseB
 }
 
 export function getEnterprises(sessionId: SessionScope): EnterpriseBlueprint[] {
-  const rows = db.select().from(enterprises).where(eq(enterprises.sessionId, sessionId)).all();
+  const rows = db.select().from(enterprises)
+    .where(and(eq(enterprises.sessionId, sessionId), eq(enterprises.isBankrupt, false)))
+    .all();
   return rows.map(row => ({
     id: row.id,
     name: row.name,

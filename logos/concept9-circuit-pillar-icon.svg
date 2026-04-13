@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="c9i-title">
+  <title id="c9i-title">PolicyLab Icon - Circuit Pillar</title>
+  <defs>
+    <linearGradient id="c9i-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#a5b4fc"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(32, 4)">
+    <rect x="-18" y="2" width="36" height="4" rx="2" fill="#818cf8" opacity="0.8"/>
+    <rect x="-14" y="5" width="28" height="3" rx="1" fill="#6366f1" opacity="0.6"/>
+    <polygon points="0,0 -20,4 20,4" fill="#a5b4fc" opacity="0.3"/>
+
+    <rect x="-9" y="8" width="18" height="40" rx="1" fill="url(#c9i-grad)" opacity="0.7"/>
+
+    <line x1="-4" y1="11" x2="-4" y2="18" stroke="#e0e7ff" stroke-width="1" opacity="0.5"/>
+    <line x1="-4" y1="18" x2="2" y2="18" stroke="#e0e7ff" stroke-width="1" opacity="0.5"/>
+    <line x1="2" y1="18" x2="2" y2="26" stroke="#e0e7ff" stroke-width="1" opacity="0.5"/>
+    <line x1="4" y1="12" x2="4" y2="22" stroke="#c7d2fe" stroke-width="1" opacity="0.4"/>
+    <line x1="4" y1="22" x2="-2" y2="22" stroke="#c7d2fe" stroke-width="1" opacity="0.4"/>
+    <line x1="-2" y1="22" x2="-2" y2="32" stroke="#c7d2fe" stroke-width="1" opacity="0.4"/>
+    <line x1="0" y1="30" x2="5" y2="30" stroke="#e0e7ff" stroke-width="1" opacity="0.35"/>
+    <line x1="5" y1="30" x2="5" y2="38" stroke="#e0e7ff" stroke-width="1" opacity="0.35"/>
+    <line x1="-5" y1="34" x2="-5" y2="42" stroke="#c7d2fe" stroke-width="1" opacity="0.3"/>
+
+    <circle cx="-4" cy="11" r="1.5" fill="#e0e7ff" opacity="0.7"/>
+    <circle cx="4" cy="12" r="1.5" fill="#c7d2fe" opacity="0.6"/>
+    <circle cx="2" cy="26" r="1.5" fill="#e0e7ff" opacity="0.5"/>
+    <circle cx="-2" cy="32" r="1.5" fill="#c7d2fe" opacity="0.5"/>
+    <circle cx="5" cy="38" r="1.5" fill="#e0e7ff" opacity="0.45"/>
+
+    <rect x="-14" y="48" width="28" height="3" rx="1" fill="#6366f1" opacity="0.6"/>
+    <rect x="-18" y="50" width="36" height="4" rx="2" fill="#818cf8" opacity="0.7"/>
+  </g>
+</svg>

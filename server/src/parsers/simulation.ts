@@ -197,11 +197,13 @@ export function parseResolutionStrict(text: string): ParsedResolution {
     .filter((o): o is ParsedAgentOutcome => o !== null);
 
   const rawEvents = Array.isArray(raw.lifecycleEvents) ? raw.lifecycleEvents : [];
-  const lifecycleEvents: ParsedLifecycleEvent[] = rawEvents.map((e: Record<string, unknown>) => ({
-    type: e.type === 'role_change' ? 'role_change' : 'death',
-    agentId: String(e.agentId ?? ''),
-    detail: String(e.detail ?? ''),
-  }));
+  const lifecycleEvents: ParsedLifecycleEvent[] = rawEvents
+    .map((e: Record<string, unknown>): ParsedLifecycleEvent => ({
+      type: e.type === 'role_change' ? 'role_change' : 'death',
+      agentId: String(e.agentId ?? ''),
+      detail: String(e.detail ?? ''),
+    }))
+    .filter(e => e.agentId.length > 0); // Filter ghost events with empty agentId (LLM hallucination)
 
   return { narrativeSummary, agentOutcomes, lifecycleEvents };
 }
@@ -254,11 +256,13 @@ export function parseGroupResolutionStrict(text: string): ParsedGroupResolution 
     .filter((o): o is ParsedAgentOutcome => o !== null);
 
   const rawEvents = Array.isArray(raw.lifecycleEvents) ? raw.lifecycleEvents : [];
-  const lifecycleEvents: ParsedLifecycleEvent[] = rawEvents.map((e: Record<string, unknown>) => ({
-    type: e.type === 'role_change' ? 'role_change' : 'death',
-    agentId: String(e.agentId ?? ''),
-    detail: String(e.detail ?? ''),
-  }));
+  const lifecycleEvents: ParsedLifecycleEvent[] = rawEvents
+    .map((e: Record<string, unknown>): ParsedLifecycleEvent => ({
+      type: e.type === 'role_change' ? 'role_change' : 'death',
+      agentId: String(e.agentId ?? ''),
+      detail: String(e.detail ?? ''),
+    }))
+    .filter(e => e.agentId.length > 0);
 
   return { groupSummary, agentOutcomes, lifecycleEvents };
 }
@@ -286,11 +290,13 @@ export function parseMergeResolutionStrict(text: string): ParsedMergeResolution 
   if (!narrativeSummary) throw new Error('Missing or empty "narrativeSummary" field');
 
   const rawEvents = Array.isArray(raw.lifecycleEvents) ? raw.lifecycleEvents : [];
-  const lifecycleEvents: ParsedLifecycleEvent[] = rawEvents.map((e: Record<string, unknown>) => ({
-    type: e.type === 'role_change' ? 'role_change' : 'death',
-    agentId: String(e.agentId ?? ''),
-    detail: String(e.detail ?? ''),
-  }));
+  const lifecycleEvents: ParsedLifecycleEvent[] = rawEvents
+    .map((e: Record<string, unknown>): ParsedLifecycleEvent => ({
+      type: e.type === 'role_change' ? 'role_change' : 'death',
+      agentId: String(e.agentId ?? ''),
+      detail: String(e.detail ?? ''),
+    }))
+    .filter(e => e.agentId.length > 0);
 
   return { narrativeSummary, lifecycleEvents };
 }

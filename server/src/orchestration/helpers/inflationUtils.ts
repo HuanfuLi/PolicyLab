@@ -3,6 +3,16 @@ import type { AutomatedMarketMaker } from '../../mechanics/automatedMarketMaker.
 import { getEconomyConfig } from '../../mechanics/economyConfigUtils.js';
 import { sessionPriceHistory } from '../simulationState.js';
 
+// Realistic baseline prices for non-food commodities when no market data exists.
+// Without these, fallback of 1.0 for tools/luxury_goods makes 60% of the CPI basket
+// essentially static, preventing CPI from reflecting actual price movements.
+const NON_FOOD_COMMODITY_BASELINES: Record<string, number> = {
+  food: 6,           // typical AMM spot price for food
+  tools: 12,
+  luxury_goods: 12,
+  raw_materials: 4,
+};
+
 export function getInflationBasketPrices(
   sessionId: string,
   economyConfig: ReturnType<typeof getEconomyConfig>,
@@ -14,11 +24,24 @@ export function getInflationBasketPrices(
   }
   const priceHistory = sessionPriceHistory.get(sessionId);
   const basePrices = economyConfig.cpiBasePrices ?? {};
+
+  // Resolve price per commodity: iteration price > history > config base > realistic baseline
+  // Use explicit undefined checks (not truthiness) to avoid rejecting legitimate price of 0.
+  const resolve = (item: string): number => {
+    const iterPrice = iterationPrices.get(item as ItemType);
+    if (iterPrice !== undefined && iterPrice > 0) return iterPrice;
+    const histPrice = priceHistory?.get(item as ItemType);
+    if (histPrice !== undefined && histPrice > 0) return histPrice;
+    const basePrice = (basePrices as Record<string, number>)[item];
+    if (basePrice !== undefined && basePrice > 0) return basePrice;
+    return NON_FOOD_COMMODITY_BASELINES[item] ?? 1;
+  };
+
   return {
-    food: iterationPrices.get('food') ?? priceHistory?.get('food') ?? basePrices.food ?? 1,
-    tools: iterationPrices.get('tools') ?? priceHistory?.get('tools') ?? basePrices.tools ?? 1,
-    luxury_goods: iterationPrices.get('luxury_goods') ?? priceHistory?.get('luxury_goods') ?? basePrices.luxury_goods ?? 1,
-    raw_materials: iterationPrices.get('raw_materials') ?? priceHistory?.get('raw_materials') ?? basePrices.raw_materials ?? 1,
+    food: resolve('food'),
+    tools: resolve('tools'),
+    luxury_goods: resolve('luxury_goods'),
+    raw_materials: resolve('raw_materials'),
   };
 }
 

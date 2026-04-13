@@ -25,6 +25,7 @@ function rowToDeposit(row: typeof depositAccounts.$inferSelect): DepositAccount 
     balance: row.balance,
     interestRate: row.interestRate,
     lastUpdated: row.lastUpdated,
+    createdAtIteration: row.createdAtIteration,
   };
 }
 
@@ -41,6 +42,9 @@ export function upsertDeposit(
   const id = deposit.id ?? existing?.id ?? uuidv4();
 
   if (existing) {
+    // [H2] createdAtIteration is deliberately NOT included in the update —
+    // it's set once on insert and must be immutable thereafter so interest-
+    // accrual filters can rely on "created this iter" being a stable signal.
     db.update(depositAccounts)
       .set({
         balance: deposit.balance,
@@ -51,6 +55,10 @@ export function upsertDeposit(
       .where(eq(depositAccounts.id, id))
       .run();
   } else {
+    // [H2] On insert, stamp createdAtIteration with the current iteration
+    // number (passed via the explicit field if provided, else default to the
+    // same value as lastUpdated — typical case: fresh DEPOSIT this tick).
+    const createdAtIteration = deposit.createdAtIteration ?? deposit.lastUpdated;
     db.insert(depositAccounts).values({
       id,
       sessionId: deposit.sessionId,
@@ -60,6 +68,7 @@ export function upsertDeposit(
       balance: deposit.balance,
       interestRate: deposit.interestRate,
       lastUpdated: deposit.lastUpdated,
+      createdAtIteration,
     }).run();
   }
 

@@ -255,7 +255,8 @@ export function runMigrations() {
       account_type TEXT NOT NULL DEFAULT 'demand',
       balance REAL NOT NULL DEFAULT 0,
       interest_rate REAL NOT NULL DEFAULT 0.002,
-      last_updated INTEGER NOT NULL DEFAULT 0
+      last_updated INTEGER NOT NULL DEFAULT 0,
+      created_at_iteration INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE INDEX IF NOT EXISTS idx_deposit_accounts_session ON deposit_accounts(session_id);

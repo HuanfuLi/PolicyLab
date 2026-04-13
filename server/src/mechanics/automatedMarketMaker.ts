@@ -620,13 +620,14 @@ export function createAMMForSession(
 }
 
 /** Item types that have dedicated AMM pools (excluding food which uses the primary AMM). */
-export const MULTI_AMM_ITEM_TYPES = ['raw_materials', 'luxury_goods'] as const;
+export const MULTI_AMM_ITEM_TYPES = ['raw_materials', 'luxury_goods', 'tools'] as const;
 export type MultiAMMItemType = typeof MULTI_AMM_ITEM_TYPES[number];
 
 /** Initial spot prices for non-food commodity AMM pools. */
 const COMMODITY_SPOT_PRICES: Record<MultiAMMItemType, number> = {
   raw_materials: 4.0,  // cheaper than food, basic material
   luxury_goods: 12.0,  // expensive, discretionary item
+  tools: 12.0,         // durable goods, similar price tier to luxury
 };
 
 /**

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 80" width="360" height="80" role="img" aria-labelledby="c5l-title">
+  <title id="c5l-title">PolicyLab Logo - Hex Grid (Light)</title>
+  <defs>
+    <linearGradient id="c5l-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+
+  <g id="c5l-icon" transform="translate(38, 40)">
+    <polygon points="0,-14 12.1,-7 12.1,7 0,14 -12.1,7 -12.1,-7" fill="url(#c5l-grad)" opacity="0.9"/>
+    <polygon points="0,-9 7.8,-4.5 7.8,4.5 0,9 -7.8,4.5 -7.8,-4.5" fill="#ffffff" opacity="0.25"/>
+
+    <polygon points="0,-36 10,-30 10,-22 0,-16 -10,-22 -10,-30" fill="#4f46e5" opacity="0.45"/>
+    <polygon points="22,-22 32,-16 32,-8 22,-2 12,-8 12,-16" fill="#6366f1" opacity="0.4"/>
+    <polygon points="22,2 32,8 32,16 22,22 12,16 12,8" fill="#4f46e5" opacity="0.35"/>
+    <polygon points="0,16 10,22 10,30 0,36 -10,30 -10,22" fill="#6366f1" opacity="0.4"/>
+    <polygon points="-22,2 -12,8 -12,16 -22,22 -32,16 -32,8" fill="#4f46e5" opacity="0.35"/>
+    <polygon points="-22,-22 -12,-16 -12,-8 -22,-2 -32,-8 -32,-16" fill="#6366f1" opacity="0.4"/>
+
+    <circle cx="0" cy="-26" r="1.5" fill="#4338ca" opacity="0.5"/>
+    <circle cx="22" cy="-12" r="1.5" fill="#4f46e5" opacity="0.45"/>
+    <circle cx="22" cy="12" r="1.5" fill="#4338ca" opacity="0.45"/>
+    <circle cx="0" cy="26" r="1.5" fill="#4f46e5" opacity="0.45"/>
+    <circle cx="-22" cy="12" r="1.5" fill="#4338ca" opacity="0.45"/>
+    <circle cx="-22" cy="-12" r="1.5" fill="#4f46e5" opacity="0.45"/>
+  </g>
+
+  <g transform="translate(84, 0)">
+    <text x="0" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#1f2937" letter-spacing="-0.5">
+      Policy</text>
+    <text x="116" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#4f46e5" letter-spacing="-0.5">
+      Lab</text>
+    <text x="0" y="62" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#6b7280" letter-spacing="3">
+      POLICY SIMULATION</text>
+  </g>
+</svg>

@@ -27,6 +27,7 @@ export type SimulationEvent =
   | { type: 'iteration-start'; iteration: number; total: number }
   | {
       type: 'agent-intent';
+      iterationNumber: number;
       agentId: string;
       agentName: string;
       intent: string;
@@ -149,6 +150,23 @@ class SimulationManager {
       state.pauseRequested = false;
       state.resetRequested = false;
     }
+  }
+
+  /**
+   * Fully remove a session from the manager. Used on session deletion to
+   * prevent memory leaks and stale state from blocking future operations.
+   * Closes all SSE clients before removal.
+   */
+  cleanup(sessionId: string): void {
+    const state = this.sessions.get(sessionId);
+    if (state) {
+      // Close all SSE connections so clients receive a clean end
+      for (const client of state.clients) {
+        try { client.end(); } catch { /* best-effort */ }
+      }
+      state.clients.clear();
+    }
+    this.sessions.delete(sessionId);
   }
 
   addClient(sessionId: string, res: Response): void {

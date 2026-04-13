@@ -239,7 +239,12 @@ export function buildResolutionPrompt(
   }).join('\n');
 
   const metricsBlock = iterationMetrics
-    ? `\n\n[OBJECTIVE SYSTEM METRICS — last iteration]\n${iterationMetrics}\n⚠️ You MUST reflect these statistics in your narrative. Do NOT ignore the unemployed or failed agents. If many agents failed to find work, narrate a society gripped by unemployment crisis, desperation, and inequality.`
+    // [R6] Narrative tone must match the metrics in both directions. Previously
+    // this clause only described how to narrate failure; that biased summaries
+    // toward crisis language even when the economy was improving. Now we
+    // describe both regimes symmetrically and require the tone to be earned
+    // by the data rather than defaulted to.
+    ? `\n\n[OBJECTIVE SYSTEM METRICS — last iteration]\n${iterationMetrics}\n⚠️ You MUST reflect these statistics in your narrative honestly and symmetrically. If employment, wealth, or health are rising, narrate the recovery plainly — earned optimism, relief, modest prosperity — without manufacturing a crisis subplot. If many agents failed to find work or stats are declining, narrate the shortfall concretely (numbers, affected groups) without inflating it into apocalyptic framing. Loaded words ("gripped", "desperation", "crisis", "collapse") are only permitted when the metrics clearly support them.`
     : '';
 
   const physicsLogBlock = physicsLog
@@ -266,7 +271,7 @@ ${agentList}
 Laws (excerpt):
 ${session.law?.slice(0, 500) ?? '(no laws)'}
 
-NARRATIVE DIRECTIVE — DATA-DRIVEN GROUNDING: Your narrative tone MUST match the telemetry data provided in the TELEMETRY DIGEST above. If metrics are improving, narrate cautious optimism tempered by remaining challenges. If metrics are declining, narrate crisis and struggle. Also incorporate citizen sentiment — if population mood shows widespread distress, reflect desperation; if satisfaction is high, reflect collective progress. NEVER contradict the numbers in the digest. Include at least 2 specific data points from the digest as embedded numbers in your prose (e.g., "Food prices fell 15% to 4.88 fiat/unit as agricultural output surged").
+NARRATIVE DIRECTIVE — DATA-DRIVEN GROUNDING: Your narrative tone MUST match the telemetry data provided in the TELEMETRY DIGEST above, in both directions. If metrics are improving, narrate cautious optimism tempered by remaining challenges — do NOT inject manufactured crisis to "balance" the tone. If metrics are declining, narrate the shortfall concretely and proportionately without escalating to apocalyptic language unless the numbers truly warrant it. Incorporate citizen sentiment similarly — high satisfaction → collective progress; widespread distress → strain (reserve words like "desperation" and "crisis" for cases the data clearly supports). NEVER contradict the numbers in the digest. Include at least 2 specific data points from the digest as embedded numbers in your prose (e.g., "Food prices fell 15% to 4.88 fiat/unit as agricultural output surged").
 
 Resolve all agent intentions simultaneously, considering:
 - How agent actions interact with each other
@@ -443,7 +448,7 @@ export function buildMergeResolutionMessages(
 ): LLMMessage[] {
   const summaryList = groupSummaries.map((s, i) => `Group ${i + 1}: ${s}`).join('\n');
   const metricsBlock = iterationMetrics
-    ? `\n[OBJECTIVE SYSTEM METRICS — last iteration]\n${iterationMetrics}\n⚠️ Weave these facts into your narrative. If unemployment is high, the story must reflect crisis, desperation, and inequality — not a utopia.`
+    ? `\n[OBJECTIVE SYSTEM METRICS — last iteration]\n${iterationMetrics}\n⚠️ Weave these facts into your narrative honestly. If employment and stats are improving, narrate the recovery plainly without inventing a crisis. If unemployment is high or stats declining, narrate the shortfall proportionately — avoid apocalyptic framing unless the numbers clearly support it.`
     : '';
 
   const mergeLockedNote = lockedVariables && lockedVariables.length > 0
@@ -464,7 +469,7 @@ ${previousSummary ? `\nPrevious iteration:\n${previousSummary.slice(0, 400)}` : 
 Sub-group summaries:
 ${summaryList}
 
-NARRATIVE DIRECTIVE — DATA-DRIVEN GROUNDING: Your narrative tone MUST match the telemetry data provided in the TELEMETRY DIGEST above. If metrics are improving, narrate cautious optimism tempered by remaining challenges. If metrics are declining, narrate crisis and struggle. Also incorporate citizen sentiment — if population mood shows widespread distress, reflect desperation; if satisfaction is high, reflect collective progress. NEVER contradict the numbers in the digest. Include at least 2 specific data points from the digest as embedded numbers in your prose (e.g., "Food prices fell 15% to 4.88 fiat/unit as agricultural output surged").
+NARRATIVE DIRECTIVE — DATA-DRIVEN GROUNDING: Your narrative tone MUST match the telemetry data provided in the TELEMETRY DIGEST above, in both directions. If metrics are improving, narrate cautious optimism tempered by remaining challenges — do NOT inject manufactured crisis to "balance" the tone. If metrics are declining, narrate the shortfall concretely and proportionately without escalating to apocalyptic language unless the numbers truly warrant it. Incorporate citizen sentiment similarly — high satisfaction → collective progress; widespread distress → strain (reserve words like "desperation" and "crisis" for cases the data clearly supports). NEVER contradict the numbers in the digest. Include at least 2 specific data points from the digest as embedded numbers in your prose (e.g., "Food prices fell 15% to 4.88 fiat/unit as agricultural output surged").
 
 Synthesise these into one coherent society-wide narrative and identify any society-level lifecycle events.
 

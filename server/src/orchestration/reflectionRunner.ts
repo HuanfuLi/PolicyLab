@@ -78,14 +78,14 @@ export async function runReflection(sessionId: string): Promise<void> {
     }
 
     // Group resolved actions by agent → iteration, extracting both actions and stats
-    interface IterEntry { actions: string[]; finalWealth?: number; finalHealth?: number; finalHappiness?: number; wealthDelta: number; healthDelta: number; happinessDelta: number }
+    interface IterEntry { actions: string[]; actionCodes: string[]; finalWealth?: number; finalHealth?: number; finalHappiness?: number; wealthDelta: number; healthDelta: number; happinessDelta: number }
     const agentIterData = new Map<string, Map<string, IterEntry>>();
     for (const ra of allResolvedActions) {
       if (!agentIterData.has(ra.agentId)) agentIterData.set(ra.agentId, new Map());
       const iterMap = agentIterData.get(ra.agentId)!;
       const iterKey = ra.iterationId ?? 'unknown';
       if (!iterMap.has(iterKey)) {
-        iterMap.set(iterKey, { actions: [], wealthDelta: 0, healthDelta: 0, happinessDelta: 0 });
+        iterMap.set(iterKey, { actions: [], actionCodes: [], wealthDelta: 0, healthDelta: 0, happinessDelta: 0 });
       }
       const entry = iterMap.get(iterKey)!;
       entry.actions.push(ra.action);
@@ -98,6 +98,12 @@ export async function runReflection(sessionId: string): Promise<void> {
           entry.wealthDelta += Number(parsed.wealthDelta ?? 0);
           entry.healthDelta += Number(parsed.healthDelta ?? 0);
           entry.happinessDelta += Number(parsed.happinessDelta ?? 0);
+          // Extract action codes from actionQueue for grounded trajectory display
+          if (Array.isArray(parsed.actionQueue)) {
+            for (const act of parsed.actionQueue as Array<{ actionCode?: string }>) {
+              if (act.actionCode) entry.actionCodes.push(act.actionCode);
+            }
+          }
         } catch { /* ignore malformed outcome */ }
       }
     }
@@ -121,6 +127,8 @@ export async function runReflection(sessionId: string): Promise<void> {
 
       const entries: StatTrajectoryEntry[] = [];
       for (const { iterNum, data } of sortedEntries) {
+        const prevW = w;
+        const prevH = h;
         if (data.finalWealth !== undefined && data.finalHealth !== undefined && data.finalHappiness !== undefined) {
           w = data.finalWealth;
           h = data.finalHealth;
@@ -131,7 +139,17 @@ export async function runReflection(sessionId: string): Promise<void> {
           h = clampStat(h + data.healthDelta);
           hap = clampStat(hap + data.happinessDelta);
         }
-        entries.push({ iteration: iterNum, wealth: w, health: h, happiness: hap, actions: data.actions });
+        // Extract action codes from outcome JSON for clearer trajectory display
+        const actionCodes = data.actionCodes.length > 0 ? data.actionCodes : data.actions;
+        entries.push({
+          iteration: iterNum,
+          wealth: w,
+          health: h,
+          happiness: hap,
+          actions: actionCodes,
+          wealthDelta: w - prevW,
+          healthDelta: h - prevH,
+        });
       }
       // Limit to last 10 for token budget
       return entries.slice(-10);
@@ -147,8 +165,15 @@ export async function runReflection(sessionId: string): Promise<void> {
         const statTrajectory = buildStatTrajectory(agent.id, agent);
         const messages = buildAgentReflectionPrompt(agent, session, iterationSummaries, statTrajectory);
         const raw = await citizenProv.chat(messages, { model: settings.citizenAgentModel });
-        const { pass1 } = parseAgentReflection(raw);
+        const { pass1, pass1_best } = parseAgentReflection(raw);
         pass1Map.set(agent.id, pass1);
+
+        // [R4] Append the "one thing that went well" to the displayed reflection
+        // body when the model provided it. This forces agents to articulate at
+        // least one positive outcome even when the main reflection is critical.
+        const displayContent = pass1_best && pass1_best.trim().length > 0
+          ? `${pass1}\n\nWhat went well: ${pass1_best}`
+          : pass1;
 
         // Broadcast BEFORE DB insert — frontend always receives pass1 even if DB fails
         reflectionManager.broadcast(sessionId, {
@@ -156,14 +181,14 @@ export async function runReflection(sessionId: string): Promise<void> {
           pass: 1,
           agentId: agent.id,
           agentName: agent.name,
-          content: pass1,
+          content: displayContent,
         });
 
         await db.insert(reflections).values({
           id: uuidv4(),
           sessionId,
           agentId: agent.id,
-          content: pass1,
+          content: displayContent,
           insights: null,
           createdAt: new Date().toISOString(),
         });
@@ -197,7 +222,7 @@ export async function runReflection(sessionId: string): Promise<void> {
     const avgStat = (key: keyof Agent['currentStats']) =>
       aliveAgents.length === 0
         ? 0
-        : Math.round(aliveAgents.reduce((s, a) => s + a.currentStats[key], 0) / aliveAgents.length);
+        : Math.round(aliveAgents.reduce((s, a) => s + (a.currentStats[key] ?? 0), 0) / aliveAgents.length);
 
     const evalMessages = buildEvaluationPrompt(
       session,

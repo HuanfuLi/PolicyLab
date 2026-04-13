@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="c8i-title">
+  <title id="c8i-title">PolicyLab Icon - Overlapping Circles</title>
+
+  <g transform="translate(32, 32)">
+    <circle cx="0" cy="-10" r="18" fill="none" stroke="#6366f1" stroke-width="2" opacity="0.7"/>
+    <circle cx="0" cy="-10" r="18" fill="#6366f1" opacity="0.08"/>
+
+    <circle cx="-12" cy="7" r="18" fill="none" stroke="#4f46e5" stroke-width="2" opacity="0.6"/>
+    <circle cx="-12" cy="7" r="18" fill="#4f46e5" opacity="0.06"/>
+
+    <circle cx="12" cy="7" r="18" fill="none" stroke="#818cf8" stroke-width="2" opacity="0.6"/>
+    <circle cx="12" cy="7" r="18" fill="#818cf8" opacity="0.06"/>
+
+    <circle cx="0" cy="2" r="5" fill="#6366f1" opacity="0.25"/>
+    <circle cx="0" cy="2" r="2.5" fill="#c7d2fe" opacity="0.6"/>
+
+    <circle cx="0" cy="-14" r="1.8" fill="#a5b4fc" opacity="0.7"/>
+    <circle cx="-12" cy="10" r="1.8" fill="#818cf8" opacity="0.6"/>
+    <circle cx="12" cy="10" r="1.8" fill="#c7d2fe" opacity="0.6"/>
+  </g>
+</svg>

@@ -312,25 +312,33 @@ const Reflection = () => {
                 </div>
 
                 {/* Society Trend Graph */}
-                {displayStats.length > 1 && (
-                  <>
-                    <h3 style={{ color: 'var(--color-bright)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <BarChart2 size={18} style={{ color: 'var(--primary)' }} /> Society Trend
-                    </h3>
-                    <div style={{ background: 'var(--panel-alpha-05)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--glass-border)', marginBottom: '2rem' }}>
-                      <LineChart
-                        series={[
-                          { label: 'Wealth', color: 'var(--warning)', data: displayStats.map(s => s.avgWealth) },
-                          { label: 'Health', color: 'var(--success)', data: displayStats.map(s => s.avgHealth), yRange: [0, 100] },
-                          { label: 'Happiness', color: 'var(--chart-indigo)', data: displayStats.map(s => s.avgHappiness), yRange: [0, 100] },
-                        ]}
-                        xLabels={displayStats.map(s => String(s.iterationNumber))}
-                        height={240}
-                        splitAxes
-                      />
+                <h3 style={{ color: 'var(--color-bright)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <BarChart2 size={18} style={{ color: 'var(--primary)' }} /> Society Trend
+                </h3>
+                <div style={{ background: 'var(--panel-alpha-05)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--glass-border)', marginBottom: '2rem' }}>
+                  {displayStats.length > 1 ? (
+                    <LineChart
+                      series={[
+                        { label: 'Wealth', color: 'var(--warning)', data: displayStats.map(s => s.avgWealth ?? 0) },
+                        { label: 'Health', color: 'var(--success)', data: displayStats.map(s => s.avgHealth ?? 0), yRange: [0, 100] },
+                        { label: 'Happiness', color: 'var(--chart-indigo)', data: displayStats.map(s => s.avgHappiness ?? 0), yRange: [0, 100] },
+                      ]}
+                      xLabels={displayStats.map(s => String(s.iterationNumber))}
+                      height={240}
+                      splitAxes
+                    />
+                  ) : (
+                    <div style={{ color: 'var(--text-dim)', fontSize: '0.9rem', textAlign: 'center', padding: '2rem 1rem' }}>
+                      <AlertCircle size={20} style={{ opacity: 0.5, marginBottom: '0.5rem' }} />
+                      <div>No iteration data available.</div>
+                      <div style={{ fontSize: '0.8rem', marginTop: '0.5rem', opacity: 0.7 }}>
+                        {displayStats.length === 0
+                          ? 'The simulation produced no iterations — likely an early failure (e.g., LLM provider was unreachable).'
+                          : 'Need at least 2 iterations to render a trend.'}
+                      </div>
                     </div>
-                  </>
-                )}
+                  )}
+                </div>
 
                 <h3 style={{ color: 'var(--color-bright)', marginBottom: '0.75rem' }}>Analysis</h3>
                 <MarkdownText>{evaluation.analysis}</MarkdownText>
@@ -429,7 +437,11 @@ const Reflection = () => {
                   {data.pass1 && (
                     <div style={{ marginBottom: data.pass2 ? '0.75rem' : 0 }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Personal perspective</span>
-                      <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.4rem', fontStyle: 'italic' }}>
+                      {/* whiteSpace: pre-wrap preserves the \n\n separator the
+                          backend uses to append the "What went well: …" suffix
+                          from the pass1_best schema slot. Without it, the
+                          paragraph break collapses to a single space. */}
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.4rem', fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>
                         "{data.pass1}"
                       </p>
                     </div>
@@ -438,7 +450,7 @@ const Reflection = () => {
                   {data.pass2 && (
                     <div>
                       <span style={{ fontSize: '0.75rem', color: 'var(--success)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>After seeing the full picture</span>
-                      <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.4rem', fontStyle: 'italic' }}>
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.4rem', fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>
                         "{data.pass2}"
                       </p>
                     </div>

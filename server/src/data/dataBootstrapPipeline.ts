@@ -470,12 +470,19 @@ export function generateEnterprises(
         if (j % owners.length === i) {
           const agentName = employees[j].name;
           // Prefer UUID if name-to-ID map provided; fall back to name for backward compat
-          entEmployees.push(agentNameToId?.get(agentName) ?? agentName);
+          const resolvedId = agentNameToId?.get(agentName) ?? agentName;
+          if (agentNameToId && !agentNameToId.has(agentName)) {
+            console.warn(`[Enterprise] Employee "${agentName}" not found in agent name→UUID map`);
+          }
+          entEmployees.push(resolvedId);
         }
       }
 
       // Resolve ownerId to UUID if map is provided
       const ownerIdResolved = agentNameToId?.get(owners[i].name) ?? owners[i].name;
+      if (agentNameToId && !agentNameToId.has(owners[i].name)) {
+        console.warn(`[Enterprise] Owner "${owners[i].name}" not found in agent name→UUID map — using name as ownerId (may cause employment wiring failures)`);
+      }
 
       enterprises.push({
         id: `ent_${sector.slice(0, 4)}_${i + 1}`,

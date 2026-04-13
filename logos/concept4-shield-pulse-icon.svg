@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="c4i-title">
+  <title id="c4i-title">PolicyLab Icon - Shield Pulse</title>
+  <defs>
+    <linearGradient id="c4i-grad" x1="0%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(32, 4)">
+    <path d="M0,2 L-26,12 L-26,28 Q-26,50 0,58 Q26,50 26,28 L26,12 Z"
+          fill="url(#c4i-grad)" opacity="0.85"/>
+    <path d="M0,7 L-21,15 L-21,28 Q-21,46 0,53 Q21,46 21,28 L21,15 Z"
+          fill="none" stroke="#a5b4fc" stroke-width="0.8" opacity="0.3"/>
+
+    <polyline points="-16,30 -10,30 -6,20 -2,38 2,24 6,34 10,26 14,30 18,30"
+              fill="none" stroke="#e0e7ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+
+    <circle cx="-6" cy="20" r="1.5" fill="#c7d2fe"/>
+    <circle cx="2" cy="24" r="1.5" fill="#e0e7ff"/>
+    <circle cx="10" cy="26" r="1.5" fill="#c7d2fe"/>
+
+    <circle cx="0" cy="2" r="2" fill="#a5b4fc" opacity="0.6"/>
+  </g>
+</svg>

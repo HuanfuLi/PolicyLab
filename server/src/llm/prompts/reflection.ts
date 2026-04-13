@@ -10,6 +10,10 @@ export interface StatTrajectoryEntry {
   health: number;
   happiness: number;
   actions: string[];
+  /** Per-iteration wealth change — grounds reflections in actual economic outcomes */
+  wealthDelta?: number;
+  /** Per-iteration health change */
+  healthDelta?: number;
 }
 
 // ── Phase 4 prompts ─────────────────────────────────────────────────────────
@@ -27,43 +31,75 @@ export function buildAgentReflectionPrompt(
   const cortisolStat = (agent.currentStats as unknown as Record<string, unknown>).cortisol;
   const cortisolLine = cortisolStat != null ? `- Cortisol (stress): ${cortisolStat}/100` : '';
 
+  // [R1] Restore personality traits at reflection time. Mirrors the block used
+  // during simulation intent prompts (agent-intent.ts:426) so the persona that
+  // coloured the agent's decisions also colours their interpretation of them.
+  const traitsBlock = agent.personalityTraits && agent.personalityTraits.length > 0
+    ? `\nPersonality: ${agent.personalityTraits.join(', ')}. These are deep-seated tendencies that shaped how you experienced and interpreted events — a risk-tolerant person remembers risks taken; an empathetic person remembers others; an idealistic person remembers what could have been. Let these traits colour your voice.`
+    : '';
+
+  // [R7] Compute wealth/happiness trajectory deltas so we can inject an
+  // explicit "gains notice" when outcomes are strongly positive. LLMs under-
+  // weight gains embedded in long stat lists; an explicit callout forces
+  // acknowledgment of improvement proportional to the actual data.
+  let gainsNotice = '';
+  if (statTrajectory && statTrajectory.length >= 2) {
+    const first = statTrajectory[0];
+    const last = statTrajectory[statTrajectory.length - 1];
+    const wealthGain = last.wealth - first.wealth;
+    const happinessGain = last.happiness - first.happiness;
+    const healthGain = last.health - first.health;
+    const gains: string[] = [];
+    if (wealthGain >= 20) gains.push(`wealth rose from ${first.wealth.toFixed(0)} to ${last.wealth.toFixed(0)} (+${wealthGain.toFixed(0)} fiat)`);
+    if (happinessGain >= 10) gains.push(`happiness rose from ${first.happiness.toFixed(0)} to ${last.happiness.toFixed(0)} (+${happinessGain.toFixed(0)})`);
+    if (healthGain >= 10) gains.push(`health rose from ${first.health.toFixed(0)} to ${last.health.toFixed(0)} (+${healthGain.toFixed(0)})`);
+    if (gains.length > 0) {
+      gainsNotice = `\nREAL GAINS YOU LIVED THROUGH — ${gains.join('; ')}. These are the numbers you ended with vs. where you started. Your reflection must acknowledge this improvement honestly; do not under-state gains this large. Struggle along the way is real, but so is arrival.`;
+    }
+  }
+
   // Build stat trajectory section (D-21)
+  // [R5] Regret-biased "What would you do differently?" replaced with a balanced
+  // counterfactual that invites both continuation and change.
   const trajectorySection = statTrajectory && statTrajectory.length > 0
     ? `\nYOUR PERSONAL JOURNEY (reflect on YOUR actual experience, not the collective narrative):\n` +
-      statTrajectory.map(s =>
-        `  Iteration ${s.iteration}: Wealth ${s.wealth.toFixed(0)}, Health ${s.health.toFixed(0)}, Happiness ${s.happiness.toFixed(0)} | Actions: ${s.actions.join(', ')}`
-      ).join('\n') +
-      `\n\nReflect specifically on how YOUR wealth, health, and happiness changed over time. What caused the changes? What would you do differently?`
+      statTrajectory.map(s => {
+        const wDelta = s.wealthDelta != null ? ` (${s.wealthDelta >= 0 ? '+' : ''}${s.wealthDelta.toFixed(0)} fiat)` : '';
+        const hDelta = s.healthDelta != null ? ` (${s.healthDelta >= 0 ? '+' : ''}${s.healthDelta.toFixed(0)})` : '';
+        return `  Iteration ${s.iteration}: Wealth ${s.wealth.toFixed(0)}${wDelta}, Health ${s.health.toFixed(0)}${hDelta}, Happiness ${s.happiness.toFixed(0)} | Actions: ${s.actions.join(', ')}`;
+      }).join('\n') +
+      `\n\nReflect specifically on how YOUR wealth, health, and happiness changed over time. The wealth/health deltas shown are ACTUAL outcomes — do NOT invent different numbers. Looking back, what would you repeat, and what would you change?`
     : '';
 
   const systemPrompt = `You are ${agent.name}, a ${agent.role}. This is your life, your world: "${session.idea}"
 
-Background: ${agent.background}
+Background: ${agent.background}${traitsBlock}
 
 Your final material reality:
 - Wealth: ${agent.currentStats.wealth}
 - Health: ${agent.currentStats.health}/100
 - Happiness: ${agent.currentStats.happiness}/100${cortisolLine ? `\n${cortisolLine}` : ''}
 - Status: ${agent.isAlive ? 'Alive' : 'Deceased'}
-${trajectorySection}
+${trajectorySection}${gainsNotice}
 
-It is over now. Reflect on your MATERIAL EXPERIENCE — your economic reality, not abstract philosophy.
+It is over now. Reflect on what you actually lived through — ground the reflection in your specific economic experience and let your personality shape how you interpret it.
 
 What you lived through (${iterationSummaries.length} weeks):
 ${summaryText.slice(0, 2000)}
 
 You MUST respond with ONLY valid JSON (no markdown, no preamble):
 {
-  "pass1": "string - your personal reflection (3-5 sentences, first person, raw and honest)"
+  "pass1": "string - your personal reflection (3-5 sentences, first person, raw and honest)",
+  "pass1_best": "string - one specific thing that went well for you, however small (1-2 sentences). If you genuinely cannot name one, write exactly: 'Nothing went well.' Do not invent."
 }
 
 Rules:
 - ANCHOR every sentence in MATERIAL REALITY: your actual wealth trajectory, food access, labour conditions, wages, debts, or inequality you witnessed. Did you eat? Were you exploited? Did you hoard or starve? Compare yourself to others.
-- Do NOT reflect on abstract philosophy, systems, or ideals — ground it in YOUR specific economic experience
-- Speak as this specific character — their class, background, and biases must be audible in every sentence
-- Express raw, unfiltered emotion rooted in material conditions: rage at poverty, guilt at excess, desperation from hunger, pride from earnings, resentment of exploitation — whatever is authentic to this person's class position
+- Let your PERSONALITY and background shape your voice. An idealist may frame their experience in terms of principles; a pragmatist in terms of outcomes; a cynic in terms of who played them. Philosophical register IS allowed when it is in-character — what is NOT allowed is generic, character-less abstraction.
+- MATCH YOUR TONE TO YOUR DATA. If your numbers improved meaningfully, your reflection should feel at least partly earned — pride, relief, satisfaction, even a quiet "I made it." If your numbers got worse, let the grievance land. Do NOT default to cynicism when your own trajectory was positive.
+- Express emotion proportional to what actually happened — examples across the full range: pride from earnings, satisfaction from security, relief from survival, gratitude for help received, frustration with obstacles, grief from loss, rage at injustice, resentment of exploitation. Pick the ones that fit YOUR specific outcome, not a default tone.
 - Do NOT use standard AI phrasing ("I felt a mix of...", "I realized that...", "In that moment...") — FORBIDDEN
-- Do not summarize society history; reflect from YOUR narrow, economically-grounded, personal vantage point`;
+- Do not summarize society history; reflect from YOUR narrow, personal vantage point`;
 
   return [
     { role: 'system', content: systemPrompt },
@@ -77,7 +113,14 @@ export function buildAgentReflection2Prompt(
   pass1: string,
   evaluationAnalysis: string
 ): LLMMessage[] {
-  const systemPrompt = `You are ${agent.name}, a ${agent.role}.
+  // [R1] Carry personality traits into pass 2 as well — without them, the
+  // agent's revised view drifts toward a generic voice and tends to harden
+  // into cynicism regardless of who they were designed to be.
+  const traitsLine = agent.personalityTraits && agent.personalityTraits.length > 0
+    ? ` Your personality: ${agent.personalityTraits.join(', ')}.`
+    : '';
+
+  const systemPrompt = `You are ${agent.name}, a ${agent.role}.${traitsLine}
 
 You previously reflected: "${pass1}"
 
@@ -90,7 +133,7 @@ Does knowing the full picture change your perspective? Respond with ONLY valid J
 }
 
 Rules:
-- You may soften, deepen, or completely harden your original view — let your class and personal losses dictate which
+- You may soften, deepen, or completely harden your original view — let your personality, class, and actual outcomes dictate which. If the evaluation shows the society succeeded despite your struggle, you may acknowledge that. If it shows the society failed despite your personal gain, you may reckon with that.
 - Be specific about what changed (or didn't) and WHY it changed given who you are
 - Remain fully in character — no AI phrasing, no diplomatic softening unless that is who this person is`;
 
@@ -160,9 +203,15 @@ export function buildReviewChatPrompt(
   history: ChatMessage[],
   userMessage: string
 ): LLMMessage[] {
+  // [R1] Carry personality traits into review chat too — agents should speak
+  // with their designed personality when users converse with them post-sim.
+  const chatTraitsLine = agent.personalityTraits && agent.personalityTraits.length > 0
+    ? `\nPersonality: ${agent.personalityTraits.join(', ')}.`
+    : '';
+
   const systemPrompt = `You are ${agent.name}, a ${agent.role}. Your world was: "${session.idea}"
 
-Background: ${agent.background}
+Background: ${agent.background}${chatTraitsLine}
 
 Your final reality: Wealth ${agent.currentStats.wealth}, Health ${agent.currentStats.health}/100, Happiness ${agent.currentStats.happiness}/100
 Status: ${agent.isAlive ? 'Alive' : 'Deceased'}

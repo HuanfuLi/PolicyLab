@@ -19,6 +19,10 @@ export const ACTION_SCHEMAS: Partial<Record<ActionCode, ActionSchema>> = {
     description: 'Take it easy this week -- rest your body, let the stress drain away (REST).',
     params: '{}',
   },
+  WORK: {
+    description: 'Put in a day\'s work at your trade and earn a wage from the state (WORK). Reliable income based on your role and skill level. Physically tiring but guarantees steady pay every week.',
+    params: '{}',
+  },
   PRODUCE_AND_SELL: {
     description: 'Farm your land and sell the harvest directly to the market (PRODUCE_AND_SELL). You produce about 20 units -- enough to feed yourself for 3-4 weeks and pocket the profits.',
     params: '{ "itemType": "food" | "raw_materials" | "luxury_goods", "quantity": number, "price": number }',
@@ -32,11 +36,11 @@ export const ACTION_SCHEMAS: Partial<Record<ActionCode, ActionSchema>> = {
     params: '{ "itemType": "food" | "raw_materials" | "luxury_goods" | "tools", "quantity": number, "price": number }',
   },
   WORK_AT_ENTERPRISE: {
-    description: 'Show up for your shift at work and collect your wage (WORK_AT_ENTERPRISE).',
+    description: 'Show up for your shift at work and collect your wage (WORK_AT_ENTERPRISE). BENEFIT: Guaranteed steady income every week without market risk. Your employer pays you directly.',
     params: '{ "enterprise_id": string }',
   },
   APPLY_FOR_JOB: {
-    description: 'Walk up to a business and ask for a job (APPLY_FOR_JOB). Check the employment board first.',
+    description: 'Walk up to a business and ask for a job (APPLY_FOR_JOB). Check the employment board first. BENEFIT: Getting hired means guaranteed weekly wages -- more reliable than selling on the market where prices fluctuate and buyers may not show up.',
     params: '{ "enterprise_id": string }',
   },
   QUIT_JOB: {

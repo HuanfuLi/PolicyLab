@@ -33,3 +33,14 @@ try {
 } catch {
   // Column already exists — safe to ignore
 }
+
+try {
+  // [H2] Add createdAtIteration to deposit_accounts so interest-accrual can
+  // distinguish "created this tick" from "touched this tick". Existing rows
+  // default to 0, which makes them NOT match any non-zero iterNum filter —
+  // i.e., existing deposits are treated as pre-existing and accrue interest,
+  // which is the correct behavior for legacy data.
+  sqlite.prepare("ALTER TABLE deposit_accounts ADD COLUMN created_at_iteration INTEGER NOT NULL DEFAULT 0").run();
+} catch {
+  // Column already exists — safe to ignore
+}

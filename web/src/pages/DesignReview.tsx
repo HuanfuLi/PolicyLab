@@ -76,6 +76,13 @@ const DesignReview = () => {
     }
     // Sync locked variables from config
     setLockedVariables(session.config?.lockedVariables ?? []);
+    // Auto-mark as reviewed if this session has been simulated before (i.e., user
+    // returned here via abort/back). Re-checking the box after abort is annoying UX.
+    // Heuristic: if totalIterations is set in config, the user has previously
+    // configured & started a simulation, so they've already reviewed the design.
+    if (session.config?.totalIterations) {
+      setReviewed(true);
+    }
   }, [session?.stage, session?.config?.lockedVariables, session?.config?.totalIterations, loading, id, navigate]);
 
   useEffect(() => {

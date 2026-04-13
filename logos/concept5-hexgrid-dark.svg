@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 80" width="360" height="80" role="img" aria-labelledby="c5-title">
+  <title id="c5-title">PolicyLab Logo - Hex Grid</title>
+  <defs>
+    <linearGradient id="c5-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+
+  <g id="c5-icon" transform="translate(38, 40)">
+    <!-- Center hex (policy core) - larger, brighter -->
+    <polygon points="0,-14 12.1,-7 12.1,7 0,14 -12.1,7 -12.1,-7" fill="url(#c5-grad)" opacity="0.9"/>
+    <polygon points="0,-9 7.8,-4.5 7.8,4.5 0,9 -7.8,4.5 -7.8,-4.5" fill="#c7d2fe" opacity="0.3"/>
+
+    <!-- Top hex -->
+    <polygon points="0,-36 10,-30 10,-22 0,-16 -10,-22 -10,-30" fill="#6366f1" opacity="0.5"/>
+    <!-- Top-right hex -->
+    <polygon points="22,-22 32,-16 32,-8 22,-2 12,-8 12,-16" fill="#818cf8" opacity="0.45"/>
+    <!-- Bottom-right hex -->
+    <polygon points="22,2 32,8 32,16 22,22 12,16 12,8" fill="#6366f1" opacity="0.4"/>
+    <!-- Bottom hex -->
+    <polygon points="0,16 10,22 10,30 0,36 -10,30 -10,22" fill="#818cf8" opacity="0.45"/>
+    <!-- Bottom-left hex -->
+    <polygon points="-22,2 -12,8 -12,16 -22,22 -32,16 -32,8" fill="#6366f1" opacity="0.4"/>
+    <!-- Top-left hex -->
+    <polygon points="-22,-22 -12,-16 -12,-8 -22,-2 -32,-8 -32,-16" fill="#818cf8" opacity="0.45"/>
+
+    <!-- Connecting edges between hexes (subtle) -->
+    <line x1="0" y1="-16" x2="0" y2="-14" stroke="#a5b4fc" stroke-width="1" opacity="0.4"/>
+    <line x1="12" y1="-8" x2="12.1" y2="-7" stroke="#a5b4fc" stroke-width="1" opacity="0.4"/>
+    <line x1="12" y1="8" x2="12.1" y2="7" stroke="#a5b4fc" stroke-width="1" opacity="0.4"/>
+    <line x1="0" y1="16" x2="0" y2="14" stroke="#a5b4fc" stroke-width="1" opacity="0.4"/>
+    <line x1="-12" y1="8" x2="-12.1" y2="7" stroke="#a5b4fc" stroke-width="1" opacity="0.4"/>
+    <line x1="-12" y1="-8" x2="-12.1" y2="-7" stroke="#a5b4fc" stroke-width="1" opacity="0.4"/>
+
+    <!-- Glow dots at hex centers -->
+    <circle cx="0" cy="-26" r="1.5" fill="#e0e7ff" opacity="0.6"/>
+    <circle cx="22" cy="-12" r="1.5" fill="#c7d2fe" opacity="0.5"/>
+    <circle cx="22" cy="12" r="1.5" fill="#e0e7ff" opacity="0.5"/>
+    <circle cx="0" cy="26" r="1.5" fill="#c7d2fe" opacity="0.5"/>
+    <circle cx="-22" cy="12" r="1.5" fill="#e0e7ff" opacity="0.5"/>
+    <circle cx="-22" cy="-12" r="1.5" fill="#c7d2fe" opacity="0.5"/>
+  </g>
+
+  <g transform="translate(84, 0)">
+    <text x="0" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#f3f4f6" letter-spacing="-0.5">
+      Policy</text>
+    <text x="116" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#818cf8" letter-spacing="-0.5">
+      Lab</text>
+    <text x="0" y="62" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#9ca3af" letter-spacing="3">
+      POLICY SIMULATION</text>
+  </g>
+</svg>

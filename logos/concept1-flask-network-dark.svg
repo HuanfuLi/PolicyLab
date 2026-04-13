@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 80" width="360" height="80" role="img" aria-labelledby="c1-title">
+  <title id="c1-title">PolicyLab Logo - Flask Network</title>
+  <defs>
+    <linearGradient id="c1-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="c1-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Flask body -->
+  <g id="c1-icon" transform="translate(8, 6)">
+    <!-- Flask neck -->
+    <rect x="26" y="4" width="16" height="20" rx="2" fill="url(#c1-grad)" opacity="0.9"/>
+    <!-- Flask neck rim -->
+    <rect x="22" y="2" width="24" height="5" rx="2.5" fill="url(#c1-glow)"/>
+    <!-- Flask body - triangular/conical -->
+    <path d="M26,24 L8,58 Q6,62 10,64 L58,64 Q62,62 60,58 L42,24 Z" fill="url(#c1-grad)" opacity="0.85"/>
+    <!-- Liquid level inside flask -->
+    <path d="M16,48 L52,48 L58,58 Q60,62 56,64 L12,64 Q8,62 10,58 Z" fill="#4f46e5" opacity="0.5"/>
+
+    <!-- Network nodes inside flask -->
+    <circle cx="24" cy="52" r="3" fill="#a5b4fc"/>
+    <circle cx="38" cy="44" r="3.5" fill="#c7d2fe"/>
+    <circle cx="44" cy="56" r="2.5" fill="#a5b4fc"/>
+    <circle cx="30" cy="42" r="2" fill="#e0e7ff"/>
+
+    <!-- Network connections -->
+    <line x1="24" y1="52" x2="38" y2="44" stroke="#c7d2fe" stroke-width="0.8" opacity="0.6"/>
+    <line x1="38" y1="44" x2="44" y2="56" stroke="#c7d2fe" stroke-width="0.8" opacity="0.6"/>
+    <line x1="24" y1="52" x2="44" y2="56" stroke="#a5b4fc" stroke-width="0.8" opacity="0.4"/>
+    <line x1="30" y1="42" x2="38" y2="44" stroke="#e0e7ff" stroke-width="0.8" opacity="0.5"/>
+    <line x1="30" y1="42" x2="24" y2="52" stroke="#c7d2fe" stroke-width="0.8" opacity="0.4"/>
+
+    <!-- Bubbles rising -->
+    <circle cx="32" cy="34" r="1.5" fill="#c7d2fe" opacity="0.5"/>
+    <circle cx="36" cy="28" r="1" fill="#e0e7ff" opacity="0.4"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g transform="translate(84, 0)">
+    <text x="0" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#f3f4f6" letter-spacing="-0.5">
+      Policy</text>
+    <text x="116" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#818cf8" letter-spacing="-0.5">
+      Lab</text>
+    <text x="0" y="62" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#9ca3af" letter-spacing="3">
+      POLICY SIMULATION</text>
+  </g>
+</svg>

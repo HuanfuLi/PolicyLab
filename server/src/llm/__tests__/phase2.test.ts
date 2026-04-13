@@ -183,7 +183,7 @@ async function testKeywordFallback() {
     };
     const result = await runParserAgent(input, failingProvider);
     assert(isValidAction(result.actionCode), 'Keyword match → valid ActionCode even with failing LLM');
-    assert(result.actionCode === 'WORK', 'Mining → WORK via keyword');
+    assert(result.actionCode === 'WORK_AT_ENTERPRISE', 'Mining → WORK_AT_ENTERPRISE via keyword');
     assert(result.method === 'keyword', 'Method is keyword');
     assert(result.confidence === 1, 'Confidence is 1 (keyword)');
 }
@@ -308,11 +308,11 @@ runAsyncTests().then(() => {
     console.log(`Results: ${passed} passed, ${failed} failed, ${passed + failed} total`);
     if (failed > 0) {
         console.error('\n❌ Some tests FAILED!');
-        process.exit(1);
+        throw new Error(`${failed} phase2 tests failed`);
     } else {
         console.log('\n✅ All Phase 2 tests PASSED!');
     }
 }).catch(err => {
     console.error('Test runner error:', err);
-    process.exit(1);
+    throw err;
 });

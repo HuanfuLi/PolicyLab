@@ -432,11 +432,11 @@ section('Running Async Tests...');
     console.log(`Results: ${passed} passed, ${failed} failed, ${passed + failed} total`);
     if (failed > 0) {
         console.error('\n❌ Some tests FAILED!');
-        process.exit(1);
+        throw new Error(`${failed} phase3 tests failed`);
     } else {
         console.log('\n✅ All Phase 3 tests PASSED!');
     }
 })().catch(err => {
     console.error('Test runner error:', err);
-    process.exit(1);
+    throw err;
 });

@@ -189,6 +189,12 @@ export const depositAccounts = sqliteTable('deposit_accounts', {
   balance: real('balance').notNull().default(0),
   interestRate: real('interest_rate').notNull().default(0.002),
   lastUpdated: integer('last_updated').notNull().default(0),
+  // [H2] Iteration at which this deposit row was first inserted. Used to
+  // exclude deposits created in the current iteration from interest accrual
+  // without conflating "created this tick" with "topped-up this tick" — the
+  // lastUpdated-based filter previously gave existing-account top-ups a free
+  // skip of interest. createdAtIteration is set on INSERT only, never updated.
+  createdAtIteration: integer('created_at_iteration').notNull().default(0),
 });
 
 export const loanContracts = sqliteTable('loan_contracts', {

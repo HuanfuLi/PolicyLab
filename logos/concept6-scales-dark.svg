@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 80" width="360" height="80" role="img" aria-labelledby="c6-title">
+  <title id="c6-title">PolicyLab Logo - Balance Scales</title>
+  <defs>
+    <linearGradient id="c6-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+
+  <g id="c6-icon" transform="translate(38, 8)">
+    <!-- Central pillar -->
+    <rect x="-2" y="12" width="4" height="48" rx="2" fill="url(#c6-grad)" opacity="0.7"/>
+    <!-- Base -->
+    <rect x="-14" y="58" width="28" height="4" rx="2" fill="#6366f1" opacity="0.6"/>
+    <!-- Top pivot -->
+    <circle cx="0" cy="12" r="4" fill="#818cf8" opacity="0.9"/>
+    <circle cx="0" cy="12" r="2" fill="#e0e7ff"/>
+
+    <!-- Left beam (tilted slightly down) -->
+    <line x1="-28" y1="20" x2="0" y2="14" stroke="#6366f1" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+    <!-- Right beam (tilted slightly up) -->
+    <line x1="0" y1="14" x2="28" y2="18" stroke="#6366f1" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+
+    <!-- Left pan (lower) -->
+    <path d="M-34,22 Q-28,28 -22,22" stroke="#a5b4fc" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <!-- Left pan chains -->
+    <line x1="-28" y1="20" x2="-34" y2="22" stroke="#818cf8" stroke-width="0.8" opacity="0.5"/>
+    <line x1="-28" y1="20" x2="-22" y2="22" stroke="#818cf8" stroke-width="0.8" opacity="0.5"/>
+
+    <!-- Right pan (higher) -->
+    <path d="M22,20 Q28,26 34,20" stroke="#a5b4fc" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <!-- Right pan chains -->
+    <line x1="28" y1="18" x2="22" y2="20" stroke="#818cf8" stroke-width="0.8" opacity="0.5"/>
+    <line x1="28" y1="18" x2="34" y2="20" stroke="#818cf8" stroke-width="0.8" opacity="0.5"/>
+
+    <!-- Data sparkles on left pan (heavier = more data) -->
+    <circle cx="-30" cy="24" r="1.5" fill="#c7d2fe" opacity="0.7"/>
+    <circle cx="-26" cy="25" r="1" fill="#e0e7ff" opacity="0.6"/>
+    <circle cx="-28" cy="23" r="1" fill="#a5b4fc" opacity="0.5"/>
+
+    <!-- Data sparkle on right pan -->
+    <circle cx="28" cy="22" r="1.5" fill="#c7d2fe" opacity="0.6"/>
+
+    <!-- Small binary/data ticks along pillar -->
+    <rect x="4" y="26" width="3" height="1.5" rx="0.5" fill="#a5b4fc" opacity="0.3"/>
+    <rect x="4" y="32" width="5" height="1.5" rx="0.5" fill="#a5b4fc" opacity="0.25"/>
+    <rect x="4" y="38" width="2" height="1.5" rx="0.5" fill="#a5b4fc" opacity="0.3"/>
+    <rect x="4" y="44" width="4" height="1.5" rx="0.5" fill="#a5b4fc" opacity="0.2"/>
+    <rect x="4" y="50" width="3" height="1.5" rx="0.5" fill="#a5b4fc" opacity="0.25"/>
+  </g>
+
+  <g transform="translate(84, 0)">
+    <text x="0" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#f3f4f6" letter-spacing="-0.5">
+      Policy</text>
+    <text x="116" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#818cf8" letter-spacing="-0.5">
+      Lab</text>
+    <text x="0" y="62" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#9ca3af" letter-spacing="3">
+      POLICY SIMULATION</text>
+  </g>
+</svg>

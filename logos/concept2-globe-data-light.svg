@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 80" width="360" height="80" role="img" aria-labelledby="c2l-title">
+  <title id="c2l-title">PolicyLab Logo - Globe Data (Light)</title>
+  <defs>
+    <linearGradient id="c2l-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+
+  <g id="c2l-icon" transform="translate(40, 40)">
+    <circle cx="0" cy="0" r="30" fill="none" stroke="url(#c2l-grad)" stroke-width="2.2" opacity="0.9"/>
+    <ellipse cx="0" cy="0" rx="30" ry="10" fill="none" stroke="#4f46e5" stroke-width="0.8" opacity="0.25"/>
+    <ellipse cx="0" cy="-14" rx="22" ry="6" fill="none" stroke="#4f46e5" stroke-width="0.6" opacity="0.18"/>
+    <ellipse cx="0" cy="14" rx="22" ry="6" fill="none" stroke="#4f46e5" stroke-width="0.6" opacity="0.18"/>
+    <ellipse cx="0" cy="0" rx="12" ry="30" fill="none" stroke="#4f46e5" stroke-width="0.8" opacity="0.25"/>
+    <line x1="-30" y1="0" x2="30" y2="0" stroke="#4f46e5" stroke-width="0.6" opacity="0.15"/>
+    <line x1="0" y1="-30" x2="0" y2="30" stroke="#4f46e5" stroke-width="0.6" opacity="0.15"/>
+
+    <circle cx="-12" cy="-10" r="2.5" fill="#4f46e5"/>
+    <circle cx="14" cy="-6" r="3" fill="#6366f1"/>
+    <circle cx="8" cy="12" r="2.5" fill="#4f46e5"/>
+    <circle cx="-10" cy="8" r="2" fill="#4338ca"/>
+    <circle cx="0" cy="-20" r="2" fill="#6366f1"/>
+
+    <path d="M-12,-10 L14,-6" stroke="#4f46e5" stroke-width="1" opacity="0.4" fill="none"/>
+    <path d="M14,-6 L8,12" stroke="#6366f1" stroke-width="1" opacity="0.4" fill="none"/>
+    <path d="M8,12 L-10,8" stroke="#4f46e5" stroke-width="1" opacity="0.35" fill="none"/>
+    <path d="M-10,8 L-12,-10" stroke="#4338ca" stroke-width="1" opacity="0.35" fill="none"/>
+    <path d="M0,-20 L14,-6" stroke="#6366f1" stroke-width="0.8" opacity="0.3" fill="none"/>
+    <path d="M0,-20 L-12,-10" stroke="#6366f1" stroke-width="0.8" opacity="0.3" fill="none"/>
+
+    <circle cx="0" cy="0" r="34" fill="none" stroke="#4f46e5" stroke-width="0.5" opacity="0.12"/>
+  </g>
+
+  <g transform="translate(84, 0)">
+    <text x="0" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#1f2937" letter-spacing="-0.5">
+      Policy</text>
+    <text x="116" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#4f46e5" letter-spacing="-0.5">
+      Lab</text>
+    <text x="0" y="62" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#6b7280" letter-spacing="3">
+      POLICY SIMULATION</text>
+  </g>
+</svg>

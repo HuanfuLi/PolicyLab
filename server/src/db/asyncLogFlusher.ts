@@ -36,18 +36,32 @@ class AsyncLogFlusher extends EventEmitter {
   private queue: QueuedInsert[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
   private consecutiveFailures = 0;
+  /** [C2] When false, enqueue() silently drops rows so that late LLM callbacks
+   *  after abort/error don't accumulate forever in a non-draining queue. */
+  private started = false;
   /** Prepared-statement cache keyed by "table|col1,col2,…" */
   private stmtCache = new Map<string, ReturnType<typeof sqlite.prepare>>();
 
   start(): void {
+    this.started = true;
     if (this.timer) return;
     this.timer = setInterval(() => this.flush(), FLUSH_INTERVAL_MS);
   }
 
   stop(): void {
+    this.started = false;
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
+    }
+    // [C3] If the caller is inside a transaction we cannot safely drain (flush
+    // would no-op, and forcing it would nest savepoints that vanish on outer
+    // rollback). Keep the queue — a later start() will drain on the next tick.
+    if (sqlite.inTransaction) {
+      if (this.queue.length > 0) {
+        console.warn(`[asyncLogFlusher] stop() called inside a caller transaction — ${this.queue.length} rows retained for next start()`);
+      }
+      return;
     }
     // D2 fix: Retry flush up to MAX_RETRY_ATTEMPTS to avoid losing the
     // final batch when the timer is already cleared.
@@ -70,6 +84,9 @@ class AsyncLogFlusher extends EventEmitter {
    * @param values  - corresponding values (same order as columns)
    */
   enqueue(table: string, columns: string[], values: unknown[]): void {
+    // [C2] Drop writes after stop() so late callbacks (LLM retries resolving
+    // post-abort, orphaned promise side effects) don't pile up.
+    if (!this.started) return;
     if (this.queue.length >= MAX_QUEUE_SIZE) {
       console.error(`[asyncLogFlusher] Queue full (${MAX_QUEUE_SIZE} rows) — dropping oldest ${BULK_THRESHOLD} rows to prevent OOM`);
       this.queue.splice(0, BULK_THRESHOLD);
@@ -83,6 +100,12 @@ class AsyncLogFlusher extends EventEmitter {
   /** Flush all queued rows to SQLite in a single transaction. */
   flush(): void {
     if (this.queue.length === 0) return;
+
+    // [C3] Skip if the caller is already inside a transaction. better-sqlite3
+    // nests transactions via SAVEPOINTs; if our savepoint commits but the outer
+    // transaction later rolls back, our inserts are silently lost. We defer the
+    // drain to the next interval tick, which runs outside any caller tx.
+    if (sqlite.inTransaction) return;
 
     // Snapshot the batch but DON'T splice yet — only clear after successful commit
     const batch = this.queue.slice(0);

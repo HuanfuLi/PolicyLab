@@ -6,10 +6,15 @@
  */
 import { parseJSON } from './json.js';
 
-export function parseAgentReflection(text: string): { pass1: string } {
+export function parseAgentReflection(text: string): { pass1: string; pass1_best: string | null } {
   const parsed = parseJSON(text) as Record<string, unknown>;
+  const bestRaw = parsed?.pass1_best;
+  // [R4] pass1_best is optional — models that don't emit it fall back to null,
+  // and the sentinel "Nothing went well." is preserved verbatim.
+  const best = typeof bestRaw === 'string' && bestRaw.trim().length > 0 ? bestRaw.trim() : null;
   return {
     pass1: String(parsed?.pass1 ?? text.trim()),
+    pass1_best: best,
   };
 }
 

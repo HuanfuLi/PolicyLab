@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 80" width="360" height="80" role="img" aria-labelledby="c9-title">
+  <title id="c9-title">PolicyLab Logo - Circuit Pillar</title>
+  <defs>
+    <linearGradient id="c9-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#a5b4fc"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+
+  <g id="c9-icon" transform="translate(38, 6)">
+    <!-- Classical pillar/column - stylized -->
+    <!-- Capital (top) -->
+    <rect x="-20" y="2" width="40" height="5" rx="2" fill="#818cf8" opacity="0.8"/>
+    <rect x="-16" y="6" width="32" height="3" rx="1" fill="#6366f1" opacity="0.6"/>
+
+    <!-- Pediment triangle above capital -->
+    <polygon points="0,0 -22,5 22,5" fill="#a5b4fc" opacity="0.3"/>
+
+    <!-- Column shaft with circuit traces -->
+    <rect x="-10" y="9" width="20" height="46" rx="1" fill="url(#c9-grad)" opacity="0.7"/>
+
+    <!-- Circuit traces running down the column -->
+    <line x1="-5" y1="12" x2="-5" y2="20" stroke="#e0e7ff" stroke-width="1" opacity="0.5"/>
+    <line x1="-5" y1="20" x2="2" y2="20" stroke="#e0e7ff" stroke-width="1" opacity="0.5"/>
+    <line x1="2" y1="20" x2="2" y2="30" stroke="#e0e7ff" stroke-width="1" opacity="0.5"/>
+
+    <line x1="5" y1="14" x2="5" y2="26" stroke="#c7d2fe" stroke-width="1" opacity="0.4"/>
+    <line x1="5" y1="26" x2="-2" y2="26" stroke="#c7d2fe" stroke-width="1" opacity="0.4"/>
+    <line x1="-2" y1="26" x2="-2" y2="36" stroke="#c7d2fe" stroke-width="1" opacity="0.4"/>
+
+    <line x1="0" y1="34" x2="6" y2="34" stroke="#e0e7ff" stroke-width="1" opacity="0.35"/>
+    <line x1="6" y1="34" x2="6" y2="44" stroke="#e0e7ff" stroke-width="1" opacity="0.35"/>
+
+    <line x1="-6" y1="38" x2="-6" y2="48" stroke="#c7d2fe" stroke-width="1" opacity="0.3"/>
+    <line x1="-6" y1="48" x2="0" y2="48" stroke="#c7d2fe" stroke-width="1" opacity="0.3"/>
+
+    <!-- Circuit nodes -->
+    <circle cx="-5" cy="12" r="1.5" fill="#e0e7ff" opacity="0.7"/>
+    <circle cx="5" cy="14" r="1.5" fill="#c7d2fe" opacity="0.6"/>
+    <circle cx="2" cy="30" r="1.5" fill="#e0e7ff" opacity="0.5"/>
+    <circle cx="-2" cy="36" r="1.5" fill="#c7d2fe" opacity="0.5"/>
+    <circle cx="6" cy="44" r="1.5" fill="#e0e7ff" opacity="0.45"/>
+    <circle cx="0" cy="48" r="1.5" fill="#c7d2fe" opacity="0.4"/>
+
+    <!-- Base -->
+    <rect x="-16" y="55" width="32" height="3" rx="1" fill="#6366f1" opacity="0.6"/>
+    <rect x="-20" y="57" width="40" height="5" rx="2" fill="#818cf8" opacity="0.7"/>
+  </g>
+
+  <g transform="translate(84, 0)">
+    <text x="0" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#f3f4f6" letter-spacing="-0.5">
+      Policy</text>
+    <text x="116" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#818cf8" letter-spacing="-0.5">
+      Lab</text>
+    <text x="0" y="62" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#9ca3af" letter-spacing="3">
+      POLICY SIMULATION</text>
+  </g>
+</svg>

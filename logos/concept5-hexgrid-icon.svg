@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="c5i-title">
+  <title id="c5i-title">PolicyLab Icon - Hex Grid</title>
+  <defs>
+    <linearGradient id="c5i-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(32, 32)">
+    <polygon points="0,-12 10.4,-6 10.4,6 0,12 -10.4,6 -10.4,-6" fill="url(#c5i-grad)" opacity="0.9"/>
+    <polygon points="0,-8 6.9,-4 6.9,4 0,8 -6.9,4 -6.9,-4" fill="#c7d2fe" opacity="0.3"/>
+
+    <polygon points="0,-30 8.7,-25 8.7,-19 0,-14 -8.7,-19 -8.7,-25" fill="#6366f1" opacity="0.5"/>
+    <polygon points="18.5,-18 27.2,-13 27.2,-7 18.5,-2 9.8,-7 9.8,-13" fill="#818cf8" opacity="0.45"/>
+    <polygon points="18.5,2 27.2,7 27.2,13 18.5,18 9.8,13 9.8,7" fill="#6366f1" opacity="0.4"/>
+    <polygon points="0,14 8.7,19 8.7,25 0,30 -8.7,25 -8.7,19" fill="#818cf8" opacity="0.45"/>
+    <polygon points="-18.5,2 -9.8,7 -9.8,13 -18.5,18 -27.2,13 -27.2,7" fill="#6366f1" opacity="0.4"/>
+    <polygon points="-18.5,-18 -9.8,-13 -9.8,-7 -18.5,-2 -27.2,-7 -27.2,-13" fill="#818cf8" opacity="0.45"/>
+
+    <circle cx="0" cy="-22" r="1.5" fill="#e0e7ff" opacity="0.6"/>
+    <circle cx="18.5" cy="-10" r="1.5" fill="#c7d2fe" opacity="0.5"/>
+    <circle cx="18.5" cy="10" r="1.5" fill="#e0e7ff" opacity="0.5"/>
+    <circle cx="0" cy="22" r="1.5" fill="#c7d2fe" opacity="0.5"/>
+    <circle cx="-18.5" cy="10" r="1.5" fill="#e0e7ff" opacity="0.5"/>
+    <circle cx="-18.5" cy="-10" r="1.5" fill="#c7d2fe" opacity="0.5"/>
+  </g>
+</svg>

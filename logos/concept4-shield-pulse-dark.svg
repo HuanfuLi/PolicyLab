@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 80" width="360" height="80" role="img" aria-labelledby="c4-title">
+  <title id="c4-title">PolicyLab Logo - Shield Pulse</title>
+  <defs>
+    <linearGradient id="c4-grad" x1="0%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+    <linearGradient id="c4-pulse" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#a5b4fc" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#a5b4fc" stop-opacity="1"/>
+      <stop offset="70%" stop-color="#c7d2fe" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#a5b4fc" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <g id="c4-icon" transform="translate(38, 6)">
+    <!-- Shield shape -->
+    <path d="M0,4 L-28,14 L-28,32 Q-28,54 0,66 Q28,54 28,32 L28,14 Z"
+          fill="url(#c4-grad)" opacity="0.85"/>
+
+    <!-- Shield inner border -->
+    <path d="M0,9 L-23,17 L-23,32 Q-23,50 0,60 Q23,50 23,32 L23,17 Z"
+          fill="none" stroke="#a5b4fc" stroke-width="0.8" opacity="0.3"/>
+
+    <!-- Simulation pulse/waveform across shield -->
+    <polyline points="-18,34 -12,34 -8,24 -4,42 0,28 4,38 8,30 12,34 18,34"
+              fill="none" stroke="#e0e7ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+
+    <!-- Small data dots on the pulse -->
+    <circle cx="-8" cy="24" r="1.5" fill="#c7d2fe"/>
+    <circle cx="0" cy="28" r="1.5" fill="#e0e7ff"/>
+    <circle cx="8" cy="30" r="1.5" fill="#c7d2fe"/>
+
+    <!-- Top accent -->
+    <circle cx="0" cy="4" r="2" fill="#a5b4fc" opacity="0.6"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g transform="translate(84, 0)">
+    <text x="0" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#f3f4f6" letter-spacing="-0.5">
+      Policy</text>
+    <text x="116" y="42" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="700" fill="#818cf8" letter-spacing="-0.5">
+      Lab</text>
+    <text x="0" y="62" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#9ca3af" letter-spacing="3">
+      POLICY SIMULATION</text>
+  </g>
+</svg>

@@ -56,12 +56,21 @@ export function applyEnterpriseAction(params: {
       }
       const industry = String(action.parameters.industry ?? `${agent.role}_enterprise`);
       const enterpriseId = `e-${agent.id.slice(0, 8)}-${iterationNumber}`;
+      // Map industry string to EnterpriseSector for production engine
+      const sectorFromIndustry = (ind: string): import('@policylab/shared').EnterpriseSector => {
+        const lower = ind.toLowerCase();
+        if (lower.includes('food') || lower.includes('agri') || lower.includes('farm')) return 'agriculture';
+        if (lower.includes('service') || lower.includes('luxury')) return 'services';
+        if (lower.includes('gov')) return 'government';
+        return 'industry'; // default: manufacturing
+      };
       if (!enterpriseRegistry.has(enterpriseId)) {
         enterpriseRegistry.set(enterpriseId, {
           id: enterpriseId,
           ownerId: agent.id,
           ownerName: agent.name,
           industry,
+          sector: sectorFromIndustry(industry),
           employees: new Set(),
           applicants: new Set(),
           wage: 0,

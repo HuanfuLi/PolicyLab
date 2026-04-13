@@ -112,6 +112,12 @@ router.get('/:id', async (req, res) => {
         // ignore malformed config
       }
     }
+    // Ensure budgetAllocation is present in config — for sessions created before
+    // the PUT /config fix, it may only exist in fiscal_budgets table.
+    if (config && !(config as Record<string, unknown>).budgetAllocation) {
+      const dbBudget = fiscalRepo.getActiveBudget(createScope(id));
+      if (dbBudget) (config as Record<string, unknown>).budgetAllocation = dbBudget;
+    }
 
     const detail: SessionDetail = {
       id: session.id,
@@ -380,6 +386,12 @@ router.put('/:id/config', async (req, res) => {
         const existingEconomy = (currentConfig.economyConfig ?? {}) as Record<string, unknown>;
         updatedConfig.economyConfig = { ...existingEconomy, ...body.economyConfig };
       }
+      // Persist budgetAllocation in session.config JSON so the frontend sees it on reload.
+      // The authoritative copy is in fiscal_budgets table (read by simulation runner),
+      // but the UI reads from session.config.budgetAllocation for display.
+      if (body.budgetAllocation !== undefined) {
+        updatedConfig.budgetAllocation = body.budgetAllocation;
+      }
 
       const now = new Date().toISOString();
       const setClauses = [`config = ?`, `updated_at = ?`];
@@ -617,19 +629,23 @@ router.patch('/:id/agents/:agentId', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
 
-  // R5 fix: Prevent deletion of sessions with active simulations
+  // If a simulation is running/paused, force-abort it and proceed with deletion.
+  // The user's explicit intent to delete should override the simulation state —
+  // previously a 409 was returned which silently failed in the UI.
   const simStatus = simulationManager.getStatus(id);
   if (simStatus === 'running' || simStatus === 'paused') {
-    return res.status(409).json({
-      error: `Cannot delete session with ${simStatus} simulation. Stop or abort the simulation first.`,
-    });
+    simulationManager.abort(id);
+    // Wait briefly for the runner to acknowledge the abort and clean up.
+    // The runner checks isAbortRequested at the top of each iteration.
+    await new Promise(resolve => setTimeout(resolve, 200));
   }
 
   try {
     await db.delete(sessions).where(eq(sessions.id, id));
-    // Clean up in-memory simulation state (SSE clients, sequenceId, flags) to
-    // prevent memory leaks when a session is deleted while not simulating.
+    // Clean up in-memory simulation state to prevent memory leaks
+    // and stale state from blocking future operations on the same id.
     simulationManager.finish(id);
+    simulationManager.cleanup(id);
     res.status(204).send();
   } catch (err) {
     console.error('DELETE /sessions/:id error:', err);

@@ -55,7 +55,11 @@ const HomePage = () => {
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!window.confirm('Delete this session? This cannot be undone.')) return;
-    await deleteSession(id);
+    try {
+      await deleteSession(id);
+    } catch (err) {
+      alert(`Failed to delete session: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
   };
 
   const handleExport = (e: React.MouseEvent, id: string) => {

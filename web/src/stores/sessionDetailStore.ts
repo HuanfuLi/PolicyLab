@@ -429,6 +429,16 @@ export const useSessionDetailStore = create<SessionDetailStore>((set, get) => ({
       if (!res.ok) {
         throw new Error(`Failed to save budget: HTTP ${res.status}`);
       }
+      // Update local session state so UI reflects the saved budget without a page refresh
+      const current = get().session;
+      if (current?.config) {
+        set({
+          session: {
+            ...current,
+            config: { ...current.config, budgetAllocation: allocation },
+          },
+        });
+      }
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Failed to save budget allocation' });
     }

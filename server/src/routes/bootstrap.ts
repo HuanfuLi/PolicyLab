@@ -520,11 +520,6 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
       }
     })();
 
-    // C1 fix: Seed fiscal_budgets table (simulationRunner reads from DB, not session.config)
-    if (finalConfig.fiscalEnabled) {
-      fiscalRepo.createBudget(createScope(id), budget);
-    }
-
     // Generate and persist enterprise blueprints (Phase 10)
     // Build name→UUID map from persisted agents so enterprises store UUIDs directly (GC1)
     const agentNameToId = new Map(citizenRows.map(r => [r.name, r.id]));
@@ -535,9 +530,6 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
       finalConfig.minimumWage ?? 5,
       agentNameToId,  // pass map so ownerId and employees are stored as UUIDs
     );
-    for (const bp of enterpriseBlueprints) {
-      insertEnterprise(createScope(id), bp);
-    }
 
     // Update session: config (partial merge), law, overview, stage
     let currentConfig: Record<string, unknown> = {};
@@ -557,17 +549,24 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
       bootstrapSources: dataSources,
     };
 
-    await db
-      .update(sessions)
-      .set({
-        stage: 'design-review' as Stage,
-        title: societyTitle,
-        law,
-        societyOverview: societyOverview,
-        config: JSON.stringify(updatedConfig),
-        updatedAt: now(),
-      })
-      .where(eq(sessions.id, id));
+    // Atomic dual-write: session.config + fiscal_budgets + enterprises must all succeed
+    // or none should — prevents inconsistency between session.config.budgetAllocation
+    // (read by UI) and fiscal_budgets table (read by simulation runner).
+    sqlite.transaction(() => {
+      // NOTE: column names are snake_case in the DB. The Drizzle schema maps
+      // `title` → `name` and `societyOverview` → `society_overview`.
+      sqlite.prepare(
+        `UPDATE sessions SET stage = ?, name = ?, law = ?, society_overview = ?, config = ?, updated_at = ? WHERE id = ?`
+      ).run('design-review', societyTitle, law, societyOverview, JSON.stringify(updatedConfig), now(), id);
+
+      if (finalConfig.fiscalEnabled) {
+        fiscalRepo.createBudget(createScope(id), budget);
+      }
+
+      for (const bp of enterpriseBlueprints) {
+        insertEnterprise(createScope(id), bp);
+      }
+    })();
 
     // Send completion event
     sendEvent({ type: 'complete', message: `Bootstrap complete for ${location}` });

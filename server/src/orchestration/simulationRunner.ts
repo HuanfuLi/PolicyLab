@@ -17,7 +17,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db, sqlite } from '../db/index.js';
 import { resolvedActions, iterations as iterationsTable, ammSnapshots as ammSnapshotsTable } from '../db/schema.js';
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { agentRepo } from '../db/repos/agentRepo.js';
 import { sessionRepo } from '../db/repos/sessionRepo.js';
 import { getProvider, getCitizenProvider } from '../llm/gateway.js';
@@ -43,7 +43,7 @@ import {
   type CitizenCapitalMarketContext,
   type CitizenFiscalContext,
 } from '../llm/prompts/index.js';
-import { buildTelemetryDigest } from '../llm/narrativeValidation.js';
+import { buildTelemetryDigest, validateNarrative } from '../llm/narrativeValidation.js';
 import {
   parseResolutionStrict,
   parseGroupResolutionStrict,
@@ -61,6 +61,16 @@ import { retryWithHealing } from '../llm/retryWithHealing.js';
 // Banking Foundation imports (Phase 1: Banking Foundation)
 import * as bankingEngine from '../mechanics/bankingEngine.js';
 import * as bankingRepo from '../db/repos/bankingRepo.js';
+// Enterprise persistence (Phase 10)
+import * as enterpriseRepo from '../db/repos/enterpriseRepo.js';
+import * as orderBookRepo from '../db/repos/orderBookRepo.js';
+// Enterprise engine (Phase 10) — production, idle fallback, cost pass-through
+import {
+  processEnterpriseProduction,
+  processIdleFallback,
+  processEnterpriseCostPassThrough,
+  type ProductionInput,
+} from '../mechanics/enterpriseEngine.js';
 import { getEconomyConfig } from '../mechanics/economyConfigUtils.js';
 // Capital Markets imports (Phase 2: Capital Markets)
 import * as capitalMarketEngine from '../mechanics/capitalMarketEngine.js';
@@ -69,7 +79,7 @@ import * as capitalMarketRepo from '../db/repos/capitalMarketRepo.js';
 import * as fiscalEngine from '../mechanics/fiscalEngine.js';
 import * as fiscalRepo from '../db/repos/fiscalRepo.js';
 import { DEFAULT_BUDGET_ALLOCATION, DEFAULT_PUBLIC_GOODS_INITIAL } from '@policylab/shared';
-import { computeInflation } from '../mechanics/inflationEngine.js';
+import { computeInflation, computeTaylorRule } from '../mechanics/inflationEngine.js';
 import * as macroSnapshotRepo from '../db/repos/macroSnapshotRepo.js';
 // Phase 1 Economy imports
 import { getOrderBook, restoreOrderBook, isOrderBookWarm } from '../mechanics/orderBook.js';
@@ -129,6 +139,8 @@ import {
   sessionFiscalMultipliers,
   getEnterpriseRegistry,
   getEmploymentRegistry,
+  getAgentIdleCounter,
+  sessionPreviousWageCosts,
   appendTrace,
 } from './simulationState.js';
 
@@ -256,6 +268,38 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     const employmentRegistry = getEmploymentRegistry(sessionId);
     let latestMarketBoard: MarketBoardEntry[] = [];
 
+    // ── Phase 10 Fix: Load enterprises from DB into in-memory registries ──
+    // Bootstrap persists enterprises to the DB, but the simulation loop uses
+    // in-memory Maps. Without this load step, enterprises are invisible and
+    // agents can never WORK_AT_ENTERPRISE or APPLY_FOR_JOB.
+    {
+      const blueprints = enterpriseRepo.getEnterprises(scope);
+      for (const bp of blueprints) {
+        enterpriseRegistry.set(bp.id, {
+          id: bp.id,
+          ownerId: bp.ownerId,
+          ownerName: agents.find(a => a.id === bp.ownerId)?.name ?? 'Unknown',
+          industry: bp.industry,
+          sector: bp.sector,
+          employees: new Set(bp.employees ?? []),
+          applicants: new Set(),
+          wage: bp.wage ?? 5,
+          minSkill: 0,
+        });
+        // Populate employment registry for each bootstrapped employee
+        for (const employeeId of bp.employees ?? []) {
+          employmentRegistry.set(employeeId, {
+            enterpriseId: bp.id,
+            employerId: bp.ownerId,
+            employeeId,
+            wage: bp.wage ?? 5,
+            minSkill: 0,
+            startedAt: 0,
+          });
+        }
+      }
+    }
+
     // ── Phase 1: Initialize economy state for all agents ──────────────────
     const citizenAgents = agents.filter(a => a.isAlive && !a.isCentralAgent);
     await economyRepo.initializeForSession(
@@ -273,6 +317,51 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       .from(iterationsTable).where(eq(iterationsTable.sessionId, sessionId));
     const startIter = (maxRow?.max ?? 0) + 1;
     const endIter = startIter + totalIterations - 1;
+
+    // ── Restore idle counters on session continuation ─────────────────────
+    // Idle counters are in-memory only. On resume, derive from recent resolved_actions
+    // by walking backward per agent until a productive action is found.
+    if (startIter > 1) {
+      const PRODUCTIVE_CODES = new Set(['WORK', 'WORK_AT_ENTERPRISE', 'PRODUCE_AND_SELL', 'PRODUCE']);
+      const idleCounters = getAgentIdleCounter(sessionId);
+      const idleThreshold = 5; // scan up to 5 recent iterations
+      const recentActions = db.select({
+        agentId: resolvedActions.agentId,
+        outcome: resolvedActions.outcome,
+        iterNum: iterationsTable.iterationNumber,
+      })
+        .from(resolvedActions)
+        .innerJoin(iterationsTable, eq(resolvedActions.iterationId, iterationsTable.id))
+        .where(and(
+          eq(resolvedActions.sessionId, sessionId),
+          sql`${iterationsTable.iterationNumber} > ${startIter - 1 - idleThreshold}`,
+        ))
+        .orderBy(sql`${iterationsTable.iterationNumber} DESC`)
+        .all();
+
+      // Group by agent, walk backward to count consecutive idle iterations
+      const agentActions = new Map<string, Array<{ iterNum: number; productive: boolean }>>();
+      for (const row of recentActions) {
+        if (!agentActions.has(row.agentId)) agentActions.set(row.agentId, []);
+        let productive = false;
+        if (row.outcome) {
+          try {
+            const parsed = JSON.parse(row.outcome) as { actionQueue?: Array<{ actionCode?: string }> };
+            productive = (parsed.actionQueue ?? []).some(a => PRODUCTIVE_CODES.has(a.actionCode ?? ''));
+          } catch { /* ignore */ }
+        }
+        agentActions.get(row.agentId)!.push({ iterNum: row.iterNum, productive });
+      }
+      for (const [agentId, actions] of agentActions) {
+        // Already sorted DESC by iterNum — count consecutive non-productive from most recent
+        let idleCount = 0;
+        for (const { productive } of actions) {
+          if (productive) break;
+          idleCount++;
+        }
+        if (idleCount > 0) idleCounters.set(agentId, idleCount);
+      }
+    }
 
     // ── BUG-04 Fix: Seed treasury BEFORE genesis wealth floor ─────────────
     // The genesis wealth floor (below) funds top-ups from the treasury.
@@ -821,6 +910,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
           simulationManager.broadcast(sessionId, {
             type: 'agent-intent',
+            iterationNumber: iterNum,
             agentId: intentRecord.agentId,
             agentName: intentRecord.agentName,
             intent: intentRecord.intent,
@@ -971,7 +1061,23 @@ export async function runSimulation(sessionId: string, totalIterations: number):
                 })()
               : Promise.resolve([]);
 
-          const [resolutionResult, illegalAgents] = await Promise.all([resolutionPromise, legalityPromise]);
+          // [C4] Promise.allSettled instead of Promise.all: if either branch
+          // rejects, the other's result is still available (and its internal
+          // mutations — agentIntentMap reads etc. — don't become orphaned
+          // side effects of a rejected outer task). Both inner promises
+          // already catch their own errors with fallbacks, so rejections are
+          // rare, but this makes the safety explicit against future edits.
+          const [resolutionSettled, legalitySettled] = await Promise.allSettled([resolutionPromise, legalityPromise]);
+          if (resolutionSettled.status === 'rejected') {
+            // retryWithHealing is supposed to always resolve (fallback); if it
+            // threw, propagate — the surrounding catch handles it.
+            throw resolutionSettled.reason;
+          }
+          const resolutionResult = resolutionSettled.value;
+          const illegalAgents = legalitySettled.status === 'fulfilled' ? legalitySettled.value : [];
+          if (legalitySettled.status === 'rejected') {
+            console.warn(`[SHERIFF/MR] legality branch rejected — treating as no-illegal-actions:`, legalitySettled.reason);
+          }
           return { ...resolutionResult, illegalAgents };
         });
 
@@ -1057,6 +1163,31 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             simulationManager.isPauseRequested(sessionId) ||
             simulationManager.isAbortRequested(sessionId),
         });
+      }
+
+      // ── Narrative validation: check for data-narrative contradictions ────
+      // Uses previous iteration's telemetry since current isn't computed yet.
+      // On iteration 1: no telemetry history, but we still validate the death-count
+      // assertion using a minimal stub (checks 2 & 3 auto-skip when previous=null).
+      {
+        const allTel = sessionTelemetryLogs.get(sessionId) ?? [];
+        const deathEventsThisIter = (resolution.lifecycleEvents ?? []).filter(
+          (e: { type: string }) => e.type === 'death'
+        ).length;
+        const currentTel = allTel.length >= 1
+          ? allTel[allTel.length - 1]
+          : { totalFiatSupply: 0, giniCoefficient: 0 } as TelemetryLog; // minimal stub for iter 1
+        const prevTel = allTel.length >= 2 ? allTel[allTel.length - 2] : null;
+        const validation = validateNarrative(
+          resolution.narrativeSummary,
+          currentTel,
+          prevTel,
+          aliveAgents.length,
+          deathEventsThisIter,
+        );
+        if (!validation.passed) {
+          appendTrace(sessionId, `[NARRATIVE] Validation failed (iter ${iterNum}): ${validation.failures.join('; ')}`);
+        }
       }
 
       // Controlled Variable Method: suppress role_change lifecycle events when role is locked
@@ -1396,6 +1527,55 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
       }
 
+      // ── AMM fallback for unfilled buy orders ────────────────────────────
+      // When buy orders have no matching sell counterparty, attempt execution
+      // against the AMM pool. This prevents persistent buy-side pressure with
+      // zero trade volume.
+      {
+        const marketState = orderBook.getMarketState();
+        const unfilledBuys = marketState.openOrders.filter(o => o.side === 'buy' && !o.filled && o.agentId !== 'SYSTEM_NPC');
+        const primaryAMM = sessionAMMRegistry.get(sessionId);
+        const multiAMMs = sessionMultiAMMRegistry.get(sessionId);
+        for (const order of unfilledBuys) {
+          const buyerState = weekStateMap.get(order.agentId);
+          if (!buyerState) continue;
+          const buyerWealth = (aliveAgents.find(a => a.id === order.agentId)?.currentStats.wealth ?? 0) + buyerState.wealthDelta;
+          if (buyerWealth <= 0) continue;
+
+          const itemType = order.itemType;
+          const qty = Math.max(0, order.quantity - order.filledQuantity);
+          if (qty <= 0) continue;
+
+          let pool: AutomatedMarketMaker | undefined;
+          if (itemType === 'food') {
+            pool = primaryAMM;
+          } else {
+            pool = multiAMMs?.get(itemType as MultiAMMItemType);
+          }
+          if (!pool) continue;
+
+          const fiatCost = pool.fiatCostForFood(qty);
+          if (fiatCost === null || fiatCost > buyerWealth) continue;
+
+          const receipt = pool.executeBuy(fiatCost, iterNum);
+          if (receipt.success) {
+            const goodsOut = 'goodsOut' in receipt.quote ? (receipt.quote as { goodsOut: number }).goodsOut : qty;
+            buyerState.wealthDelta -= fiatCost;
+            buyerState.inventory[itemType as keyof typeof buyerState.inventory].quantity += goodsOut;
+            buyerState.events.push(`Bought ${goodsOut.toFixed(1)} ${itemType} via AMM at ${(fiatCost / goodsOut).toFixed(2)}/unit (order book had no sellers)`);
+            order.filled = true;
+            order.filledQuantity = order.quantity;
+          }
+        }
+        // Persist AMM-filled orders to DB so they aren't re-executed on session resume
+        const ammFilledOrders = unfilledBuys.filter(o => o.filled);
+        if (ammFilledOrders.length > 0) {
+          orderBookRepo.updateMatchedOrders(
+            ammFilledOrders.map(o => ({ id: o.id, filledQuantity: o.filledQuantity, filled: true }))
+          );
+        }
+      }
+
       // ── Wage Settlement & Bankruptcy Check ───────────────────────────────
       // Group employees by enterprise, check if the owner can cover all wages,
       // then either pay in full or declare bankruptcy with proportional liquidation.
@@ -1512,6 +1692,78 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             enterpriseRegistry.delete(enterpriseId);
           }
         }
+      }
+
+      // ── Enterprise Production: surviving enterprises produce goods → AMM ──
+      // Runs after wage settlement so only non-bankrupt enterprises produce.
+      {
+        const prodInputs: ProductionInput[] = [];
+        for (const [entId, ent] of enterpriseRegistry) {
+          const workerCount = [...ent.employees].filter(id => weekStateMap.get(id)?.workedEnterpriseId === entId).length;
+          if (workerCount === 0) continue;
+          // Base production per worker scaled by worker count
+          const baseQty = 10 * workerCount;
+          prodInputs.push({
+            id: entId,
+            sector: ent.sector,
+            productionQuantity: baseQty,
+          });
+        }
+        if (prodInputs.length > 0) {
+          const prodDelta = processEnterpriseProduction({ enterprises: prodInputs });
+          const primaryAMM = sessionAMMRegistry.get(sessionId);
+          const multiAMMs = sessionMultiAMMRegistry.get(sessionId);
+          for (const output of prodDelta.productionOutput) {
+            // Inject produced goods into AMM reserves (supply-side injection)
+            if (output.commodity === 'food' && primaryAMM) {
+              primaryAMM.injectGoodsReserve(output.quantity);
+            } else if (output.commodity !== 'none') {
+              const pool = multiAMMs?.get(output.commodity as MultiAMMItemType);
+              if (pool) pool.injectGoodsReserve(output.quantity);
+            }
+          }
+          if (prodDelta.trace.length > 0) appendTrace(sessionId, prodDelta.trace.join('\n'));
+        }
+      }
+
+      // ── Idle Fallback: agents idle for 2+ iterations get forced food production ──
+      {
+        const idleCounters = getAgentIdleCounter(sessionId);
+        const agentActions = new Map<string, string[]>();
+        for (const agent of aliveAgents) {
+          if (agent.type === 'bank') continue;
+          const ws = weekStateMap.get(agent.id);
+          if (ws) agentActions.set(agent.id, ws.executedActions.map(a => a.actionCode));
+        }
+        const idleDelta = processIdleFallback({
+          idleCounters,
+          agentActions,
+          config: getEconomyConfig(session.config as Record<string, unknown> | null),
+        });
+        for (const fb of idleDelta.idleFallbackProduction) {
+          const ws = weekStateMap.get(fb.agentId);
+          if (ws) {
+            ws.inventory.food.quantity += fb.quantity;
+            ws.events.push(`Idle fallback: subsistence-produced ${fb.quantity} food`);
+          }
+        }
+        if (idleDelta.trace.length > 0) appendTrace(sessionId, idleDelta.trace.join('\n'));
+      }
+
+      // ── Enterprise Cost Pass-Through: wage cost → price markup ──
+      {
+        const currentWageCosts = new Map<string, number>();
+        for (const [entId, ent] of enterpriseRegistry) {
+          const workerCount = [...ent.employees].filter(id => weekStateMap.get(id)?.workedEnterpriseId === entId).length;
+          currentWageCosts.set(entId, ent.wage * workerCount);
+        }
+        let prevWageCosts = sessionPreviousWageCosts.get(sessionId);
+        if (!prevWageCosts) { prevWageCosts = new Map(); sessionPreviousWageCosts.set(sessionId, prevWageCosts); }
+        const markupDelta = processEnterpriseCostPassThrough({ currentWageCosts, previousWageCosts: prevWageCosts });
+        // Store current wage costs for next iteration's comparison
+        sessionPreviousWageCosts.set(sessionId, currentWageCosts);
+        if (markupDelta.trace.length > 0) appendTrace(sessionId, markupDelta.trace.join('\n'));
+        // Markup data is informational — injected into inflation context for CPI pressure
       }
 
       const TAX_PER_AGENT = 3;
@@ -1818,6 +2070,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         let newHealth = clampStat(agent.currentStats.health + weekState.healthDelta);
         let newHappiness = clampStat(agent.currentStats.happiness + weekState.happinessDelta);
         let newCortisol = clampStat((agent.currentStats.cortisol ?? 20) + weekState.cortisolDelta);
+        // GC3: Cortisol floor — agents never reach 0 cortisol. A baseline level of
+        // stress is physiologically realistic and maintains cortisol as a policy lever.
+        const CORTISOL_FLOOR = 3;
+        newCortisol = Math.max(CORTISOL_FLOOR, newCortisol);
 
         // Task 1: Psychological clamping — cap Happiness based on physiological state.
         // Prevents LLM hallucinations of "100 Happiness" while starving to death.
@@ -2025,6 +2281,36 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
       }
 
+      // ── Banking action accumulation ──────────────────────────────────────
+      // Gather pending DEPOSIT/WITHDRAW/TAKE_LOAN/REPAY_LOAN actions from intents.
+      // Physics engine records emotional deltas (w=0) but does NOT create deposits/loans.
+      // We accumulate here and process below before the banking interest tick.
+      const pendingBankingActions: Array<{
+        agentId: string;
+        actionCode: 'DEPOSIT' | 'WITHDRAW' | 'TAKE_LOAN' | 'REPAY_LOAN';
+        amount: number;
+        loanId?: string;
+      }> = [];
+      for (const intent of intents) {
+        if (!intent.actions) continue;
+        for (const action of intent.actions) {
+          if (action.actionCode === 'DEPOSIT') {
+            const amount = typeof action.parameters?.amount === 'number' ? action.parameters.amount : 0;
+            if (amount > 0) pendingBankingActions.push({ agentId: intent.agentId, actionCode: 'DEPOSIT', amount });
+          } else if (action.actionCode === 'WITHDRAW') {
+            const amount = typeof action.parameters?.amount === 'number' ? action.parameters.amount : 0;
+            if (amount > 0) pendingBankingActions.push({ agentId: intent.agentId, actionCode: 'WITHDRAW', amount });
+          } else if (action.actionCode === 'TAKE_LOAN') {
+            const principal = typeof action.parameters?.principal === 'number' ? action.parameters.principal : 0;
+            if (principal > 0) pendingBankingActions.push({ agentId: intent.agentId, actionCode: 'TAKE_LOAN', amount: principal });
+          } else if (action.actionCode === 'REPAY_LOAN') {
+            const amount = typeof action.parameters?.amount === 'number' ? action.parameters.amount : 0;
+            const loanId = typeof action.parameters?.loan_id === 'string' ? action.parameters.loan_id : undefined;
+            if (amount > 0) pendingBankingActions.push({ agentId: intent.agentId, actionCode: 'REPAY_LOAN', amount, loanId });
+          }
+        }
+      }
+
       // ── Capital market request accumulation ────────────────────────────────
       // Gather pending capital market requests from intents before the capital market tick.
       // Mirrors the ADJUST_TAX / EMBEZZLE pattern: scan all intents for the relevant action codes.
@@ -2150,11 +2436,154 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       let bankingCollateralEscrow = 0;
       let bankingLoansOutstanding = 0;
       let inflationTelemetry: Pick<TelemetryLog, 'cpi' | 'inflationRate' | 'inflationExpectations'> | null = null;
+      // [H4] Hoisted out of the financial-block transaction so they remain
+      // in scope for telemetry assembly after the transaction closes. We use
+      // an object holder (not top-level `let`) because TS's control-flow
+      // analysis does not consider assignments inside a callback (here the
+      // sqlite.transaction closure), which would narrow a plain `let X: T | null`
+      // to `null` at the usage site. Property access on an object holder is
+      // exempt from that narrowing.
+      const phaseOut: {
+        telemetryBondYields: { governmentYield?: number; corporateYield?: number } | null;
+        fiscalPublicGoodsQuality: { infrastructureQuality: number; educationQuality: number; defenseQuality: number; welfareQuality: number } | null;
+        fiscalCategorySpending: { infrastructure: number; education: number; defense: number; welfare: number } | null;
+      } = { telemetryBondYields: null, fiscalPublicGoodsQuality: null, fiscalCategorySpending: null };
 
+      // [H4] Outer transaction spanning banking + capital market + fiscal writes.
+      // Previously each phase committed independently, so an exception in the
+      // middle (or a mid-iteration abort between phases) left partial financial
+      // state persisted — banking committed, capital market not, or worse.
+      // Wrapping all three phases in one synchronous transaction makes them
+      // atomic: either every financial row for this iteration commits, or
+      // none do. Inner sqlite.transaction(...) calls nest as SAVEPOINTs, which
+      // is safe.
+      //
+      // NOTES:
+      //  - This whole block must remain SYNCHRONOUS — do not add `await` between
+      //    here and the closing `})();` below.
+      //  - In-memory mutations inside this block (appendTrace, sessionSFCTracking,
+      //    sessionStateTreasury, sessionFiscalMultipliers) are NOT transactional.
+      //    If the outer transaction rolls back via a thrown exception, these
+      //    mutations persist. That divergence is self-healing: the runner's
+      //    catch block routes any unhandled exception to handleError() →
+      //    lifecycle.dispose() → cleanupSessionState(), which wipes all the
+      //    session-scoped Maps entirely. So a rollback cannot produce a stable
+      //    divergent state that survives into the next iteration.
+      sqlite.transaction(() => {
       if (economyConfig.bankingEnabled) {
         const bankAgents = agents.filter(a => a.type === 'bank' && a.isAlive);
+        const bankAgent = bankAgents[0]; // Primary bank for deposit/loan routing
+
+        // ── Process pending banking actions into actual DB records ─────────
+        // This must run BEFORE processIteration so new deposits/loans appear
+        // in the loans/deposits arrays used for interest accrual.
+        if (bankAgent && pendingBankingActions.length > 0) {
+          // [C1] Running reserves ledger — decrement as each TAKE_LOAN/REPAY_LOAN
+          // is issued so repeated loans in the same iteration can't over-subscribe
+          // the bank. bankAgent.currentStats.wealth is a pre-iteration snapshot
+          // and the statUpdates delta isn't applied until after this loop.
+          let bankReservesRemaining = bankAgent.currentStats.wealth;
+          sqlite.transaction(() => {
+            for (const ba of pendingBankingActions) {
+              const agentUpdate = statUpdates.find(u => u.id === ba.agentId);
+              if (!agentUpdate) continue;
+
+              if (ba.actionCode === 'DEPOSIT') {
+                // Transfer fiat from agent wealth → deposit account
+                const depositAmount = Math.min(ba.amount, agentUpdate.wealth);
+                if (depositAmount <= 0) continue;
+                agentUpdate.wealth -= depositAmount;
+                const existing = bankingRepo.getDeposit(ba.agentId, bankAgent.id, scope);
+                const newBalance = (existing?.balance ?? 0) + depositAmount;
+                bankingRepo.upsertDeposit({
+                  sessionId,
+                  ownerAgentId: ba.agentId,
+                  bankAgentId: bankAgent.id,
+                  accountType: 'demand',
+                  balance: newBalance,
+                  interestRate: economyConfig.depositInterestRate ?? 0.001,
+                  lastUpdated: iterNum,
+                });
+              } else if (ba.actionCode === 'WITHDRAW') {
+                // Transfer fiat from deposit account → agent wealth
+                const existing = bankingRepo.getDeposit(ba.agentId, bankAgent.id, scope);
+                if (!existing || existing.balance <= 0) continue;
+                const withdrawAmount = Math.min(ba.amount, existing.balance);
+                agentUpdate.wealth += withdrawAmount;
+                bankingRepo.upsertDeposit({
+                  ...existing,
+                  balance: existing.balance - withdrawAmount,
+                  lastUpdated: iterNum,
+                });
+              } else if (ba.actionCode === 'TAKE_LOAN') {
+                // Create loan: principal credited to borrower deposit, bank reserves debited
+                // [C1] Use running ledger, not currentStats.wealth snapshot, so multiple
+                // TAKE_LOAN actions in one iteration can't each pass the 50% cap independently.
+                if (bankReservesRemaining <= 0) continue;
+                const principal = Math.min(ba.amount, bankReservesRemaining * 0.5); // Cap at 50% of running reserves
+                if (principal <= 0) continue;
+                const isBusinessLoan = employmentRegistry.has(ba.agentId); // employed → personal, owner → business
+                const rate = isBusinessLoan
+                  ? (economyConfig.baseLoanInterestRate ?? 0.003) * (1 - (economyConfig.businessLoanRateDiscount ?? 0.3))
+                  : (economyConfig.baseLoanInterestRate ?? 0.003);
+                const term = isBusinessLoan
+                  ? Math.round((economyConfig.defaultLoanTermIterations ?? 16) * (economyConfig.businessLoanTermMultiplier ?? 1.5))
+                  : (economyConfig.defaultLoanTermIterations ?? 16);
+                // Credit principal to agent wealth (or deposit)
+                agentUpdate.wealth += principal;
+                bankingRepo.insertLoan({
+                  id: uuidv4(),
+                  sessionId,
+                  borrowerAgentId: ba.agentId,
+                  lenderAgentId: bankAgent.id,
+                  principal,
+                  interestRate: rate,
+                  termIterations: term,
+                  remainingBalance: principal,
+                  collateralAmount: principal * 0.1,
+                  consecutiveMissed: 0,
+                  issuedAtIteration: iterNum,
+                  dueAtIteration: iterNum + term,
+                  status: 'active',
+                  createdAt: new Date().toISOString(),
+                });
+                // Debit bank reserves
+                const bankUpdate = statUpdates.find(u => u.id === bankAgent.id);
+                if (bankUpdate) bankUpdate.wealth -= principal;
+                bankReservesRemaining -= principal;
+              } else if (ba.actionCode === 'REPAY_LOAN') {
+                // Repay loan: debit borrower, credit bank, reduce remaining balance
+                const activeLoans = bankingRepo.getActiveLoans(scope)
+                  .filter(l => l.borrowerAgentId === ba.agentId);
+                const loan = ba.loanId
+                  ? activeLoans.find(l => l.id === ba.loanId)
+                  : activeLoans[0]; // Repay oldest loan if no ID specified
+                if (!loan) continue;
+                const repayAmount = Math.min(ba.amount, agentUpdate.wealth, loan.remainingBalance);
+                if (repayAmount <= 0) continue;
+                agentUpdate.wealth -= repayAmount;
+                const newRemaining = loan.remainingBalance - repayAmount;
+                bankingRepo.updateLoan(loan.id, {
+                  remainingBalance: newRemaining,
+                  status: newRemaining <= 0.01 ? 'repaid' : 'active',
+                });
+                // Credit bank reserves
+                const bankUpdate = statUpdates.find(u => u.id === bankAgent.id);
+                if (bankUpdate) bankUpdate.wealth += repayAmount;
+                bankReservesRemaining += repayAmount;
+              }
+            }
+          })();
+        }
+
         const loans = bankingRepo.getActiveLoans(scope);
-        const deposits = bankingRepo.getDepositsBySession(scope);
+        // [H2] Exclude deposits CREATED this iteration from interest accrual —
+        // interest should start the NEXT iteration, not the deposit day. Must
+        // filter on createdAtIteration (immutable) rather than lastUpdated
+        // (mutated on every top-up), otherwise existing accounts that received
+        // a DEPOSIT action this tick would skip interest entirely — an arbitrage.
+        const allDeposits = bankingRepo.getDepositsBySession(scope);
+        const deposits = allDeposits.filter(d => d.createdAtIteration !== iterNum);
 
         const bankingDelta = bankingEngine.processIteration({
           sessionId,
@@ -2197,6 +2626,27 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           appendTrace(sessionId, bankingDelta.trace.join('\n'));
         }
 
+        // ── Liquidity injection: central bank lender-of-last-resort ────────
+        // When actual reserve ratio drops below threshold, inject fiat to prevent
+        // credit freeze. This is an M0 increase tracked in SFC baseline.
+        if (economyConfig.centralBankEnabled && bankAgent) {
+          const currentDeposits = bankingRepo.getTotalDeposits(scope);
+          const bankUpdate = statUpdates.find(u => u.id === bankAgent.id);
+          const currentReserves = bankUpdate?.wealth ?? bankAgent.currentStats.wealth;
+          const injection = bankingEngine.processLiquidityInjection({
+            bankReserves: currentReserves,
+            totalDeposits: currentDeposits,
+            config: economyConfig,
+          });
+          if (injection.injectionAmount > 0 && bankUpdate) {
+            bankUpdate.wealth += injection.injectionAmount;
+            // Adjust SFC baseline to account for M0 increase
+            const sfcTrack = sessionSFCTracking.get(sessionId);
+            if (sfcTrack) sfcTrack.initialFiat += injection.injectionAmount;
+            appendTrace(sessionId, injection.trace.join('\n'));
+          }
+        }
+
         // Get banking totals for SFC audit and telemetry
         bankingTotalDeposits = bankingRepo.getTotalDeposits(scope);
         bankingCollateralEscrow = bankingRepo.getTotalCollateral(scope);
@@ -2208,7 +2658,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // All capital market DB writes are batched in a single transaction.
       // SFC: bond/equity transactions are SFC-neutral transfers within the perimeter —
       // no escrow term needed; computeSystemFiatTotal is unchanged.
-      let telemetryBondYields: { governmentYield?: number; corporateYield?: number } | null = null;
+      // (telemetryBondYields hoisted out of this scope for [H4] outer transaction)
       if (cmktEconomyConfig.capitalMarketsEnabled) {
         const equityPositions = capitalMarketRepo.getEquityPositionsBySession(scope);
         const bondHoldings = capitalMarketRepo.getActiveBondHoldingsBySession(scope);
@@ -2299,7 +2749,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         const govYield = weightedAvgYield(govBonds);
         const corpYield = weightedAvgYield(corpBonds);
         if (govYield !== undefined || corpYield !== undefined) {
-          telemetryBondYields = {
+          phaseOut.telemetryBondYields = {
             governmentYield: govYield,
             corporateYield: corpYield,
           };
@@ -2310,11 +2760,38 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // Runs after capital market tick. Executes budget spending from treasury,
       // updates public goods quality, applies welfare payments to agents.
       // SFC: all spending flows from treasury to agents (direct transfers).
-      let fiscalPublicGoodsQuality: { infrastructureQuality: number; educationQuality: number; defenseQuality: number; welfareQuality: number } | null = null;
-      let fiscalCategorySpending: { infrastructure: number; education: number; defense: number; welfare: number } | null = null;
+      // (fiscalPublicGoodsQuality and fiscalCategorySpending hoisted for [H4] outer tx)
       if (economyConfig.fiscalEnabled) {
         const budgetAllocation = fiscalRepo.getActiveBudget(scope) ?? DEFAULT_BUDGET_ALLOCATION;
         const currentPublicGoods = fiscalRepo.getPublicGoodsState(scope);
+
+        // ── Income tax collection (Phase 10 Plan 05b) ─────────────────────
+        // Collect flat income tax from agents with positive wealth deltas this iteration.
+        // ORDERING INVARIANT: Runs BEFORE executeBudget so government fiscal transfers
+        // (welfare, public goods spending) are NOT included in taxable income.
+        // Moving executeBudget above this block would silently tax government transfers.
+        const taxRate = economyConfig.incomeTaxRate ?? 0.15;
+        if (taxRate > 0) {
+          const agentIncomes: Array<{ agentId: string; income: number }> = [];
+          for (const agent of aliveAgents) {
+            if (agent.type === 'bank') continue;
+            const ws = weekStateMap.get(agent.id);
+            if (ws && ws.wealthDelta > 0) {
+              agentIncomes.push({ agentId: agent.id, income: ws.wealthDelta });
+            }
+          }
+          const taxResult = fiscalEngine.computeIncomeTax({ agentIncomes, taxRate });
+          if (taxResult.totalRevenue > 0) {
+            for (const { agentId, taxAmount } of taxResult.perAgentTax) {
+              const agentUpdate = statUpdates.find(u => u.id === agentId);
+              if (agentUpdate) agentUpdate.wealth -= taxAmount;
+            }
+            const prevTreasury = sessionStateTreasury.get(sessionId) ?? 0;
+            sessionStateTreasury.set(sessionId, prevTreasury + taxResult.totalRevenue);
+            appendTrace(sessionId, taxResult.trace.join('\n'));
+          }
+        }
+
         const treasuryBalance = sessionStateTreasury.get(sessionId) ?? 0;
 
         // Compute total economy fiat for GDP-scaled public goods quality (GC3/GC5 fix).
@@ -2340,8 +2817,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         });
 
         // Lift quality scores and spending to outer scope for iterTelemetry population
-        fiscalPublicGoodsQuality = fiscalDelta.updatedPublicGoods;
-        fiscalCategorySpending = fiscalDelta.categorySpending;
+        phaseOut.fiscalPublicGoodsQuality = fiscalDelta.updatedPublicGoods;
+        phaseOut.fiscalCategorySpending = fiscalDelta.categorySpending;
 
         // Apply treasury delta (spending removed from treasury)
         sessionStateTreasury.set(sessionId, treasuryBalance + fiscalDelta.treasuryDelta);
@@ -2371,6 +2848,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           appendTrace(sessionId, fiscalDelta.trace.join('\n'));
         }
       }
+      })(); // [H4] close outer financial transaction (banking + cmkt + fiscal)
 
       // ── Inflation tick ────────────────────────────────────────────────────
       // Runs after banking/capital/fiscal effects are known so CPI, M1, and treasury
@@ -2379,7 +2857,12 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         const configRoot = (session.config as Record<string, unknown> | null) ?? {};
         const persistedEconomyConfig = getEconomyConfig(configRoot);
         const currentPrices = getInflationBasketPrices(sessionId, persistedEconomyConfig, marketState.priceIndices);
-        const hasBasePrices = Object.keys(persistedEconomyConfig.cpiBasePrices ?? {}).length > 0;
+        // GC2 fix: Check that base prices have at least one non-zero value.
+        // Old check used Object.keys().length > 0, which returned true even when
+        // all prices were 0 (e.g., { food: 0, tools: 0 }), preventing auto-init.
+        const hasBasePrices = Object.values(persistedEconomyConfig.cpiBasePrices ?? {}).some(
+          v => typeof v === 'number' && v > 0
+        );
 
         if (!hasBasePrices) {
           persistedEconomyConfig.cpiBasePrices = { ...currentPrices };
@@ -2457,6 +2940,51 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
         if (inflationOutput.trace.length > 0) {
           appendTrace(sessionId, inflationOutput.trace.join('\n'));
+        }
+
+        // ── Taylor Rule: central bank rate adjustment ─────────────────────
+        // Compute the recommended lending rate from inflation and output gap.
+        // Persists the new rate to economyConfig for next iteration's loan pricing.
+        // Skip iteration 1: no inflation data yet, and we don't want to override
+        // the bootstrap-calibrated rate from World Bank data.
+        if (persistedEconomyConfig.centralBankEnabled && iterNum > 1) {
+          const employedCount = [...employmentRegistry.values()].length;
+          const totalCitizenCount = aliveAgents.filter(a => a.type !== 'bank').length;
+          const outputGapEstimate = totalCitizenCount > 0
+            ? (employedCount / totalCitizenCount - 0.95) / 0.95
+            : 0;
+
+          const taylorResult = computeTaylorRule({
+            currentInflationRate: inflationOutput.inflationRate / 100, // convert % to decimal
+            inflationTarget: persistedEconomyConfig.taylorInflationTarget ?? 0.02 / 12,
+            neutralRate: persistedEconomyConfig.taylorNeutralRate ?? 0.02 / 12,
+            outputGapEstimate,
+            rateCeiling: persistedEconomyConfig.centralBankRateCeiling ?? 0.05,
+            inflationCoeff: persistedEconomyConfig.taylorInflationCoeff ?? 0.5,
+            outputCoeff: persistedEconomyConfig.taylorOutputCoeff ?? 0.5,
+          });
+
+          // Apply the new rate to session config
+          persistedEconomyConfig.baseLoanInterestRate = taylorResult.targetRate;
+          if (taylorResult.reserveRatioAdjustment > 0) {
+            persistedEconomyConfig.reserveRequirement = Math.min(1,
+              (persistedEconomyConfig.reserveRequirement ?? 0.1) + taylorResult.reserveRatioAdjustment
+            );
+          }
+          // Persist updated config
+          const cfgRoot = (session.config as Record<string, unknown> | null) ?? {};
+          session.config = {
+            ...cfgRoot,
+            economyConfig: {
+              ...((cfgRoot.economyConfig as Record<string, unknown> | undefined) ?? {}),
+              ...persistedEconomyConfig,
+            },
+          };
+          await sessionRepo.updateConfig(sessionId, session.config as Record<string, unknown>);
+
+          if (taylorResult.trace.length > 0) {
+            appendTrace(sessionId, taylorResult.trace.join('\n'));
+          }
         }
       }
 
@@ -2610,29 +3138,29 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           loansOutstanding: bankingLoansOutstanding,
           ...(inflationTelemetry ?? {}),
           // Fiscal public goods quality telemetry (absent when fiscalEnabled is false)
-          ...(fiscalPublicGoodsQuality ? {
-            infrastructureQuality: Math.round(fiscalPublicGoodsQuality.infrastructureQuality * 100) / 100,
-            educationQuality: Math.round(fiscalPublicGoodsQuality.educationQuality * 100) / 100,
-            defenseQuality: Math.round(fiscalPublicGoodsQuality.defenseQuality * 100) / 100,
-            welfareQuality: Math.round(fiscalPublicGoodsQuality.welfareQuality * 100) / 100,
+          ...(phaseOut.fiscalPublicGoodsQuality ? {
+            infrastructureQuality: Math.round(phaseOut.fiscalPublicGoodsQuality.infrastructureQuality * 100) / 100,
+            educationQuality: Math.round(phaseOut.fiscalPublicGoodsQuality.educationQuality * 100) / 100,
+            defenseQuality: Math.round(phaseOut.fiscalPublicGoodsQuality.defenseQuality * 100) / 100,
+            welfareQuality: Math.round(phaseOut.fiscalPublicGoodsQuality.welfareQuality * 100) / 100,
             publicGoodsQuality: {
-              infrastructure: Math.round(fiscalPublicGoodsQuality.infrastructureQuality * 100) / 100,
-              education: Math.round(fiscalPublicGoodsQuality.educationQuality * 100) / 100,
-              defense: Math.round(fiscalPublicGoodsQuality.defenseQuality * 100) / 100,
-              welfare: Math.round(fiscalPublicGoodsQuality.welfareQuality * 100) / 100,
+              infrastructure: Math.round(phaseOut.fiscalPublicGoodsQuality.infrastructureQuality * 100) / 100,
+              education: Math.round(phaseOut.fiscalPublicGoodsQuality.educationQuality * 100) / 100,
+              defense: Math.round(phaseOut.fiscalPublicGoodsQuality.defenseQuality * 100) / 100,
+              welfare: Math.round(phaseOut.fiscalPublicGoodsQuality.welfareQuality * 100) / 100,
             },
           } : {}),
           // Fiscal per-category spending telemetry (absent when fiscalEnabled is false)
-          ...(fiscalCategorySpending ? {
+          ...(phaseOut.fiscalCategorySpending ? {
             fiscalSpending: {
-              infrastructure: Math.round(fiscalCategorySpending.infrastructure * 100) / 100,
-              education: Math.round(fiscalCategorySpending.education * 100) / 100,
-              defense: Math.round(fiscalCategorySpending.defense * 100) / 100,
-              welfare: Math.round(fiscalCategorySpending.welfare * 100) / 100,
+              infrastructure: Math.round(phaseOut.fiscalCategorySpending.infrastructure * 100) / 100,
+              education: Math.round(phaseOut.fiscalCategorySpending.education * 100) / 100,
+              defense: Math.round(phaseOut.fiscalCategorySpending.defense * 100) / 100,
+              welfare: Math.round(phaseOut.fiscalCategorySpending.welfare * 100) / 100,
             },
           } : {}),
           // Bond yields telemetry (absent when capitalMarketsEnabled is false or no bonds issued)
-          ...(telemetryBondYields ? { bondYields: telemetryBondYields } : {}),
+          ...(phaseOut.telemetryBondYields ? { bondYields: phaseOut.telemetryBondYields } : {}),
         };
         // Phase A: SFC drift check — warn if unaccounted fiat appears or disappears.
         // Keep a floor tolerance so extinction or tiny populations do not generate
@@ -2955,7 +3483,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     await lifecycle.complete(finalReport);
   } catch (err) {
     if (err instanceof SimulationAbortedError) {
-      // Already handled by lifecycle.checkContinue — just exit
+      // Already signaled by lifecycle.checkContinue / checkMidIterationAbort.
+      // State disposal happens in the finally block below.
     } else if (err instanceof SimulationPausedError) {
       console.error(
         `[SimulationRunner] Session ${sessionId} paused — ${err.reason} for agent "${err.agentName}" at iteration ${err.iterationNumber}`,
@@ -2964,5 +3493,13 @@ export async function runSimulation(sessionId: string, totalIterations: number):
     } else {
       await lifecycle.handleError(err);
     }
+  } finally {
+    // [C2] Unified cleanup of session-scoped in-memory state. dispose() is
+    // idempotent and is a no-op for the pause path (handlePause flips the
+    // disposed flag so state survives for resume). Every other exit path
+    // (complete / abort / error) disposes exactly once here, eliminating the
+    // race where mid-iteration cleanup deleted Maps while awaits were still
+    // in flight.
+    lifecycle.dispose();
   }
 }

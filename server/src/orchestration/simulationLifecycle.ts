@@ -28,6 +28,9 @@ export class SimulationAbortedError extends Error {
 // ── SimulationLifecycle ───────────────────────────────────────────────────────
 
 export class SimulationLifecycle {
+  /** [C2] Guards against double-dispose of session-scoped in-memory state. */
+  private disposed = false;
+
   constructor(private readonly sessionId: string) {}
 
   // ── Startup ───────────────────────────────────────────────────────────────
@@ -100,14 +103,18 @@ export class SimulationLifecycle {
    * while work was in flight. Returns true if abort was detected (and cleanup
    * has been performed); the caller should skip the iteration commit and return.
    */
-  async checkMidIterationAbort(iterNum: number): Promise<boolean> {
+  async checkMidIterationAbort(_iterNum: number): Promise<boolean> {
     if (!simulationManager.isAbortRequested(this.sessionId)) return false;
 
-    asyncLogFlusher.stop();
-    clearOrderBook(this.sessionId);
-    cleanupSessionCognition(this.sessionId);
-    cleanupSessionState(this.sessionId);
+    // [C2] Only SIGNAL here. State disposal is deferred to the runner's
+    // finally block via dispose(), so in-flight awaits mid-iteration can't
+    // race with Map deletion and resurrect orphaned entries.
+    await this._signalAbort();
+    return true;
+  }
 
+  /** [C2] Broadcasts abort/reset + flips session status. No Map destruction. */
+  private async _signalAbort(): Promise<void> {
     if (simulationManager.isResetRequested(this.sessionId)) {
       simulationManager.broadcast(this.sessionId, { type: 'aborted-reset' });
     } else {
@@ -115,7 +122,23 @@ export class SimulationLifecycle {
       await sessionRepo.updateStage(this.sessionId, 'simulation-complete');
     }
     simulationManager.finish(this.sessionId);
-    return true;
+  }
+
+  /**
+   * [C2] Idempotent disposer for session-scoped in-memory state.
+   *
+   * Must be called from the runner's finally block on every exit path
+   * EXCEPT pause (where state must survive for resume). Splitting signal
+   * from disposal prevents the classic "late LLM callback resurrects
+   * a just-deleted session Map" race.
+   */
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    asyncLogFlusher.stop();
+    clearOrderBook(this.sessionId);
+    cleanupSessionCognition(this.sessionId);
+    cleanupSessionState(this.sessionId);
   }
 
   // ── Post-loop termination ─────────────────────────────────────────────────
@@ -125,8 +148,7 @@ export class SimulationLifecycle {
    * Flushes pending logs, tears down session state, updates stage, broadcasts completion.
    */
   async complete(finalReport: string): Promise<void> {
-    asyncLogFlusher.stop();
-    this._doSessionCleanup();
+    this.dispose();
     await sessionRepo.updateStage(this.sessionId, 'simulation-complete');
     simulationManager.broadcast(this.sessionId, { type: 'simulation-complete', finalReport });
     simulationManager.finish(this.sessionId);
@@ -142,6 +164,8 @@ export class SimulationLifecycle {
   async handlePause(_err: unknown): Promise<void> {
     asyncLogFlusher.stop();
     // Do NOT call cleanupSessionState here — state must survive for resume.
+    // [C2] Mark disposed so the runner's finally block does NOT destroy state.
+    this.disposed = true;
     try {
       await sessionRepo.updateStage(this.sessionId, 'simulation-paused');
     } catch {
@@ -156,17 +180,46 @@ export class SimulationLifecycle {
   /**
    * Called from the top-level catch block for any non-pause error.
    * Full cleanup + broadcast + finish.
+   *
+   * Stage handling:
+   * - If at least one iteration completed, mark as 'simulation-complete' (partial run)
+   * - If no iterations completed, revert to 'design-review' so the user can fix the
+   *   issue (e.g., start their LLM server) and retry from a clean state.
    */
   async handleError(err: unknown): Promise<void> {
-    asyncLogFlusher.stop();
-    clearOrderBook(this.sessionId);
-    cleanupSessionCognition(this.sessionId);
-    cleanupSessionState(this.sessionId);
+    this.dispose();
 
-    const message = err instanceof Error ? err.message : 'Simulation error';
+    const rawMessage = err instanceof Error ? err.message : 'Simulation error';
+    // Detect common LLM connection failures and provide a clearer message
+    const isConnectionError = /ECONNREFUSED|ENOTFOUND|fetch failed|network|timeout/i.test(rawMessage);
+    const message = isConnectionError
+      ? `LLM provider unreachable: ${rawMessage}. Check your LLM server (e.g., LM Studio at localhost:1234) is running and the model is loaded.`
+      : rawMessage;
     try { simulationManager.broadcast(this.sessionId, { type: 'error', message }); } catch { /* best-effort */ }
     console.error(`[SimulationRunner] Session ${this.sessionId}:`, err);
-    try { await sessionRepo.updateStage(this.sessionId, 'simulation-complete'); } catch { /* best-effort */ }
+
+    // Check if any iterations actually completed before deciding the final stage
+    let hasCompletedIterations = false;
+    try {
+      const session = await sessionRepo.getById(this.sessionId);
+      if (session) {
+        // If the session never made it past design-review iterations, revert to design-review
+        // so the user can retry. Otherwise mark as complete (partial run with valid data).
+        // We use a simple heuristic: if updated_at is very recent (< 30s after start),
+        // it's likely an early failure with no meaningful iterations completed.
+        // Better: query iterations table count.
+        const { db } = await import('../db/index.js');
+        const { iterations } = await import('../db/schema.js');
+        const { sql } = await import('drizzle-orm');
+        const { eq } = await import('drizzle-orm');
+        const [row] = await db.select({ cnt: sql<number>`count(*)` })
+          .from(iterations).where(eq(iterations.sessionId, this.sessionId));
+        hasCompletedIterations = (row?.cnt ?? 0) > 0;
+      }
+    } catch { /* best-effort */ }
+
+    const finalStage = hasCompletedIterations ? 'simulation-complete' : 'design-review';
+    try { await sessionRepo.updateStage(this.sessionId, finalStage); } catch { /* best-effort */ }
     simulationManager.finish(this.sessionId);
   }
 
@@ -182,24 +235,12 @@ export class SimulationLifecycle {
 
   // ── Internal helpers ──────────────────────────────────────────────────────
 
+  /**
+   * [C2] Signal only — disposal deferred to dispose() called from runner finally.
+   * Previously this method did both (broadcast + Map destruction); splitting
+   * them eliminates the abort-mid-iteration resurrection race.
+   */
   private async _doAbortCleanup(): Promise<void> {
-    asyncLogFlusher.stop();
-    clearOrderBook(this.sessionId);
-    cleanupSessionCognition(this.sessionId);
-    cleanupSessionState(this.sessionId);
-
-    if (simulationManager.isResetRequested(this.sessionId)) {
-      simulationManager.broadcast(this.sessionId, { type: 'aborted-reset' });
-    } else {
-      simulationManager.broadcast(this.sessionId, { type: 'error', message: 'Simulation aborted.' });
-      await sessionRepo.updateStage(this.sessionId, 'simulation-complete');
-    }
-    simulationManager.finish(this.sessionId);
-  }
-
-  private _doSessionCleanup(): void {
-    clearOrderBook(this.sessionId);
-    cleanupSessionCognition(this.sessionId);
-    cleanupSessionState(this.sessionId);
+    await this._signalAbort();
   }
 }

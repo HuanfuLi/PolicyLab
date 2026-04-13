@@ -28,8 +28,11 @@ function MiniChart({ s, width, height, xLabels, pointCount }: {
   const chartH = height - padding.top - padding.bottom;
 
   const [fixedMin, fixedMax] = s.yRange ?? [undefined, undefined];
-  const dataMin = Math.min(...s.data);
-  const dataMax = Math.max(...s.data);
+  // Filter out non-finite values (NaN, undefined, Infinity) before computing min/max
+  // to prevent blank charts when input data has gaps.
+  const validData = s.data.filter(v => Number.isFinite(v));
+  const dataMin = validData.length > 0 ? Math.min(...validData) : 0;
+  const dataMax = validData.length > 0 ? Math.max(...validData) : 1;
   const minVal = fixedMin ?? dataMin;
   const maxVal = fixedMax ?? dataMax;
   const range = maxVal - minVal || 1;
@@ -44,8 +47,17 @@ function MiniChart({ s, width, height, xLabels, pointCount }: {
     return Number.isInteger(n) ? n.toString() : n.toFixed(1);
   };
 
-  const path = s.data.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ');
-  const lastIdx = s.data.length - 1;
+  // Build path, breaking the line at non-finite values (M = move-to, L = line-to)
+  let pendingMove = true;
+  const path = s.data.map((v, i) => {
+    if (!Number.isFinite(v)) { pendingMove = true; return ''; }
+    const cmd = pendingMove ? 'M' : 'L';
+    pendingMove = false;
+    return `${cmd}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`;
+  }).filter(Boolean).join(' ');
+  // Last point with valid data for the trailing dot
+  let lastIdx = s.data.length - 1;
+  while (lastIdx >= 0 && !Number.isFinite(s.data[lastIdx])) lastIdx--;
 
   return (
     <div>
@@ -68,7 +80,9 @@ function MiniChart({ s, width, height, xLabels, pointCount }: {
 
         {/* Line */}
         <path d={path} fill="none" style={{ stroke: s.color }} strokeWidth={1.5} strokeLinejoin="round" opacity={0.85} />
-        <circle cx={toX(lastIdx)} cy={toY(s.data[lastIdx])} r={2.5} style={{ fill: s.color }} />
+        {lastIdx >= 0 && (
+          <circle cx={toX(lastIdx)} cy={toY(s.data[lastIdx])} r={2.5} style={{ fill: s.color }} />
+        )}
       </svg>
     </div>
   );
@@ -130,9 +144,9 @@ export function LineChart({ series, width = 400, height = 180, xLabels, splitAxe
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
 
-  const allValues = series.flatMap(s => s.data);
-  const minVal = Math.min(...allValues);
-  const maxVal = Math.max(...allValues);
+  const allValues = series.flatMap(s => s.data).filter(v => Number.isFinite(v));
+  const minVal = allValues.length > 0 ? Math.min(...allValues) : 0;
+  const maxVal = allValues.length > 0 ? Math.max(...allValues) : 1;
   const range = maxVal - minVal || 1;
 
   const xStep = pointCount > 1 ? chartW / (pointCount - 1) : 0;
@@ -171,15 +185,23 @@ export function LineChart({ series, width = 400, height = 180, xLabels, splitAxe
             fill="rgba(255,255,255,0.35)" fontSize={9}>{xLabels ? xLabels[i] : i + 1}</text>
         ))}
 
-        {/* Lines */}
+        {/* Lines — break at non-finite values to avoid blank charts when data has gaps */}
         {series.map((s, si) => {
-          const path = s.data.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ');
+          let pendingMove = true;
+          const path = s.data.map((v, i) => {
+            if (!Number.isFinite(v)) { pendingMove = true; return ''; }
+            const cmd = pendingMove ? 'M' : 'L';
+            pendingMove = false;
+            return `${cmd}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`;
+          }).filter(Boolean).join(' ');
           return <path key={si} d={path} fill="none" style={{ stroke: s.color }} strokeWidth={1.5} strokeLinejoin="round" opacity={0.85} />;
         })}
 
-        {/* Dots on last point */}
+        {/* Dots on last valid point */}
         {series.map((s, si) => {
-          const lastIdx = s.data.length - 1;
+          let lastIdx = s.data.length - 1;
+          while (lastIdx >= 0 && !Number.isFinite(s.data[lastIdx])) lastIdx--;
+          if (lastIdx < 0) return null;
           return <circle key={`dot-${si}`} cx={toX(lastIdx)} cy={toY(s.data[lastIdx])} r={3} style={{ fill: s.color }} />;
         })}
       </svg>

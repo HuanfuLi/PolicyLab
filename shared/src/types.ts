@@ -767,6 +767,14 @@ export interface DepositAccount {
   balance: number;
   interestRate: number;
   lastUpdated: number;
+  /**
+   * [H2] Iteration at which this deposit row was first inserted. Set on
+   * insert only; never mutated on subsequent balance updates. Used to
+   * exclude freshly-opened accounts from the current iteration's interest
+   * accrual without confusing "opened today" with "topped up today".
+   * Optional because legacy exports/imports predate this field.
+   */
+  createdAtIteration?: number;
 }
 
 export interface BankBalanceSheet {
