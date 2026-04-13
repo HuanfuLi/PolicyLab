@@ -6,6 +6,7 @@ type SSEEvent =
   | { type: 'iteration-start'; iteration: number; total: number }
   | {
       type: 'agent-intent';
+      iteration: number;
       agentId: string;
       agentName: string;
       intent: string;
@@ -65,7 +66,7 @@ interface SimulationStore {
   // Live feed
   feed: IterationFeed[];
   pendingIntents: Record<string, string>; // agentId → narrative
-  pendingActionCodes: Record<string, { actionCode: string; actionTarget: string | null; actions: ActionQueueRecord[] }>;
+  pendingActionCodes: Record<string, { iteration: number; actionCode: string; actionTarget: string | null; actions: ActionQueueRecord[] }>;
   agentIntentHistory: Record<string, AgentIntentRecord[]>; // agentId → sorted history
 
   // Stats history
@@ -107,7 +108,7 @@ const initialState = {
   lastSeenId: null as number | null,
   feed: [] as IterationFeed[],
   pendingIntents: {} as Record<string, string>,
-  pendingActionCodes: {} as Record<string, { actionCode: string; actionTarget: string | null; actions: ActionQueueRecord[] }>,
+  pendingActionCodes: {} as Record<string, { iteration: number; actionCode: string; actionTarget: string | null; actions: ActionQueueRecord[] }>,
   agentIntentHistory: {} as Record<string, AgentIntentRecord[]>,
   statsHistory: [] as IterationStats[],
   macroHistory: [] as TelemetryLog[],
@@ -264,7 +265,10 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
               currentIteration = event.iteration;
               totalIterations = event.total;
               pendingIntents = {};
-              pendingActionCodes = {};
+              // pendingActionCodes is intentionally NOT cleared here.
+              // Each agent's entry is tagged with the iteration it was produced in;
+              // AgentIntentCard gates display on (pending.iteration === currentIteration),
+              // and new agent-intent events overwrite stale entries per-agent.
               // Reset lastSeenId on new simulation start to prevent stale
               // sequence IDs from a previous run rejecting new events
               if (event.iteration <= 1) {
@@ -273,8 +277,18 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
               break;
 
             case 'agent-intent': {
+              // Use the iteration carried on the event itself rather than trusting
+              // currentIteration. If iteration-start was missed due to a late SSE
+              // subscription (common: user clicks Start → navigates → page mounts
+              // while server is already mid-iter-1), currentIteration is still 0
+              // and iter-1 records would otherwise be dropped.
+              const iter = event.iteration;
+              if (iter > currentIteration) {
+                currentIteration = iter;
+              }
               pendingIntents[event.agentId] = event.intent;
               pendingActionCodes[event.agentId] = {
+                iteration: iter,
                 actionCode: event.actionCode,
                 actionTarget: event.actionTarget,
                 actions: event.actions ?? [],
@@ -284,12 +298,12 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
               // unbounded memory growth during long-running simulations (BUG-10).
               const INTENT_HISTORY_CAP = 500;
               const agentHistory = agentIntentHistory[event.agentId] ?? [];
-              const alreadyRecorded = agentHistory.some(r => r.iterationNumber === currentIteration);
-              if (!alreadyRecorded && currentIteration > 0) {
+              const alreadyRecorded = agentHistory.some(r => r.iterationNumber === iter);
+              if (!alreadyRecorded && iter > 0) {
                 const newRecord: AgentIntentRecord = {
                   agentId: event.agentId,
                   agentName: event.agentName,
-                  iterationNumber: currentIteration,
+                  iterationNumber: iter,
                   actionCode: event.actionCode,
                   actionTarget: event.actionTarget,
                   actions: event.actions ?? [],

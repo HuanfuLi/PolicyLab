@@ -27,6 +27,7 @@ export type SimulationEvent =
   | { type: 'iteration-start'; iteration: number; total: number }
   | {
       type: 'agent-intent';
+      iteration: number;
       agentId: string;
       agentName: string;
       intent: string;

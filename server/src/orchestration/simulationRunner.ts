@@ -821,6 +821,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
           simulationManager.broadcast(sessionId, {
             type: 'agent-intent',
+            iteration: iterNum,
             agentId: intentRecord.agentId,
             agentName: intentRecord.agentName,
             intent: intentRecord.intent,
