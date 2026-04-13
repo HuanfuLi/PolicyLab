@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase complete — ready for verification
-stopped_at: Phase 11 context gathered
-last_updated: "2026-04-13T15:50:39.750Z"
+status: Ready to execute
+stopped_at: Completed 11-01-PLAN.md (Wave 0 foundation)
+last_updated: "2026-04-13T19:40:34.756Z"
 progress:
   total_phases: 11
   completed_phases: 6
-  total_plans: 52
-  completed_plans: 48
+  total_plans: 62
+  completed_plans: 49
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** The deterministic economic engine must be realistic enough that simulation outcomes are meaningful for understanding real-world policy trade-offs.
-**Current focus:** Phase 10 — fix-simulation-realism-agent-economic-behavior-inflation-response-narrative-grounding
+**Current focus:** Phase 11 — simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure
 
 ## Current Position
 
-Phase: 10 (fix-simulation-realism-agent-economic-behavior-inflation-response-narrative-grounding) — EXECUTING
-Plan: 9 of 9
+Phase: 11 (simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure) — EXECUTING
+Plan: 2 of 10
 
 ## Performance Metrics
 
@@ -89,6 +89,7 @@ Plan: 9 of 9
 | Phase 10-fix-simulation-realism PGC1 | 8m | 4 tasks | 7 files |
 | Phase 10-fix-simulation-realism PGC2 | 6 | 2 tasks | 2 files |
 | Phase 10-fix-simulation-realism PGC3 | 8 | 2 tasks | 3 files |
+| Phase 11 P01 | 5 min | 5 tasks tasks | 16 files files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -203,6 +204,11 @@ Recent decisions affecting current work:
 - [Phase 10-fix-simulation-realism]: GC2: module-scope NON_FOOD_COMMODITY_BASELINES (tools=12, luxury_goods=12, raw_materials=4) replaces literal 1 in basket price fallback
 - [Phase 10-fix-simulation-realism]: GDP_SCALED_MAX_GAIN_PER_ITER reduced from 75 to 6: at China's 1.8% GDP spending gain drops from 22.8 to 1.8 pts/iter, requiring sustained fiscal commitment
 - [Phase 10-fix-simulation-realism]: CORTISOL_FLOOR = 3 applied at final stat commit sites only (not runningCortisol accumulator) to prevent cortisol collapsing to zero in well-functioning economies
+- [Phase 11]: Wave 0 foundation: no behavior changes; optional shared types + scaffold tests only, so 8 downstream plans unblock in parallel
+- [Phase 11]: [Phase 11-01]: publicGoodsEscrow is trailing optional param with default 0 — all 4 existing computeSystemFiatTotal callers unchanged; Plans 03 and 07 wire real values
+- [Phase 11]: [Phase 11-01]: DEFAULT_ECONOMY_CONFIG ships flat 15/10/15 tax + governanceEnabled=true; publicGoodsEscrow intentionally absent (materializes at fiscal tick runtime)
+- [Phase 11]: [Phase 11-01]: 13 scaffold files (plan said 14 — 14th was a roll-up verification gate, not a file); 11 real assertions in physicsConfig.thresholds.test.ts, 95 it.todo placeholders await downstream waves
+- [Phase 11]: [Phase 11-01]: seed coefficients (10 k_*) anchored to 11-RESEARCH.md §10, not literature — matches D-05/D-09 conservative-defaults decision; hot-swappable via PUT /api/settings/physics-config
 
 ### Roadmap Evolution
 
@@ -226,6 +232,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T15:50:39.739Z
-Stopped at: Phase 11 context gathered
-Resume file: .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-CONTEXT.md
+Last session: 2026-04-13T19:40:25.945Z
+Stopped at: Completed 11-01-PLAN.md (Wave 0 foundation)
+Resume file: None
