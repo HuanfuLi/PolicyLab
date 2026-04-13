@@ -136,6 +136,8 @@ import {
   sessionInflationState,
   sessionSFCTracking,
   sessionStateTreasury,
+  sessionPublicGoodsEscrow,
+  getTotalEscrow,
   sessionLastPhysicsTraces,
   sessionFiscalMultipliers,
   getEnterpriseRegistry,
@@ -378,6 +380,22 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       );
     }
 
+    // ── Phase 11 D-11: Hydrate public-goods escrow ledger ────────────────────
+    // Restored from session.config.economyConfig.publicGoodsEscrow on pause/resume.
+    // Legacy sessions (no config entry) fall through to zero — SFC-neutral default.
+    if (!sessionPublicGoodsEscrow.has(sessionId)) {
+      const cfgRoot = (session.config as Record<string, unknown> | null) ?? {};
+      const econCfg = (cfgRoot.economyConfig as Record<string, unknown> | undefined) ?? {};
+      const savedEscrow = econCfg.publicGoodsEscrow as
+        | { infrastructure?: number; education?: number; defense?: number }
+        | undefined;
+      sessionPublicGoodsEscrow.set(sessionId, {
+        infrastructure: savedEscrow?.infrastructure ?? 0,
+        education: savedEscrow?.education ?? 0,
+        defense: savedEscrow?.defense ?? 0,
+      });
+    }
+
     // ── Phase 2: Darwinian Market Protocol — Genesis Endowment ────────────
     // Override default food surplus (10) with scarce starting ration (3)
     // to force immediate market participation and prevent trivial first iterations.
@@ -566,6 +584,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           undefined,
           baselineDeposits,
           baselineCollateral,
+          getTotalEscrow(sessionId),   // Phase 11 D-11
         ),
       });
     }
@@ -2828,7 +2847,33 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         // Apply treasury delta (spending removed from treasury)
         sessionStateTreasury.set(sessionId, treasuryBalance + fiscalDelta.treasuryDelta);
 
-        // Apply agent welfare/spending payments to statUpdates (in-memory, persisted below)
+        // Phase 11 D-11: credit publicGoodsEscrow ledger with infra/edu/def spending.
+        // Fiat stays inside the SFC perimeter (counted by computeSystemFiatTotal).
+        const escrow = sessionPublicGoodsEscrow.get(sessionId)
+          ?? { infrastructure: 0, education: 0, defense: 0 };
+        escrow.infrastructure += fiscalDelta.escrowDeltas.infrastructure;
+        escrow.education += fiscalDelta.escrowDeltas.education;
+        escrow.defense += fiscalDelta.escrowDeltas.defense;
+        sessionPublicGoodsEscrow.set(sessionId, escrow);
+
+        // Persist escrow snapshot to session.config.economyConfig.publicGoodsEscrow
+        // so pause/resume and server restart restore the ledger. Mirrors the
+        // cpiBasePrices snapshot pattern used above.
+        {
+          const cfgRoot = (session.config as Record<string, unknown> | null) ?? {};
+          const existingEcon = (cfgRoot.economyConfig as Record<string, unknown> | undefined) ?? {};
+          session.config = {
+            ...cfgRoot,
+            economyConfig: {
+              ...existingEcon,
+              publicGoodsEscrow: { ...escrow },
+            },
+          };
+          await sessionRepo.updateConfig(sessionId, session.config as Record<string, unknown>);
+        }
+
+        // Apply welfare payments to statUpdates (in-memory, persisted below).
+        // Only welfare reaches agents per D-10; infra/edu/def parked above.
         for (const [agentId, payment] of fiscalDelta.agentPayments) {
           const agentUpdate = statUpdates.find(u => u.id === agentId);
           if (agentUpdate) agentUpdate.wealth += payment;
@@ -2895,6 +2940,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           finalWealthByAgentId,
           bankingTotalDeposits,
           bankingCollateralEscrow,
+          getTotalEscrow(sessionId),   // Phase 11 D-11
         );
         const latestSnapshot = macroSnapshotRepo.getLatestSnapshot(db, scope);
         const smoothingWindow = persistedEconomyConfig.inflationSmoothingWindow ?? DEFAULT_ECONOMY_CONFIG.inflationSmoothingWindow ?? 3;
@@ -3127,6 +3173,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           finalWealthByAgentId,
           bankingTotalDeposits,
           bankingCollateralEscrow,
+          getTotalEscrow(sessionId),   // Phase 11 D-11
         );
         const totalCaloriesBurned = [...weekStateMap.values()].reduce((sum, ws) => sum + ws.caloriesBurned, 0);
         const totalCaloriesProduced = [...weekStateMap.values()].reduce((sum, ws) => sum + ws.caloriesProduced, 0);
@@ -3320,6 +3367,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           undefined,
           bankingTotalDeposits,
           bankingCollateralEscrow,
+          getTotalEscrow(sessionId),   // Phase 11 D-11
         );
 
         let sfcEntry = sessionSFCTracking.get(sessionId);
@@ -3372,6 +3420,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
                 primary: ammToPersistAtomic.snapshot(iterNum),
                 multi: multiRecord,
                 treasury: sessionStateTreasury.get(sessionId),
+                publicGoodsEscrow: sessionPublicGoodsEscrow.get(sessionId), // Phase 11 D-11
               }),
               timestamp: now,
             };
