@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 11-03-PLAN.md
-last_updated: "2026-04-13T20:05:06.019Z"
+stopped_at: Completed 11-04-PLAN.md
+last_updated: "2026-04-13T20:16:50.004Z"
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 62
-  completed_plans: 51
+  completed_plans: 52
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 11 (simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure) — EXECUTING
-Plan: 4 of 10
+Plan: 5 of 10
 
 ## Performance Metrics
 
@@ -92,6 +92,7 @@ Plan: 4 of 10
 | Phase 11 P01 | 5 min | 5 tasks tasks | 16 files files |
 | Phase 11 P02 | 8 min | 2 tasks tasks | 7 files files |
 | Phase 11 P03 | 6 min | 2 tasks tasks | 6 files files |
+| Phase 11 P04 | 6 | 3 tasks | 5 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -219,6 +220,10 @@ Recent decisions affecting current work:
 - [Phase 11-03]: Persisted escrow to session.config.economyConfig.publicGoodsEscrow mirroring cpiBasePrices pattern; additionally to AMM snapshot JSON as defense-in-depth (either restores on pause/resume)
 - [Phase 11-03]: Welfare-only distribution via welfarePerAgent=welfareSpend/agentCount; infra/edu/def fiat routes to escrowDeltas not agentPayments; multiplier pipeline unchanged (quality still drives bonuses)
 - [Phase 11-03]: All 4 computeSystemFiatTotal call sites (baseline/inflation M0/telemetry/SFC audit) pass getTotalEscrow(sessionId) as 8th arg — M0 constant through fiscal tick with escrow inside SFC perimeter
+- [Phase 11]: [Phase 11-04]: computeWithholding helper in orchestration/helpers — 4-kind dispatch (wage/amm_sell/vat/capital_gains) with piecewise-progressive brackets for income kinds; VAT and capital_gains always flat; per-rate clamp [0, 0.5]; undefined policy returns 0 (legacy safety)
+- [Phase 11]: [Phase 11-04]: TaxInput.taxPolicy optional field (not TypeScript overload) preserves Phase-10 computeIncomeTax(TaxInput) callers; when taxPolicy present, delegates per-agent to computeWithholding('wage')
+- [Phase 11]: [Phase 11-04]: VAT is buyer-side only (buyer pays base + vat, seller receives full base); seller owes separate amm_sell tax — mirrors real retail sales-tax + income-tax layering
+- [Phase 11]: [Phase 11-04]: WORK withholding uses grossPaid (actually-paid amount) not originalWealthDelta — prevents over-withholding when treasury caps the wage; BLOCKER-3 unified capital_gains loop on positive cmktDelta replaces option-a shareSaleProceeds block (0 occurrences verified)
 
 ### Roadmap Evolution
 
@@ -242,6 +247,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T20:04:52.973Z
-Stopped at: Completed 11-03-PLAN.md
+Last session: 2026-04-13T20:16:49.999Z
+Stopped at: Completed 11-04-PLAN.md
 Resume file: None
