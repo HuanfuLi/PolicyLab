@@ -10,24 +10,18 @@ const stageBadge: Record<string, { label: string; cls: string }> = {
   'reflection-complete': { label: 'Reflected', cls: 'badge-info' },
 };
 
-function ScoreBar({ widthPct, color }: { widthPct: number; color: string }) {
+function ScoreBar({ score, color }: { score: number; color: string }) {
   return (
     <div style={{ flex: 1, background: 'var(--panel-alpha-05)', borderRadius: '4px', overflow: 'hidden', height: '8px' }}>
-      <div style={{ width: `${widthPct}%`, height: '100%', background: color, borderRadius: '4px', transition: 'width 0.5s ease' }} />
+      <div style={{ width: `${score}%`, height: '100%', background: color, borderRadius: '4px', transition: 'width 0.5s ease' }} />
     </div>
   );
 }
 
-function DimensionRow({ dim, showScaleHint }: { dim: ComparisonDimension; idx: number; showScaleHint?: boolean }) {
+function DimensionRow({ dim }: { dim: ComparisonDimension; idx: number }) {
   const [open, setOpen] = useState(false);
   const colors = ['var(--primary)', 'var(--warning)'];
 
-  // Bars are scaled against the larger of the two scores (floored at 10) so
-  // the relative gap is always visible even when both scores are low. Raw
-  // numbers remain shown alongside so the absolute 0-100 calibration is clear.
-  const localMax = Math.max(dim.score1, dim.score2, 10);
-  const width1 = (dim.score1 / localMax) * 100;
-  const width2 = (dim.score2 / localMax) * 100;
   const delta = Math.abs(dim.score1 - dim.score2);
   const deltaColor = dim.score1 === dim.score2
     ? 'var(--text-muted)'
@@ -42,11 +36,11 @@ function DimensionRow({ dim, showScaleHint }: { dim: ComparisonDimension; idx: n
         <span style={{ width: '180px', color: 'var(--color-bright)', fontSize: '0.9rem', flexShrink: 0 }}>{dim.name}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
           <span style={{ color: colors[0], fontWeight: 'bold', fontSize: '0.85rem', width: '32px', textAlign: 'right' }}>{dim.score1}</span>
-          <ScoreBar widthPct={width1} color={colors[0]} />
+          <ScoreBar score={dim.score1} color={colors[0]} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
           <span style={{ color: colors[1], fontWeight: 'bold', fontSize: '0.85rem', width: '32px', textAlign: 'right' }}>{dim.score2}</span>
-          <ScoreBar widthPct={width2} color={colors[1]} />
+          <ScoreBar score={dim.score2} color={colors[1]} />
         </div>
         <span
           title="Absolute point gap between the two sessions on this dimension"
@@ -55,11 +49,6 @@ function DimensionRow({ dim, showScaleHint }: { dim: ComparisonDimension; idx: n
           Δ {delta}
         </span>
       </div>
-      {showScaleHint && (
-        <div style={{ paddingLeft: '180px', color: 'var(--text-dim)', fontSize: '0.75rem', marginTop: '-0.25rem', marginBottom: '0.25rem' }}>
-          Bars show relative spread between the two sessions; numbers are absolute scores (0–100).
-        </div>
-      )}
       {open && (
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.6, margin: 0, paddingLeft: '180px' }}>
           <MarkdownText>{dim.analysis}</MarkdownText>
@@ -564,7 +553,7 @@ const CompareSessions = () => {
               <div style={{ flex: 1, textAlign: 'center', fontSize: '0.8rem', color: 'var(--warning)' }}>Society B</div>
             </div>
             {comparison.dimensions.map((dim, idx) => (
-              <DimensionRow key={dim.name} dim={dim} idx={idx} showScaleHint={idx === 0} />
+              <DimensionRow key={dim.name} dim={dim} idx={idx} />
             ))}
 
             <div style={{ display: 'flex', gap: '1.5rem', marginTop: '2rem', flexWrap: 'wrap' }}>
