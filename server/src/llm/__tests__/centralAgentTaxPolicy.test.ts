@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { validateTaxPolicy } from '../../mechanics/economyConfigUtils.js';
 import { profileToEconomyConfig } from '../../data/dataBootstrapPipeline.js';
+import { buildLawMessages } from '../prompts/central-agent.js';
+import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
 import type { LocationProfile, TaxPolicy } from '@policylab/shared';
 
 // Phase 11 D-13 — Central Agent selects tax shape (flat | progressive) at
@@ -208,5 +210,67 @@ describe('profileToEconomyConfig taxPolicy derivation (Phase 11 D-13)', () => {
     const { confidence, sources } = profileToEconomyConfig(profile);
     expect(sources['taxPolicy']).toBe('api');
     expect(confidence['taxPolicy']).toBe('medium');
+  });
+});
+
+describe('Central Agent design-generation prompt extension (Phase 11 D-13)', () => {
+  it('law prompt mentions taxPolicy, kind/rates/brackets, and both flat + progressive examples', () => {
+    const messages = buildLawMessages('A peaceful village', 'Overview...', 'Council', 'Mixed');
+    const systemText = (messages[0].content as string);
+    expect(systemText).toContain('taxPolicy');
+    // Both kinds must appear as choices
+    expect(systemText).toMatch(/flat/);
+    expect(systemText).toMatch(/progressive/);
+    // Rate structure must be explained
+    expect(systemText).toMatch(/income/);
+    expect(systemText).toMatch(/vat/);
+    expect(systemText).toMatch(/capitalGains/);
+    // Brackets explanation
+    expect(systemText).toMatch(/brackets/);
+  });
+
+  it('taxPolicy parsing flow: valid LLM output lands in economyConfig.taxPolicy', () => {
+    // Simulates the parse path in generateDesign: parsed.taxPolicy → validateTaxPolicy → economyConfig.taxPolicy
+    const parsedFromLlm = {
+      law: 'Article 1: ...',
+      taxPolicy: {
+        kind: 'flat',
+        rates: { income: 0.2, vat: 0.08, capitalGains: 0.2 },
+      },
+    };
+    const taxPolicy = validateTaxPolicy(parsedFromLlm.taxPolicy);
+    expect(taxPolicy.kind).toBe('flat');
+    expect(taxPolicy.rates.income).toBe(0.2);
+    expect(taxPolicy.rates.vat).toBe(0.08);
+    expect(taxPolicy.rates.capitalGains).toBe(0.2);
+  });
+
+  it('taxPolicy parsing flow: missing taxPolicy field falls back to DEFAULT_ECONOMY_CONFIG.taxPolicy', () => {
+    const parsedFromLlm: Record<string, unknown> = { law: 'Article 1: ...' };
+    // Code under test: validateTaxPolicy(parsed.taxPolicy) on undefined → flat defaults
+    const taxPolicy = validateTaxPolicy(parsedFromLlm.taxPolicy);
+    expect(taxPolicy.kind).toBe('flat');
+    expect(taxPolicy.rates.income).toBe(DEFAULT_ECONOMY_CONFIG.taxPolicy!.rates.income);
+    expect(taxPolicy.rates.vat).toBe(DEFAULT_ECONOMY_CONFIG.taxPolicy!.rates.vat);
+    expect(taxPolicy.rates.capitalGains).toBe(DEFAULT_ECONOMY_CONFIG.taxPolicy!.rates.capitalGains);
+  });
+
+  it('taxPolicy parsing flow: malformed kind coerces to flat 15/10/15', () => {
+    const parsedFromLlm = {
+      law: 'Article 1: ...',
+      taxPolicy: { kind: 'wealth', rates: { income: 0.9, vat: -1, capitalGains: 'oops' } },
+    };
+    const taxPolicy = validateTaxPolicy(parsedFromLlm.taxPolicy);
+    expect(taxPolicy.kind).toBe('flat');
+    expect(taxPolicy.rates.income).toBe(0.15);
+    expect(taxPolicy.rates.vat).toBe(0.10);
+    expect(taxPolicy.rates.capitalGains).toBe(0.15);
+  });
+
+  it('law prompt JSON schema example includes taxPolicy as a top-level key', () => {
+    const messages = buildLawMessages('Peaceful village', 'Overview...', 'Council', 'Mixed');
+    const systemText = (messages[0].content as string);
+    // The prompt's JSON response schema must list taxPolicy alongside law
+    expect(systemText).toMatch(/"taxPolicy"/);
   });
 });
