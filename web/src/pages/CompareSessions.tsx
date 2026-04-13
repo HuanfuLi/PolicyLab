@@ -1,8 +1,85 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, CheckSquare, Square, MessageSquare, Send, Users, Clock, Trash2, RefreshCw } from 'lucide-react';
+import { ArrowRight, CheckSquare, Square, MessageSquare, Send, Users, Clock, Trash2, RefreshCw, Download } from 'lucide-react';
 import { useCompareStore } from '../stores/compareStore';
 import MarkdownText from '../components/MarkdownText';
-import type { SessionMetadata, ComparisonDimension, EconomyParamDiff, TelemetryLog } from '@policylab/shared';
+import type { SessionMetadata, ComparisonDimension, ComparisonResult, EconomyParamDiff, TelemetryLog } from '@policylab/shared';
+
+function sanitizeFilenamePart(s: string): string {
+  return s.replace(/[^a-z0-9]/gi, '_').toLowerCase().replace(/_+/g, '_').slice(0, 40);
+}
+
+function downloadBlob(content: string, filename: string, mime: string): void {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildComparisonMarkdown(
+  comparison: ComparisonResult,
+  s1: SessionMetadata | null,
+  s2: SessionMetadata | null,
+): string {
+  const titleA = s1?.title ?? 'Society A';
+  const titleB = s2?.title ?? 'Society B';
+  const lines: string[] = [];
+
+  lines.push(`# Comparison Report: ${titleA} vs ${titleB}`);
+  lines.push('');
+  lines.push(`_Generated ${new Date().toISOString()}_`);
+  lines.push('');
+  lines.push('## Sessions');
+  lines.push('');
+  lines.push(`- **Society A** — ${titleA} (${s1?.agentCount ?? '?'} agents, ${s1?.completedIterations ?? '?'} iterations) · id \`${comparison.session1Id}\``);
+  lines.push(`- **Society B** — ${titleB} (${s2?.agentCount ?? '?'} agents, ${s2?.completedIterations ?? '?'} iterations) · id \`${comparison.session2Id}\``);
+  lines.push('');
+
+  if (comparison.economyParamDiffs && comparison.economyParamDiffs.length > 0) {
+    lines.push('## Configuration Differences');
+    lines.push('');
+    lines.push('| Parameter | Society A | Society B |');
+    lines.push('|---|---|---|');
+    for (const d of comparison.economyParamDiffs) {
+      const v1 = typeof d.session1Value === 'boolean' ? (d.session1Value ? 'Yes' : 'No') : d.session1Value;
+      const v2 = typeof d.session2Value === 'boolean' ? (d.session2Value ? 'Yes' : 'No') : d.session2Value;
+      lines.push(`| ${d.label} | ${v1} | ${v2} |`);
+    }
+    lines.push('');
+  }
+
+  lines.push('## Dimensions');
+  lines.push('');
+  lines.push('| Dimension | Society A | Society B | Δ |');
+  lines.push('|---|---:|---:|---:|');
+  for (const d of comparison.dimensions) {
+    const delta = Math.abs(d.score1 - d.score2);
+    lines.push(`| ${d.name} | ${d.score1} | ${d.score2} | ${delta} |`);
+  }
+  lines.push('');
+
+  for (const d of comparison.dimensions) {
+    lines.push(`### ${d.name}`);
+    lines.push('');
+    lines.push(`Society A: **${d.score1}/100** · Society B: **${d.score2}/100**`);
+    lines.push('');
+    lines.push(d.analysis);
+    lines.push('');
+  }
+
+  lines.push('## Central Analysis');
+  lines.push('');
+  lines.push(comparison.narrative);
+  lines.push('');
+  lines.push('## Verdict');
+  lines.push('');
+  lines.push(comparison.verdict);
+  lines.push('');
+
+  return lines.join('\n');
+}
 
 const stageBadge: Record<string, { label: string; cls: string }> = {
   'completed': { label: '✓ Completed', cls: 'badge-success' },
@@ -380,8 +457,31 @@ const CompareSessions = () => {
     await sendMessage(text);
   };
 
-  const selected1 = selectedIds[0] ? allSessions.find(s => s.id === selectedIds[0]) : null;
-  const selected2 = selectedIds[1] ? allSessions.find(s => s.id === selectedIds[1]) : null;
+  const selected1 = selectedIds[0] ? allSessions.find(s => s.id === selectedIds[0]) ?? null : null;
+  const selected2 = selectedIds[1] ? allSessions.find(s => s.id === selectedIds[1]) ?? null : null;
+
+  const buildDownloadFilename = (ext: 'json' | 'md'): string => {
+    const a = sanitizeFilenamePart(selected1?.title ?? 'sessionA');
+    const b = sanitizeFilenamePart(selected2?.title ?? 'sessionB');
+    const date = new Date().toISOString().slice(0, 10);
+    return `comparison_${a}_vs_${b}_${date}.${ext}`;
+  };
+
+  const handleDownloadJSON = () => {
+    if (!comparison) return;
+    const payload = {
+      generatedAt: new Date().toISOString(),
+      session1: { id: comparison.session1Id, title: selected1?.title ?? null, agentCount: selected1?.agentCount ?? null, completedIterations: selected1?.completedIterations ?? null },
+      session2: { id: comparison.session2Id, title: selected2?.title ?? null, agentCount: selected2?.agentCount ?? null, completedIterations: selected2?.completedIterations ?? null },
+      comparison,
+    };
+    downloadBlob(JSON.stringify(payload, null, 2), buildDownloadFilename('json'), 'application/json');
+  };
+
+  const handleDownloadMarkdown = () => {
+    if (!comparison) return;
+    downloadBlob(buildComparisonMarkdown(comparison, selected1, selected2), buildDownloadFilename('md'), 'text/markdown');
+  };
 
   return (
     <div className="animate-fade-in" style={{ maxWidth: '1000px', margin: '0 auto', paddingBottom: '3rem' }}>
@@ -506,14 +606,32 @@ const CompareSessions = () => {
             <h2 style={{ fontSize: '1.25rem', color: 'var(--color-bright)', margin: 0 }}>
               Comparison Report
             </h2>
-            <button
-              className="btn-secondary"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
-              disabled={loading || selectedIds.length !== 2}
-              onClick={runComparison}
-            >
-              <RefreshCw size={14} /> Re-generate
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+                onClick={handleDownloadMarkdown}
+                title="Download report as Markdown"
+              >
+                <Download size={14} /> Markdown
+              </button>
+              <button
+                className="btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+                onClick={handleDownloadJSON}
+                title="Download report as JSON"
+              >
+                <Download size={14} /> JSON
+              </button>
+              <button
+                className="btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+                disabled={loading || selectedIds.length !== 2}
+                onClick={runComparison}
+              >
+                <RefreshCw size={14} /> Re-generate
+              </button>
+            </div>
           </div>
 
           {/* Side-by-side stat cards */}
