@@ -229,3 +229,144 @@ describe('wage-family hook sites (Task 2a, Phase 11 D-12/D-14)', () => {
     expect(treasury).toBeCloseTo(870, 5);
   });
 });
+
+describe('AMM/capital-family hook sites (Task 2b, Phase 11 D-12/D-14)', () => {
+  it('PRODUCE_AND_SELL AMM sell: gross 20, tax 3, seller nets 17, treasury +3', () => {
+    let treasury = 100;
+    let sellerWealth = 10;
+    const executionPrice = 4;
+    const quantity = 5;
+    const gross = executionPrice * quantity; // 20
+
+    const sellTax = computeWithholding(gross, 'amm_sell', FLAT);
+    sellerWealth += (gross - sellTax);
+    treasury += sellTax;
+
+    expect(sellTax).toBeCloseTo(3, 5);
+    expect(sellerWealth).toBeCloseTo(27, 5);
+    expect(treasury).toBeCloseTo(103, 5);
+
+    // SFC: fiat moved from buyer → seller; tax routed from seller's share → treasury.
+    // Seller+treasury delta = gross (incoming from buyer); net perimeter unchanged.
+    const sellerDelta = gross - sellTax;
+    const treasuryDelta = sellTax;
+    expect(sellerDelta + treasuryDelta).toBeCloseTo(gross, 5);
+  });
+
+  it('AMM buy with VAT: 50 base price × 10% = 5 VAT. Buyer pays 55, seller gets 50, treasury +5', () => {
+    let buyerWealth = 100;
+    let sellerWealth = 20;
+    let treasury = 200;
+    const basePrice = 50;
+
+    const vat = computeWithholding(basePrice, 'vat', FLAT);
+    buyerWealth -= (basePrice + vat);
+    // Seller still gets full base (VAT is buyer-side). Income tax on sell is separate.
+    sellerWealth += basePrice;
+    treasury += vat;
+
+    expect(vat).toBeCloseTo(5, 5);
+    expect(buyerWealth).toBeCloseTo(45, 5);
+    expect(sellerWealth).toBeCloseTo(70, 5);
+    expect(treasury).toBeCloseTo(205, 5);
+
+    // SFC: buyerDelta + sellerDelta + treasuryDelta = 0
+    const buyerDelta = -(basePrice + vat);
+    const sellerDelta = basePrice;
+    const treasuryDelta = vat;
+    expect(buyerDelta + sellerDelta + treasuryDelta).toBeCloseTo(0, 5);
+  });
+
+  it('AMM trade with both VAT (on buy) and sell-income tax (on seller): full SFC chain', () => {
+    // Model the runner's trade loop: buyer pays (base + vat), seller receives (base − sellTax),
+    // treasury collects (vat + sellTax).
+    let buyerWealth = 200;
+    let sellerWealth = 50;
+    let treasury = 300;
+    const basePrice = 100;
+
+    const vat = computeWithholding(basePrice, 'vat', FLAT); // 10
+    const sellTax = computeWithholding(basePrice, 'amm_sell', FLAT); // 15
+    buyerWealth -= (basePrice + vat);
+    sellerWealth += (basePrice - sellTax);
+    treasury += (vat + sellTax);
+
+    expect(vat).toBeCloseTo(10, 5);
+    expect(sellTax).toBeCloseTo(15, 5);
+    expect(buyerWealth).toBeCloseTo(90, 5);
+    expect(sellerWealth).toBeCloseTo(135, 5);
+    expect(treasury).toBeCloseTo(325, 5);
+
+    // SFC: buyer(−110) + seller(+85) + treasury(+25) = 0
+    const buyerDelta = -(basePrice + vat);
+    const sellerDelta = basePrice - sellTax;
+    const treasuryDelta = vat + sellTax;
+    expect(buyerDelta + sellerDelta + treasuryDelta).toBeCloseTo(0, 5);
+  });
+
+  it('SELL_SHARES capital gains: proceeds 100, 15% tax, holder nets 85, treasury +15', () => {
+    let treasury = 200;
+    let holderWealth = 500;
+    const proceeds = 100; // positive cmktDelta.wealthDeltas entry
+
+    const tax = computeWithholding(proceeds, 'capital_gains', FLAT);
+    holderWealth += (proceeds - tax);
+    treasury += tax;
+
+    expect(tax).toBeCloseTo(15, 5);
+    expect(holderWealth).toBeCloseTo(585, 5);
+    expect(treasury).toBeCloseTo(215, 5);
+  });
+
+  it('matured bond payout: principal 100, 15% tax, holder nets 85, treasury +15', () => {
+    // Model: cmktDelta.wealthDeltas positive entry for bond holder at maturity.
+    let treasury = 500;
+    let holderWealth = 0;
+    const payout = 100;
+
+    const tax = computeWithholding(payout, 'capital_gains', FLAT);
+    holderWealth += (payout - tax);
+    treasury += tax;
+
+    expect(tax).toBeCloseTo(15, 5);
+    expect(holderWealth).toBeCloseTo(85, 5);
+    expect(treasury).toBeCloseTo(515, 5);
+  });
+
+  it('negative cmkt delta (share purchase): no withholding applied', () => {
+    // Model: buyer's cmktDelta.wealthDeltas entry is negative (paying for shares).
+    let treasury = 100;
+    let buyerWealth = 200;
+    const cost = -50; // negative delta
+
+    if (cost > 0) {
+      const tax = computeWithholding(cost, 'capital_gains', FLAT);
+      buyerWealth += (cost - tax);
+      treasury += tax;
+    } else {
+      buyerWealth += cost;
+    }
+
+    expect(buyerWealth).toBe(150);
+    expect(treasury).toBe(100); // unchanged
+  });
+
+  it('legacy session (undefined taxPolicy): no VAT, no sell-tax, no capital-gains tax', () => {
+    let buyerWealth = 200;
+    let sellerWealth = 50;
+    let treasury = 300;
+    const basePrice = 100;
+
+    const vat = computeWithholding(basePrice, 'vat', undefined);
+    const sellTax = computeWithholding(basePrice, 'amm_sell', undefined);
+    buyerWealth -= (basePrice + vat);
+    sellerWealth += (basePrice - sellTax);
+    treasury += (vat + sellTax);
+
+    expect(vat).toBe(0);
+    expect(sellTax).toBe(0);
+    expect(buyerWealth).toBe(100);
+    expect(sellerWealth).toBe(150);
+    expect(treasury).toBe(300); // unchanged
+  });
+});
