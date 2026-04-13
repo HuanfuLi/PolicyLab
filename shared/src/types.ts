@@ -309,6 +309,27 @@ export interface TelemetryLog {
   fiscalSpending?: Partial<Record<FiscalCategory, number>>;
   /** Current public goods quality score per category (0-1 normalized) */
   publicGoodsQuality?: Partial<Record<FiscalCategory, number>>;
+
+  // ── Phase 11: SFC drift diagnostics (D-20, D-21) ─────────────────────────
+  /**
+   * Absolute SFC drift in fiat for this iteration (end-of-iter system total minus
+   * start-of-iter system total). Threshold for warnings: 0.1 abs.
+   * @see Phase 11 D-21, D-22
+   */
+  sfcDrift?: number;
+  /**
+   * Per-subsystem contribution to sfcDrift. Each subsystem delta should sum to zero
+   * in a clean run; non-zero values pinpoint the leaking subsystem.
+   * @see Phase 11 D-21
+   */
+  sfcDriftBySubsystem?: {
+    physicsActions: number;
+    trade: number;
+    enforcement: number;
+    banking: number;
+    capmkt: number;
+    fiscal: number;
+  };
 }
 
 /** Full-fidelity export envelope */
@@ -561,6 +582,35 @@ export interface SessionConfig {
 }
 
 // ── v1.0 Economy Types (Phase 1: Banking Foundation) ─────────────────────
+/**
+ * Tax policy shape selected by the Central Agent at bootstrap.
+ * @see Phase 11 D-13
+ */
+export interface TaxPolicy {
+  kind: 'flat' | 'progressive';
+  rates: {
+    /** Applied to WORK wage income and AMM sell proceeds from PRODUCE_AND_SELL (0..0.5) */
+    income: number;
+    /** Consumption tax applied to AMM buy trades (0..0.5) */
+    vat: number;
+    /** Applied to SELL_SHARES profit and matured bond payouts (0..0.5) */
+    capitalGains: number;
+  };
+  /** Progressive-only: income brackets with strictly increasing `upto` boundaries */
+  brackets?: Array<{ upto: number; rate: number }>;
+}
+
+/**
+ * Per-session ledger holding fiscal fiat routed to non-welfare categories.
+ * Counted in computeSystemFiatTotal so M0 stays constant (SFC-neutral).
+ * @see Phase 11 D-10, D-11
+ */
+export interface PublicGoodsEscrow {
+  infrastructure: number;
+  education: number;
+  defense: number;
+}
+
 export interface EconomyConfig {
   bankingEnabled: boolean;
   reserveRequirement: number;        // 0.0-1.0, e.g. 0.10
@@ -656,6 +706,27 @@ export interface EconomyConfig {
   incomeTaxRate?: number;
   /** When true, public goods quality gain is scaled by spending-to-GDP ratio, preventing trivial spending from maxing quality. Default: true. (D-31) */
   publicGoodsSpendingToGdpScaling?: boolean;
+
+  // ── Phase 11: Tax policy, governance, public-goods escrow ────────────────
+  /**
+   * Central-Agent-selected tax shape (flat vs progressive) with per-base rates.
+   * Undefined for legacy sessions — callers should fall back to incomeTaxRate + VAT=0.
+   * @see Phase 11 D-13
+   */
+  taxPolicy?: TaxPolicy;
+  /**
+   * User-facing toggle for the emergent governance cycle. When false, runGovernanceCycle
+   * is skipped so scenarios can isolate policy variables. Treat undefined as true
+   * (backward-compat). Use `governanceEnabled !== false` at call sites.
+   * @see Phase 11 D-17
+   */
+  governanceEnabled?: boolean;
+  /**
+   * Snapshot of the per-session public-goods escrow ledger. Populated at runtime by the
+   * fiscal tick; absent in design-stage defaults. Counted in computeSystemFiatTotal.
+   * @see Phase 11 D-10, D-11
+   */
+  publicGoodsEscrow?: PublicGoodsEscrow;
 }
 
 export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
@@ -717,6 +788,10 @@ export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   cpiBasePriceAutoInit: true,
   incomeTaxRate: 0.15,
   publicGoodsSpendingToGdpScaling: true,
+  // Phase 11: Tax policy + governance toggle (D-13, D-17)
+  // publicGoodsEscrow intentionally omitted — it materializes when the fiscal tick runs.
+  taxPolicy: { kind: 'flat', rates: { income: 0.15, vat: 0.10, capitalGains: 0.15 } },
+  governanceEnabled: true,
 };
 
 // ── Phase 10: Enterprise types ──────────────────────────────────────────────
