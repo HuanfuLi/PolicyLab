@@ -280,6 +280,37 @@ Structural improvements to reduce coupling and enable isolated module testing. S
 
 ---
 
+## Round 8: SSE Race, Governance Persistence, Comparison Calibration (2026-04-13)
+
+Three bugs surfaced during a simulation playthrough: agent action codes failed to populate for iteration 1, governance session narratives vanished from the Live Feed after page reload, and comparison scores collapsed into an indistinguishable low band.
+
+### Critical (User-Facing Display Loss)
+
+| # | Issue | Root Cause | Fix | Files |
+|---|-------|-----------|-----|-------|
+| 1 | Iter 1 agent action codes never recorded in per-agent history; card headers go blank when iter 2 begins; iter 1 missing from iter 3+ history | Late SSE subscription race — client connects after server has already emitted `iteration-start` for iter 1 (start button → fire-and-forget runner → navigate → page mount → SSE connect). `currentIteration` stays at initial `0`. The `currentIteration > 0` guard on history append silently drops every iter 1 `agent-intent` event. Compounded by an unconditional `pendingActionCodes = {}` wipe at each iteration-start that erased card-header content until the next per-agent intent arrived | Carry `iteration` on the `agent-intent` SSE payload; key history off the event's iteration not the client counter; advance `currentIteration` from `agent-intent` as a fallback when `iteration-start` was missed; stop wiping `pendingActionCodes` at iteration-start; tag pending entries with their iteration and gate "fresh" display on `pending.iteration === currentIteration`, falling back to latest history otherwise | `simulationManager.ts`, `simulationRunner.ts`, `simulationStore.ts`, `Simulation.tsx` |
+| 2 | Governance session narratives (every-5-iter legislative cycle) missing from Live Feed after page reload; live view also overwrote regular iter-N resolution | Governance summary was only broadcast via SSE — no DB write. Broadcast also reused `type: 'resolution'` with same iteration number as the regular resolution, so the frontend feed merge `{ ...feed[idx], ...entry }` silently clobbered the original iter-5 narrative during live viewing | Append governance summary to the iteration row's `state_summary` (markdown HR + bold header) so DB carries both halves and reload renders identically to live. New `governance-summary` SSE event type carrying `{ iteration, summary }`; frontend handler appends to `feed[iter].narrativeSummary` rather than overwriting | `simulationManager.ts`, `simulationRunner.ts`, `simulationStore.ts` |
+
+### High (LLM Calibration / Cross-Session UX)
+
+| # | Issue | Root Cause | Fix | Files |
+|---|-------|-----------|-----|-------|
+| 3 | Compare screen frequently shows clustered low scores (e.g. 3 vs 4 on /100), making side-by-side bars visually indistinguishable | Comparison system prompt instructed LLM to "score conservatively" with no rubric anchoring 0/50/100, no calibration baseline, and no anti-clustering directive — LLM defaulted to its internal harsh rubric and collapsed both sessions into the 0–20 band | Added explicit 0–100 rubric bands to the comparison system prompt (severe failure → excellent), calibration anchor ("a small non-collapsed sim should land 40–60"), and directive against collapsing same-band scores to identical numbers. Added a Δ badge per dimension row colored by the leading session. Diagnostic warn-log triggers when ≥5/8 dimensions have both scores < 20, to catch future prompt-calibration regressions | `comparison.ts`, `compare.ts`, `CompareSessions.tsx` |
+
+### Reverted Changes
+
+| Change | Reason |
+|--------|--------|
+| Relative-spread (local-max) score bar scaling on Compare screen | User preferred absolute 0–100 visualization for direct readability; bars restored to `width: ${score}%`. Δ badge retained as a scale-neutral comparison aid |
+
+### Commits
+
+- `3503cf5` — fix(simulation): agent action codes now persist for iteration 1 and across iteration boundaries
+- `8e70ffb` — fix(simulation,compare): persist governance sessions and calibrate comparison scoring
+- `8a6f990` — revert(compare): restore absolute 0-100 score bars
+
+---
+
 ## Known Remaining Items (Documented, Not Blocking)
 
 These are items identified during audits that are acceptable as-is or deferred for future work:
