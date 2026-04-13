@@ -78,6 +78,7 @@ import * as capitalMarketRepo from '../db/repos/capitalMarketRepo.js';
 // Fiscal Policy imports (Phase 3: Fiscal Policy)
 import * as fiscalEngine from '../mechanics/fiscalEngine.js';
 import * as fiscalRepo from '../db/repos/fiscalRepo.js';
+import { assertFiscalBudgetExists } from './helpers/fiscalBudgetGuard.js';
 import { DEFAULT_BUDGET_ALLOCATION, DEFAULT_PUBLIC_GOODS_INITIAL } from '@policylab/shared';
 import { computeInflation, computeTaylorRule } from '../mechanics/inflationEngine.js';
 import * as macroSnapshotRepo from '../db/repos/macroSnapshotRepo.js';
@@ -404,6 +405,18 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       });
     }
 
+    // ── Phase 11 D-15: Fail fast if fiscalEnabled=true with no budget row ────
+    // Replaces the previous silent default-allocation fallback at the
+    // per-iteration getActiveBudget call sites. The helper's thrown error
+    // contains the canonical phrase "fiscalEnabled=true but no fiscal_budgets row"
+    // plus root-cause guidance (abort-reset wipe, PUT /config flip, bootstrap
+    // regression) so the SSE error event surfaces an actionable diagnostic.
+    // See server/src/orchestration/helpers/fiscalBudgetGuard.ts.
+    {
+      const startupEconomyConfig = getEconomyConfig(session.config as Record<string, unknown> | null);
+      assertFiscalBudgetExists(scope, startupEconomyConfig, sessionId);
+    }
+
     // ── Phase 2: Darwinian Market Protocol — Genesis Endowment ────────────
     // Override default food surplus (10) with scarce starting ration (3)
     // to force immediate market participation and prevent trivial first iterations.
@@ -719,8 +732,13 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         ? capitalMarketRepo.getEquityPositionsBySession(scope) : [];
       const iterBondHoldings = iterEconomyConfig.capitalMarketsEnabled
         ? capitalMarketRepo.getActiveBondHoldingsBySession(scope) : [];
+      // Phase 11 D-15: assertFiscalBudgetExists at runSimulation startup
+      // guarantees this lookup returns a row when fiscalEnabled is true; the
+      // bang-assertion is safe and the silent DEFAULT_BUDGET_ALLOCATION
+      // fallback is intentionally removed (no masking of state loss).
       const iterBudgetAllocation = iterEconomyConfig.fiscalEnabled
-        ? (fiscalRepo.getActiveBudget(scope) ?? DEFAULT_BUDGET_ALLOCATION) : null;
+        ? fiscalRepo.getActiveBudget(scope)!
+        : null;
       const iterPublicGoods = iterEconomyConfig.fiscalEnabled
         ? fiscalRepo.getPublicGoodsState(scope) : null;
 
@@ -2960,7 +2978,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         // out sfcBySubsystem.fiscal at the end of the fiscal block.
         const _fiscalBefore = snapshotTotal();
 
-        const budgetAllocation = fiscalRepo.getActiveBudget(scope) ?? DEFAULT_BUDGET_ALLOCATION;
+        // Phase 11 D-15: startup assertFiscalBudgetExists guarantees the row
+        // exists when fiscalEnabled is true; bang-assert here intentionally
+        // (silent DEFAULT_BUDGET_ALLOCATION fallback removed).
+        const budgetAllocation = fiscalRepo.getActiveBudget(scope)!;
         const currentPublicGoods = fiscalRepo.getPublicGoodsState(scope);
 
         // ── Income tax collection (Phase 10 Plan 05b) ─────────────────────
