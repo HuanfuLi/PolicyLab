@@ -311,6 +311,44 @@ Three bugs surfaced during a simulation playthrough: agent action codes failed t
 
 ---
 
+## Round 9: Comparison Report Polish — Export, Visualization, and LLM Calibration Follow-ups (2026-04-13)
+
+Follow-up to Round 8's comparison fixes. After exporting and reading a real comparison report (`comparison_united_states_fork__vs_united_states_2026-04-13.json`), four narrative quality issues surfaced that the rubric tweak alone hadn't addressed: an internal numeric contradiction in the prose, unsourced numeric claims, confident scoring of "Long-term Stability" with only 5 iterations of evidence, and a symmetric verdict template that hid 7-of-8 dominance. The exported JSON also lacked the time-series data fed to the LLM, so the report wasn't self-auditable.
+
+In parallel, the on-screen Dimensions panel was redesigned from a row stack into a single grouped bar chart, the report became downloadable as JSON or Markdown, and a tooltip background fix made the chart readable in both themes.
+
+### High (LLM Output Quality)
+
+| # | Issue | Root Cause | Fix | Files |
+|---|-------|-----------|-----|-------|
+| 1 | Comparison narrative contained internal numeric contradictions (e.g. "A's modestly higher wealth growth" in para 2 directly contradicted "wealth rises by $75 vs $67 for A" in para 3, agreeing with the dimension scores) | Prompt asked the LLM to ground claims in time-series data but never required it to anchor numeric claims to a source iteration window or to re-read for self-consistency before finalizing | Added two new CRITICAL RULES to comparison system prompt: every numeric claim must cite its source iteration window inline (e.g. `(iter 1-5)` or `(final iter)`), and a mandatory self-consistency pass that verifies each dimension's narrative direction matches its score sign across all paragraphs | `comparison.ts` |
+| 2 | Long-term Stability scored 63 vs 53 confidently from only 5 iterations of data — structurally insufficient for any "long-term" judgment | Prompt rubric had no data-sufficiency gate; LLM defaulted to scoring all dimensions with equal confidence regardless of iteration count | Added DATA SUFFICIENCY rule to system prompt: time-sensitive dimensions (Long-term Stability, Economic Growth trend, Social Cohesion drift) must score within ±10 of 50 when iteration count < 10, with explicit "iteration count insufficient" note in the analysis. Pass iteration counts explicitly via new `=== ITERATION COUNTS ===` block at the top of the user prompt | `comparison.ts` |
+| 3 | Verdict framed lopsided results (A winning 7/8 dimensions) as a symmetric tradeoff ("A prioritizes wellbeing, B prioritizes growth"), understating the actual dominance | JSON template's verdict instruction was just "1-2 sentence overall takeaway" — LLM defaulted to a symmetric template regardless of win distribution | Replaced verdict instruction in JSON template with explicit guidance: if one side wins ≥6 of 8 dimensions, lead with "Society X is the clearly stronger configuration on this run"; symmetric framing only when win counts differ by ≤2 dimensions | `comparison.ts` |
+
+### Feature (Export & Visualization)
+
+| # | Change | Description | Files |
+|---|--------|-------------|-------|
+| 4 | Download comparison report as JSON or Markdown | Two new buttons next to "Re-generate" using existing Artifacts.tsx Blob+anchor pattern. JSON wraps `ComparisonResult` with session metadata + generation timestamp; Markdown renders dimensions as scored table with per-dimension analysis sections, configuration diffs, narrative, and verdict. Filenames: `comparison_<titleA>_vs_<titleB>_YYYY-MM-DD.{json,md}` | `CompareSessions.tsx` |
+| 5 | Replace 8-row Dimensions stack with grouped bar chart | Original row-by-row layout made cross-dimension scanning hard. Replaced with single recharts `BarChart` (vertical bars, two series in `--primary` / `--warning`, fixed 0–100 Y-axis with gridlines, abbreviated X-axis labels with full names in tooltip). Per-dimension analyses (already in LLM output) relocated below as collapsible blocks — same drill-down interaction, decoupled from visual. SVGLineChart pair moved out of Dimensions card into a dedicated "Trajectories" card | `CompareSessions.tsx` |
+| 6 | Self-auditable exports — include the data the LLM saw | Both JSON and Markdown now embed the per-iteration trajectory (iter / avgWealth / avgHealth / avgHappiness / gini / cpi / m1) plus per-session `finalStats`, derived by merging `session*Iterations` with `session*Telemetry` already in compareStore. Readers can now verify the narrative's numeric claims against the underlying data without DB access | `CompareSessions.tsx` |
+
+### Reverted / Adjusted Changes
+
+| Change | Reason |
+|--------|--------|
+| Local-max relative-spread bar scaling on Compare screen (added in Round 8 commit `8e70ffb`) | User preferred absolute 0–100 visualization for direct readability; bars restored to `width: ${score}%`. Δ badge retained as a scale-neutral comparison aid (kept after move into the new bar-chart layout as a per-dimension collapsible row indicator) |
+| Initial Tooltip used `--bg-card` with `--panel-alpha-05` fallback (translucent) | Bar chart tooltip text was unreadable against background. Switched to the EconomicDashboard pattern: `--bg-color` (solid) + `--text-main` items + `--text-muted` label + `--primary` border |
+
+### Commits
+
+- `769ce95` — feat(compare): download comparison report as JSON or Markdown
+- `d6c77ce` — feat(compare): replace per-dimension row stack with grouped bar chart
+- `a4a083d` — fix(compare): use solid tooltip background on dimensions bar chart
+- `e45f919` — fix(compare): self-consistency, provenance, iteration-gating, and self-auditable export
+
+---
+
 ## Known Remaining Items (Documented, Not Blocking)
 
 These are items identified during audits that are acceptable as-is or deferred for future work:
