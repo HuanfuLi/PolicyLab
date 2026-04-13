@@ -223,7 +223,7 @@ Plans:
 **Goal:** Simulation outcomes reflect policy trade-offs rather than defaulting to improvement. Cortisol and happiness become signals shaped by macro conditions (inflation surprise, inequality, unemployment, public-goods quality, peer deaths) rather than per-action rewards. Infrastructure/education/defense fiscal spending parks in escrow instead of leaking to agents as de-facto UBI. Taxes withhold at every fiat-bearing event (wages, AMM trades, capital gains, bonds). Central Agent chooses flat-or-progressive taxPolicy at design. Users can disable governance for clean A/B policy comparison; governance can amend law text paragraph-by-paragraph. SFC drift is observable per subsystem so future leaks localize instantly.
 **Requirements**: D-01 through D-23 (see 11-CONTEXT.md)
 **Depends on:** Phase 10
-**Plans:** 5/10 plans executed
+**Plans:** 6/10 plans executed
 
 Plans:
 - [x] 11-01-PLAN.md — Wave 0: shared types, physicsConfig coefficients, sfcAudit extension, 14 test scaffolds
@@ -231,7 +231,7 @@ Plans:
 - [x] 11-03-PLAN.md — Wave 1: fiscal escrow ledger (D-10, D-11)
 - [x] 11-04-PLAN.md — Wave 2: tax withholding at 5 hook sites (D-12, D-14)
 - [x] 11-05-PLAN.md — Wave 3: Central Agent taxPolicy selection at bootstrap (D-13)
-- [ ] 11-06-PLAN.md — Wave 3: governance toggle + law amendments (D-17, D-18, D-19)
+- [x] 11-06-PLAN.md — Wave 3: governance toggle + law amendments (D-17, D-18, D-19)
 - [ ] 11-07-PLAN.md — Wave 4: SFC subsystem drift telemetry (D-20..D-23)
 - [ ] 11-08-PLAN.md — Wave 4: bootstrap D-15 fix + startup assertion
 - [ ] 11-09-PLAN.md — Wave 5: frontend UI (governance toggle, taxPolicy readout, SFC drift panel + banner)

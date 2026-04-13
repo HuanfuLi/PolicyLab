@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 11-05-PLAN.md
-last_updated: "2026-04-13T20:25:25.456Z"
+stopped_at: Completed 11-06-PLAN.md
+last_updated: "2026-04-13T20:38:20.420Z"
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 62
-  completed_plans: 53
+  completed_plans: 54
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 11 (simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure) — EXECUTING
-Plan: 6 of 10
+Plan: 7 of 10
 
 ## Performance Metrics
 
@@ -94,6 +94,7 @@ Plan: 6 of 10
 | Phase 11 P03 | 6 min | 2 tasks tasks | 6 files files |
 | Phase 11 P04 | 6 | 3 tasks | 5 files |
 | Phase 11 P05 | 4 min | 2 tasks | 5 files |
+| Phase 11 P06 | 8 min | 2 tasks tasks | 9 files files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -228,6 +229,10 @@ Recent decisions affecting current work:
 - [Phase 11]: [Phase 11-05]: validateTaxPolicy helper is total+idempotent — any input shape returns a valid TaxPolicy; per-rate clamp [0, 0.5] inside the helper, not at ingestion
 - [Phase 11]: [Phase 11-05]: bootstrap taxPolicy heuristic gdpPerCapita > 25000 AND govExpense > 30% → progressive 3-bracket (500/2000/10000 wealth tiers); else flat — rates scale with lendingRate × 2 and govExpense / 300
 - [Phase 11]: [Phase 11-05]: creative-mode taxPolicy emitted via buildLawMessages JSON schema extension — zero new LLM calls; law step JSON response now typed { law, taxPolicy? }, validated via validateTaxPolicy, merged into economyConfig only when existingConfig.economyConfig is absent
+- [Phase 11-06]: Move GovernanceBallotItem to @policylab/shared as discriminated union (kind: 'policy' | 'law_amendment'); prompts/shared.ts re-exports for backward compat
+- [Phase 11-06]: applyParagraphDiff helper shared by centralAgent refine-law and governanceManager law_amendment ratification — single source of truth for smart-quote + whitespace normalization (D-19)
+- [Phase 11-06]: Governance toggle uses `governanceEnabled !== false` (not truthy check) so undefined legacy sessions default to enabled (Pitfall 5 backward compat)
+- [Phase 11-06]: runGovernanceCycle mutates session.law and session.config in-memory alongside DB writes so subsequent iterations in the same runSimulation loop see the amended law without re-reading
 
 ### Roadmap Evolution
 
@@ -251,6 +256,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T20:25:25.452Z
-Stopped at: Completed 11-05-PLAN.md
+Last session: 2026-04-13T20:38:11.576Z
+Stopped at: Completed 11-06-PLAN.md
 Resume file: None
