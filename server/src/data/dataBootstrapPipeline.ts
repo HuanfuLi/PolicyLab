@@ -18,9 +18,11 @@ import type {
   EnterpriseBlueprint,
   EnterpriseSector,
   EnterpriseCommodity,
+  TaxPolicy,
 } from '@policylab/shared';
 import { distributeWealth } from './giniDistribution.js';
 import { getRoleTier } from '../mechanics/actionCodes.js';
+import { validateTaxPolicy } from '../mechanics/economyConfigUtils.js';
 
 /** Iterations per year — all annual rates are divided by this. */
 const ITERATIONS_PER_YEAR = 12;
@@ -204,6 +206,41 @@ export function profileToEconomyConfig(profile: LocationProfile): {
     : 24;
   confidence['defaultLoanTermIterations'] = profile.economics.gdpPerCapita?.confidence ?? 'low';
 
+  // --- Phase 11 D-13: Tax Policy derivation ---------------------------------
+  // Heuristic: high-GDP + high-gov-expense → progressive with 3 brackets.
+  // Otherwise → flat. Rates scale with lending rate + gov-expense percentage.
+  // Per 11-RESEARCH.md §5:
+  //   income rate   = clamp(lendingRate × 2, 0.08, 0.30)   (lendingRate as decimal)
+  //   vat rate      = clamp(gov_expense_pct_gdp / 300, 0.05, 0.20)
+  //   capitalGains  = same as income rate
+  const lendingRatePct = profile.economics.lendingInterestRate?.value ?? 8;   // % p.a.
+  const govExpensePct = profile.fiscal.govExpensePctGdp?.value ?? 0;          // % of GDP
+  const incomeSeed = Math.max(0.08, Math.min(0.30, (lendingRatePct / 100) * 2));
+  const vatSeed = Math.max(0.05, Math.min(0.20, govExpensePct / 300));
+
+  let taxPolicyDerived: TaxPolicy;
+  if (gdpPC > 25000 && govExpensePct > 30) {
+    // Progressive — 3 brackets tiered on wealth percentiles (bootstrap baseFiat ≈ 10k scale)
+    taxPolicyDerived = {
+      kind: 'progressive',
+      rates: { income: incomeSeed, vat: vatSeed, capitalGains: incomeSeed },
+      brackets: [
+        { upto: 500,   rate: Math.max(0.05, incomeSeed / 2) },      // low bracket
+        { upto: 2000,  rate: Math.max(0.10, incomeSeed * 0.8) },    // mid bracket
+        { upto: 10000, rate: incomeSeed },                           // high bracket (top marginal)
+      ],
+    };
+  } else {
+    taxPolicyDerived = {
+      kind: 'flat',
+      rates: { income: incomeSeed, vat: vatSeed, capitalGains: incomeSeed },
+    };
+  }
+  // Defensive: run through validator so any downstream TaxPolicy invariant
+  // (rate clamp, bracket monotonicity) is enforced even if heuristic drifts.
+  const taxPolicy = validateTaxPolicy(taxPolicyDerived);
+  confidence['taxPolicy'] = 'medium';
+
   const config: Partial<EconomyConfig> = {
     bankingEnabled: true,
     capitalMarketsEnabled: true,
@@ -221,6 +258,7 @@ export function profileToEconomyConfig(profile: LocationProfile): {
     dividendPayoutRatio,
     defaultLoanTermIterations,
     defaultThresholdIterations: 3,
+    taxPolicy,
   };
 
   // Derive sources from the primary DataPoint that contributed to each param
@@ -237,6 +275,8 @@ export function profileToEconomyConfig(profile: LocationProfile): {
   sources['govBondCouponRate'] = src(lendingSrc);
   sources['dividendPayoutRatio'] = src(profile.economics.stockMarketCap);
   sources['defaultLoanTermIterations'] = src(profile.economics.gdpPerCapita);
+  // Phase 11 D-13: taxPolicy is derived from WB lending rate + gov expense — api source
+  sources['taxPolicy'] = 'api';
 
   return { config, budget, confidence, sources };
 }
