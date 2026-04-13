@@ -22,3 +22,12 @@ The following files carry uncommitted edits from a prior session (visible in `gi
 - `server/src/routes/simulate.ts`
 
 None relate to Plan 11-01 scope. Untouched by this plan's commits.
+
+## Pre-existing test failures (verified during 11-02 via `git stash && vitest`)
+
+Before Plan 11-02 edits, `npm run test -w server` showed 5 failures in 2 files that are unrelated to Phase 11 scope:
+
+1. `server/src/__tests__/economyConfig.test.ts` — 4 failures on `baseLoanInterestRate` / `depositInterestRate` default mismatches (expects 0.005 / 0.003, actual 0.001 / 0.0005). Points to a previous defaults change.
+2. `server/src/mechanics/__tests__/banking.test.ts` — 1 failure on `canIssueLoan(0, 0, 0, 0.10)` — logic change vs stale test.
+
+Impact on 11-02: zero. All 65 Phase-11-owned tests (cortisolStrip, happinessStrip, structuralPressures, statClamping, edgeCases regression) pass. Folded forward as deferred — future phase touching banking defaults or canIssueLoan should fix.
