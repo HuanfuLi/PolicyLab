@@ -31,3 +31,12 @@ Before Plan 11-02 edits, `npm run test -w server` showed 5 failures in 2 files t
 2. `server/src/mechanics/__tests__/banking.test.ts` — 1 failure on `canIssueLoan(0, 0, 0, 0.10)` — logic change vs stale test.
 
 Impact on 11-02: zero. All 65 Phase-11-owned tests (cortisolStrip, happinessStrip, structuralPressures, statClamping, edgeCases regression) pass. Folded forward as deferred — future phase touching banking defaults or canIssueLoan should fix.
+
+## Agent-roster generation issues (surfaced during Phase 11 UAT, outside scope)
+
+Observed while UAT-verifying 11-09 frontend on a China location bootstrap. These concern `centralAgent` roster generation / LLM prompts, not the Phase 11 (stress/fiscal/SFC) contract surface.
+
+1. **Duplicated agent names in roster** — multiple agents in the same session share identical display names. Generation prompt does not enforce uniqueness, or the LLM is resampling without deduplication. Recommend: add a per-session name-dedup pass in `generateAgentRoster()` or extend the prompt with a "names must be unique across the roster" rule.
+2. **All-Chinese-character names for China bootstrap** — a China location seed produces 100% Hanzi names with no romanization. Unclear whether intended (authenticity) or a bug (downstream UI truncation / search). At minimum, the frontend should handle multi-byte names gracefully in every roster view; at best, prompts should emit `{name, latinName}` pairs so both scripts are available.
+
+Impact on Phase 11: zero. Neither issue touches stress pressures, fiscal escrow, tax withholding, governance, SFC drift, or budget assertions. Logged here so a follow-up phase (likely a "roster polish" or "agent generation hardening" phase) can pick them up.
