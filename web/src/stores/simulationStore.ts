@@ -16,6 +16,7 @@ type SSEEvent =
       actions?: ActionQueueRecord[];
     }
   | { type: 'resolution'; iteration: number; narrativeSummary: string; lifecycleEvents: LifecycleEvent[] }
+  | { type: 'governance-summary'; iteration: number; summary: string }
   | { type: 'iteration-complete'; iteration: number; stats: IterationStats }
   | { type: 'simulation-complete'; finalReport: string }
   | { type: 'paused'; iteration: number }
@@ -336,6 +337,28 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
                 feed[idx] = { ...feed[idx], ...entry };
               } else {
                 feed.push(entry);
+              }
+              break;
+            }
+
+            case 'governance-summary': {
+              // Append the governance block to this iteration's narrative so
+              // live and reload paths render identically (the backend persists
+              // the same block by appending to iterations.state_summary).
+              const govBlock = `\n\n---\n\n**Governance Session (iter ${event.iteration})**\n\n${event.summary}`;
+              const idx = feed.findIndex(f => f.number === event.iteration);
+              if (idx >= 0) {
+                feed[idx] = {
+                  ...feed[idx],
+                  narrativeSummary: feed[idx].narrativeSummary + govBlock,
+                };
+              } else {
+                feed.push({
+                  number: event.iteration,
+                  narrativeSummary: govBlock,
+                  lifecycleEvents: [],
+                  stats: null,
+                });
               }
               break;
             }

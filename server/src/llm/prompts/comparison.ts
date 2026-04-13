@@ -54,10 +54,20 @@ export function buildComparisonMessages(
 Compare them objectively across exactly 8 dimensions: Economic Equality, Citizen Wellbeing, Social Cohesion, Governance Effectiveness, Long-term Stability, Banking Stability, Fiscal Effectiveness, Economic Growth.
 For Banking Stability, Fiscal Effectiveness, and Economic Growth: if the economic telemetry data is not available for a session, note this in your analysis and score conservatively based on available indirect evidence.
 
+SCORING RUBRIC (apply consistently to both societies):
+- 0-20: Severe failure — systemic collapse, mass deaths, unworkable institutions
+- 21-40: Poor — significant unmet needs, frequent policy failures, persistent instability
+- 41-60: Acceptable — basic functioning with notable tradeoffs; this is the typical baseline a small policy sim should land in
+- 61-80: Good — most indicators healthy, only minor persistent issues
+- 81-100: Excellent — optimal outcomes, robust and well-balanced
+
+Calibrate against this rubric: a small, non-collapsed policy sim with a functioning economy should land 40-60 on most dimensions, not 0-20. Use the full 0-100 range.
+
 CRITICAL RULES:
 - If configuration differences are listed below, your narrative MUST explicitly explain how those parameter changes caused or contributed to observed outcome differences.
 - If per-iteration time series data is provided, base your trend claims on the ACTUAL numbers. Do NOT invent trends that contradict the data.
 - If wealth distribution data is provided, use it to ground inequality claims.
+- Do NOT cluster all scores at the low end. If the evidence only supports "both bad", still produce a numerical gap on each dimension that reflects which session was less bad. The output is displayed as a side-by-side bar chart, so flat identical scores hide the actual comparison.
 
 Respond with ONLY valid JSON, no markdown, no preamble.`;
 
