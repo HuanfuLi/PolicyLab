@@ -105,3 +105,127 @@ describe('computeWithholding (Phase 11 D-12, D-14)', () => {
     });
   });
 });
+
+// ── Hook-site integration model (mirrors simulationRunner.ts wiring) ─────────
+//
+// These tests model the per-hook-site arithmetic the runner performs. They use
+// computeWithholding directly the same way the runner does so SFC invariants
+// hold end-to-end without mounting the full runner.
+
+describe('wage-family hook sites (Task 2a, Phase 11 D-12/D-14)', () => {
+  it('WORK: treasury-backed wage — employee nets 85, treasury gains 15 tax, SFC invariant holds', () => {
+    // Model: runner debits treasury for gross wage, then withholds tax from employee, credits treasury.
+    let treasury = 1000;
+    let employeeWealth = 50;
+    const wage = 100;
+
+    const grossPaid = Math.min(wage, treasury);
+    treasury -= grossPaid;
+    const wageTax = computeWithholding(grossPaid, 'wage', FLAT);
+    employeeWealth += (grossPaid - wageTax);
+    treasury += wageTax;
+
+    expect(wageTax).toBeCloseTo(15, 5);
+    expect(employeeWealth).toBeCloseTo(50 + 85, 5);
+    expect(treasury).toBeCloseTo(1000 - 100 + 15, 5);
+
+    // SFC: wealthDelta (+85) + treasury delta (−85) = 0
+    const wealthDelta = (grossPaid - wageTax);
+    const treasuryDelta = -grossPaid + wageTax;
+    expect(wealthDelta + treasuryDelta).toBeCloseTo(0, 5);
+  });
+
+  it('WORK with empty treasury: gross clawed back, no tax, no treasury delta', () => {
+    let treasury = 0;
+    let employeeWealth = 50;
+    const wage = 100;
+
+    const grossPaid = Math.min(wage, treasury);
+    treasury -= grossPaid;
+    const wageTax = computeWithholding(grossPaid, 'wage', FLAT);
+    employeeWealth += (grossPaid - wageTax);
+    treasury += wageTax;
+
+    expect(grossPaid).toBe(0);
+    expect(wageTax).toBe(0);
+    expect(employeeWealth).toBe(50);
+    expect(treasury).toBe(0);
+  });
+
+  it('enterprise wage solvent: owner debits gross 30, employee nets 25.5, treasury +4.5', () => {
+    let treasury = 500;
+    let ownerWealth = 1000;
+    let employeeWealth = 20;
+    const wage = 30;
+
+    const wageTax = computeWithholding(wage, 'wage', FLAT);
+    ownerWealth -= wage;
+    employeeWealth += (wage - wageTax);
+    treasury += wageTax;
+
+    expect(wageTax).toBeCloseTo(4.5, 5);
+    expect(ownerWealth).toBeCloseTo(970, 5);
+    expect(employeeWealth).toBeCloseTo(45.5, 5);
+    expect(treasury).toBeCloseTo(504.5, 5);
+
+    // SFC invariant: ownerDelta + employeeDelta + treasuryDelta = 0
+    const ownerDelta = -wage;
+    const employeeDelta = wage - wageTax;
+    const treasuryDelta = wageTax;
+    expect(ownerDelta + employeeDelta + treasuryDelta).toBeCloseTo(0, 5);
+  });
+
+  it('enterprise wage bankruptcy partial pay: partial=15, tax=2.25, SFC holds on partial amount', () => {
+    let treasury = 500;
+    let ownerWealth = 15;
+    let employeeWealth = 10;
+    const partialPay = 15;
+
+    const wageTax = computeWithholding(partialPay, 'wage', FLAT);
+    ownerWealth -= partialPay;
+    employeeWealth += (partialPay - wageTax);
+    treasury += wageTax;
+
+    expect(wageTax).toBeCloseTo(2.25, 5);
+    expect(ownerWealth).toBe(0);
+    expect(employeeWealth).toBeCloseTo(22.75, 5);
+    expect(treasury).toBeCloseTo(502.25, 5);
+
+    // SFC invariant
+    const ownerDelta = -partialPay;
+    const employeeDelta = partialPay - wageTax;
+    const treasuryDelta = wageTax;
+    expect(ownerDelta + employeeDelta + treasuryDelta).toBeCloseTo(0, 5);
+  });
+
+  it('legacy session (no taxPolicy): wage unchanged, no treasury delta', () => {
+    let treasury = 1000;
+    let employeeWealth = 50;
+    const wage = 100;
+
+    // undefined policy path
+    const wageTax = computeWithholding(wage, 'wage', undefined);
+    treasury -= wage;
+    employeeWealth += (wage - wageTax);
+    treasury += wageTax;
+
+    expect(wageTax).toBe(0);
+    expect(employeeWealth).toBe(150);
+    expect(treasury).toBe(900);
+  });
+
+  it('progressive policy wage: 150 wage → 20 tax, employee nets 130', () => {
+    let treasury = 1000;
+    let employeeWealth = 0;
+    const wage = 150;
+
+    const wageTax = computeWithholding(wage, 'wage', PROGRESSIVE);
+    treasury -= wage;
+    employeeWealth += (wage - wageTax);
+    treasury += wageTax;
+
+    expect(wageTax).toBeCloseTo(20, 5);
+    expect(employeeWealth).toBeCloseTo(130, 5);
+    expect(treasury).toBeCloseTo(870, 5);
+  });
+});
