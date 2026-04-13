@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 11-06-PLAN.md
-last_updated: "2026-04-13T20:38:20.420Z"
+stopped_at: Completed 11-07-PLAN.md
+last_updated: "2026-04-13T20:53:21.799Z"
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 62
-  completed_plans: 54
+  completed_plans: 55
 ---
 
 # Project State
@@ -95,6 +95,7 @@ Plan: 7 of 10
 | Phase 11 P04 | 6 | 3 tasks | 5 files |
 | Phase 11 P05 | 4 min | 2 tasks | 5 files |
 | Phase 11 P06 | 8 min | 2 tasks tasks | 9 files files |
+| Phase 11 P07 | 7 min | 2 tasks tasks | 4 files files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -233,6 +234,10 @@ Recent decisions affecting current work:
 - [Phase 11-06]: applyParagraphDiff helper shared by centralAgent refine-law and governanceManager law_amendment ratification — single source of truth for smart-quote + whitespace normalization (D-19)
 - [Phase 11-06]: Governance toggle uses `governanceEnabled !== false` (not truthy check) so undefined legacy sessions default to enabled (Pitfall 5 backward compat)
 - [Phase 11-06]: runGovernanceCycle mutates session.law and session.config in-memory alongside DB writes so subsequent iterations in the same runSimulation loop see the amended law without re-reading
+- [Phase 11-07]: Per-subsystem SFC drift telemetry: sfcSubsystemAccounting helper + 4 wrapped subsystems (physicsActions snapshot pair; banking/capmkt/fiscal closure form). Trade and enforcement bundled into physicsActions this phase per planner discretion.
+- [Phase 11-07]: accountSubsystemAsync sister helper added because fiscal tick awaits sessionRepo.updateConfig — async block must complete before snapshot-after fires; same accumulation + exception semantics as sync variant
+- [Phase 11-07]: Closure-return idiom for fiscal: closure returns { quality, spending } and outer scope assigns — bypasses TS narrowing loss across async callback closures without weakening types or adding casts
+- [Phase 11-07]: iter 1 emits sfcDrift=0 (no baseline) but populates sfcDriftBySubsystem so dashboards render unbroken series; replaced existing console.warn drift line with reportDriftIfOverThreshold per D-23 (no auto-correction)
 
 ### Roadmap Evolution
 
@@ -256,6 +261,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T20:38:11.576Z
-Stopped at: Completed 11-06-PLAN.md
+Last session: 2026-04-13T20:53:21.795Z
+Stopped at: Completed 11-07-PLAN.md
 Resume file: None
