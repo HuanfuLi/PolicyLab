@@ -135,7 +135,9 @@ function DimensionsBarChart({ dimensions, title1, title2 }: {
             label={{ value: 'Score', angle: -90, position: 'insideLeft', fill: 'var(--text-muted)', fontSize: 12 }}
           />
           <Tooltip
-            contentStyle={{ background: 'var(--bg-card, var(--panel-alpha-05))', border: '1px solid var(--glass-border)', borderRadius: 8, fontSize: '0.85rem' }}
+            contentStyle={{ background: 'var(--bg-color)', border: '1px solid var(--primary)', borderRadius: 8, fontSize: '0.85rem', color: 'var(--text-main)' }}
+            labelStyle={{ color: 'var(--text-muted)' }}
+            itemStyle={{ color: 'var(--text-main)' }}
             labelFormatter={(_label, payload) => (payload && payload[0] ? (payload[0].payload as { name: string }).name : '')}
             cursor={{ fill: 'var(--panel-alpha-05)' }}
           />
