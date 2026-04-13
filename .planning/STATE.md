@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 11-07-PLAN.md
-last_updated: "2026-04-13T20:53:21.799Z"
+stopped_at: Completed 11-08-PLAN.md
+last_updated: "2026-04-13T21:04:58.554Z"
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 62
-  completed_plans: 55
+  completed_plans: 56
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 11 (simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure) — EXECUTING
-Plan: 7 of 10
+Plan: 8 of 10
 
 ## Performance Metrics
 
@@ -96,6 +96,7 @@ Plan: 7 of 10
 | Phase 11 P05 | 4 min | 2 tasks | 5 files |
 | Phase 11 P06 | 8 min | 2 tasks tasks | 9 files files |
 | Phase 11 P07 | 7 min | 2 tasks tasks | 4 files files |
+| Phase 11 P08 | 6 min | 2 tasks | 5 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -238,6 +239,10 @@ Recent decisions affecting current work:
 - [Phase 11-07]: accountSubsystemAsync sister helper added because fiscal tick awaits sessionRepo.updateConfig — async block must complete before snapshot-after fires; same accumulation + exception semantics as sync variant
 - [Phase 11-07]: Closure-return idiom for fiscal: closure returns { quality, spending } and outer scope assigns — bypasses TS narrowing loss across async callback closures without weakening types or adding casts
 - [Phase 11-07]: iter 1 emits sfcDrift=0 (no baseline) but populates sfcDriftBySubsystem so dashboards render unbroken series; replaced existing console.warn drift line with reportDriftIfOverThreshold per D-23 (no auto-correction)
+- [Phase 11-08]: Helper-extraction-then-DI-test pattern: assertions live in tiny helpers/fiscalBudgetGuard.ts module so vitest verifies the contract without mounting the 3000-line simulationRunner; runner becomes a 4-line wrapper
+- [Phase 11-08]: Bang-assertion (getActiveBudget(scope)!) at consumer sites instead of redundant guards: startup gate guarantees invariant, runtime TypeError surfaces immediately if invariant ever breaks vs silent stub data flowing into fiscal tick
+- [Phase 11-08]: Structured-result idiom for route guards: assertPutConfigFiscalFlip returns {ok|status|error} rather than throwing — caller decides whether to throw inside transaction (rolls back) or short-circuit response, helper stays pure
+- [Phase 11-08]: Source-grep contract tests for invariants the type system cannot enforce (no '?? DEFAULT_BUDGET_ALLOCATION' must reappear in runner): fs.readFile + import.meta.url assertions fail loudly on regression with zero infrastructure to maintain
 
 ### Roadmap Evolution
 
@@ -261,6 +266,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T20:53:21.795Z
-Stopped at: Completed 11-07-PLAN.md
+Last session: 2026-04-13T21:04:58.550Z
+Stopped at: Completed 11-08-PLAN.md
 Resume file: None
