@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, CheckSquare, Square, MessageSquare, Send, Users, Clock, Trash2, RefreshCw, Download } from 'lucide-react';
+import { ArrowRight, CheckSquare, Square, MessageSquare, Send, Users, Clock, Trash2, RefreshCw, Download, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
+} from 'recharts';
 import { useCompareStore } from '../stores/compareStore';
 import MarkdownText from '../components/MarkdownText';
 import type { SessionMetadata, ComparisonDimension, ComparisonResult, EconomyParamDiff, TelemetryLog } from '@policylab/shared';
@@ -87,49 +90,98 @@ const stageBadge: Record<string, { label: string; cls: string }> = {
   'reflection-complete': { label: 'Reflected', cls: 'badge-info' },
 };
 
-function ScoreBar({ score, color }: { score: number; color: string }) {
+// Compact labels for the X-axis so 8 dimensions fit without wrapping into
+// each other. Full names remain in the tooltip and analysis blocks below.
+const DIMENSION_SHORT_LABEL: Record<string, string> = {
+  'Economic Equality': 'Equality',
+  'Citizen Wellbeing': 'Wellbeing',
+  'Social Cohesion': 'Cohesion',
+  'Governance Effectiveness': 'Governance',
+  'Long-term Stability': 'Stability',
+  'Banking Stability': 'Banking',
+  'Fiscal Effectiveness': 'Fiscal',
+  'Economic Growth': 'Growth',
+};
+
+function DimensionsBarChart({ dimensions, title1, title2 }: {
+  dimensions: ComparisonDimension[];
+  title1: string;
+  title2: string;
+}) {
+  const data = dimensions.map(d => ({
+    name: d.name,
+    short: DIMENSION_SHORT_LABEL[d.name] ?? d.name,
+    societyA: d.score1,
+    societyB: d.score2,
+  }));
+
   return (
-    <div style={{ flex: 1, background: 'var(--panel-alpha-05)', borderRadius: '4px', overflow: 'hidden', height: '8px' }}>
-      <div style={{ width: `${score}%`, height: '100%', background: color, borderRadius: '4px', transition: 'width 0.5s ease' }} />
+    <div style={{ width: '100%', height: 360 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 16, right: 24, left: 8, bottom: 56 }} barCategoryGap="22%">
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" vertical={false} />
+          <XAxis
+            dataKey="short"
+            tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+            interval={0}
+            angle={-25}
+            textAnchor="end"
+            height={60}
+          />
+          <YAxis
+            domain={[0, 100]}
+            ticks={[0, 25, 50, 75, 100]}
+            tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+            label={{ value: 'Score', angle: -90, position: 'insideLeft', fill: 'var(--text-muted)', fontSize: 12 }}
+          />
+          <Tooltip
+            contentStyle={{ background: 'var(--bg-card, var(--panel-alpha-05))', border: '1px solid var(--glass-border)', borderRadius: 8, fontSize: '0.85rem' }}
+            labelFormatter={(_label, payload) => (payload && payload[0] ? (payload[0].payload as { name: string }).name : '')}
+            cursor={{ fill: 'var(--panel-alpha-05)' }}
+          />
+          <Legend wrapperStyle={{ fontSize: '0.85rem', paddingTop: 8 }} />
+          <Bar dataKey="societyA" name={`Society A — ${title1}`} fill="var(--primary)" radius={[4, 4, 0, 0]}>
+            <LabelList dataKey="societyA" position="top" fill="var(--primary)" fontSize={11} />
+          </Bar>
+          <Bar dataKey="societyB" name={`Society B — ${title2}`} fill="var(--warning)" radius={[4, 4, 0, 0]}>
+            <LabelList dataKey="societyB" position="top" fill="var(--warning)" fontSize={11} />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
 
-function DimensionRow({ dim }: { dim: ComparisonDimension; idx: number }) {
+function DimensionAnalysisBlock({ dim }: { dim: ComparisonDimension }) {
   const [open, setOpen] = useState(false);
   const colors = ['var(--primary)', 'var(--warning)'];
-
   const delta = Math.abs(dim.score1 - dim.score2);
   const deltaColor = dim.score1 === dim.score2
     ? 'var(--text-muted)'
     : dim.score1 > dim.score2 ? colors[0] : colors[1];
 
   return (
-    <div style={{ borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.75rem', marginBottom: '0.75rem' }}>
+    <div style={{ borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', marginBottom: '0.5rem' }}
         onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', padding: '0.4rem 0' }}
       >
-        <span style={{ width: '180px', color: 'var(--color-bright)', fontSize: '0.9rem', flexShrink: 0 }}>{dim.name}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
-          <span style={{ color: colors[0], fontWeight: 'bold', fontSize: '0.85rem', width: '32px', textAlign: 'right' }}>{dim.score1}</span>
-          <ScoreBar score={dim.score1} color={colors[0]} />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
-          <span style={{ color: colors[1], fontWeight: 'bold', fontSize: '0.85rem', width: '32px', textAlign: 'right' }}>{dim.score2}</span>
-          <ScoreBar score={dim.score2} color={colors[1]} />
-        </div>
+        {open ? <ChevronDown size={14} color="var(--text-muted)" /> : <ChevronRight size={14} color="var(--text-muted)" />}
+        <span style={{ flex: 1, color: 'var(--color-bright)', fontSize: '0.9rem' }}>{dim.name}</span>
+        <span style={{ color: colors[0], fontWeight: 'bold', fontSize: '0.85rem', width: '40px', textAlign: 'right' }}>{dim.score1}</span>
+        <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>vs</span>
+        <span style={{ color: colors[1], fontWeight: 'bold', fontSize: '0.85rem', width: '40px', textAlign: 'right' }}>{dim.score2}</span>
         <span
           title="Absolute point gap between the two sessions on this dimension"
-          style={{ color: deltaColor, fontWeight: 'bold', fontSize: '0.8rem', width: '44px', textAlign: 'right', flexShrink: 0 }}
+          style={{ color: deltaColor, fontWeight: 'bold', fontSize: '0.8rem', width: '44px', textAlign: 'right' }}
         >
           Δ {delta}
         </span>
       </div>
       {open && (
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.6, margin: 0, paddingLeft: '180px' }}>
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.6, margin: 0, padding: '0.25rem 0 0.5rem 1.75rem' }}>
           <MarkdownText>{dim.analysis}</MarkdownText>
-        </p>
+        </div>
       )}
     </div>
   );
@@ -660,25 +712,34 @@ const CompareSessions = () => {
 
           {/* Dimensions */}
           <div className="glass-card" style={{ marginBottom: '2rem' }}>
-            <h3 style={{ fontSize: '1rem', color: 'var(--color-bright)', marginBottom: '1.25rem' }}>
+            <h3 style={{ fontSize: '1rem', color: 'var(--color-bright)', marginBottom: '1rem' }}>
               Dimensions
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '1rem', fontWeight: 'normal' }}>
-                (click to expand analysis)
-              </span>
             </h3>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', paddingLeft: '180px' }}>
-              <div style={{ flex: 1, textAlign: 'center', fontSize: '0.8rem', color: 'var(--primary)' }}>Society A</div>
-              <div style={{ flex: 1, textAlign: 'center', fontSize: '0.8rem', color: 'var(--warning)' }}>Society B</div>
-            </div>
-            {comparison.dimensions.map((dim, idx) => (
-              <DimensionRow key={dim.name} dim={dim} idx={idx} />
+            <DimensionsBarChart
+              dimensions={comparison.dimensions}
+              title1={selected1?.title || 'Society A'}
+              title2={selected2?.title || 'Society B'}
+            />
+            <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '1.5rem 0 0.5rem', fontWeight: 'normal' }}>
+              Per-dimension analysis (click to expand)
+            </h4>
+            {comparison.dimensions.map(dim => (
+              <DimensionAnalysisBlock key={dim.name} dim={dim} />
             ))}
-
-            <div style={{ display: 'flex', gap: '1.5rem', marginTop: '2rem', flexWrap: 'wrap' }}>
-              <SVGLineChart title={selected1?.title || 'Society A'} iterations={session1Iterations} />
-              <SVGLineChart title={selected2?.title || 'Society B'} iterations={session2Iterations} />
-            </div>
           </div>
+
+          {/* Trajectories */}
+          {(session1Iterations.length > 0 || session2Iterations.length > 0) && (
+            <div className="glass-card" style={{ marginBottom: '2rem' }}>
+              <h3 style={{ fontSize: '1rem', color: 'var(--color-bright)', marginBottom: '1rem' }}>
+                Trajectories
+              </h3>
+              <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                <SVGLineChart title={selected1?.title || 'Society A'} iterations={session1Iterations} />
+                <SVGLineChart title={selected2?.title || 'Society B'} iterations={session2Iterations} />
+              </div>
+            </div>
+          )}
 
           {/* Economic Indicator Comparison Charts */}
           {(session1Telemetry.length > 0 || session2Telemetry.length > 0) && (
