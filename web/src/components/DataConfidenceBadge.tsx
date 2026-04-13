@@ -59,14 +59,14 @@ const DataConfidenceBadge: React.FC<DataConfidenceBadgeProps> = ({ source, confi
           transform: 'translateX(-50%)',
           marginBottom: '4px',
           padding: '0.35rem 0.6rem',
-          background: 'var(--bg-card)',
+          background: 'var(--bg-color)',
           border: '1px solid var(--border)',
           borderRadius: '6px',
           fontSize: '0.7rem',
           color: 'var(--text)',
           whiteSpace: 'nowrap',
           zIndex: 100,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
         }}>
           {sourceNote}
         </span>
