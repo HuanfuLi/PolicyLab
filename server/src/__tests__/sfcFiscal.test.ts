@@ -5,10 +5,11 @@
  * SFC Model (Fiscal Policy):
  *
  *  Budget execution is SFC-neutral within the perimeter:
- *  - treasuryDelta + sum(agentPayments) === 0 (spending is a treasury-to-agent transfer)
+ *  - treasuryDelta + sum(agentPayments) + sum(escrowDeltas) === 0 (welfare → citizens;
+ *    infra/edu/def → publicGoodsEscrow per Phase 11 D-10/D-11)
  *  - Treasury never goes negative (proportional scaling caps at available balance)
  *  - Public goods quality scores are side effects of spending, not stores of value
- *  - All four budget categories distribute fiat to agents (employment + transfers model)
+ *  - Welfare distributes to agents; infra/edu/def park in escrow (still inside SFC perimeter)
  *
  * FISC requirements tested:
  *  - FISC-04: proportional scaling when treasury is insufficient
@@ -73,7 +74,11 @@ function makeAgentIds(count: number): string[] {
 
 // ── SFC Core Invariant Tests ─────────────────────────────────────────────────
 
-describe('SFC Fiscal: treasuryDelta + sum(agentPayments) === 0', () => {
+function sumEscrow(r: { escrowDeltas: { infrastructure: number; education: number; defense: number } }): number {
+  return r.escrowDeltas.infrastructure + r.escrowDeltas.education + r.escrowDeltas.defense;
+}
+
+describe('SFC Fiscal: treasuryDelta + sum(agentPayments) + sum(escrowDeltas) === 0 (Phase 11 D-11)', () => {
   it('maintains SFC invariant with normal treasury and multiple agents', () => {
     const agentIds = makeAgentIds(5);
     const result = executeBudget({
@@ -86,8 +91,8 @@ describe('SFC Fiscal: treasuryDelta + sum(agentPayments) === 0', () => {
     });
 
     const totalPayments = [...result.agentPayments.values()].reduce((s, v) => s + v, 0);
-    // SFC invariant: treasury delta + agent payments = 0
-    expect(result.treasuryDelta + totalPayments).toBeCloseTo(0, 8);
+    // SFC invariant: treasury delta + agent payments (welfare) + escrow (infra/edu/def) = 0
+    expect(result.treasuryDelta + totalPayments + sumEscrow(result)).toBeCloseTo(0, 8);
   });
 
   it('maintains SFC invariant with unequal budget allocation', () => {
@@ -108,7 +113,7 @@ describe('SFC Fiscal: treasuryDelta + sum(agentPayments) === 0', () => {
     });
 
     const totalPayments = [...result.agentPayments.values()].reduce((s, v) => s + v, 0);
-    expect(result.treasuryDelta + totalPayments).toBeCloseTo(0, 8);
+    expect(result.treasuryDelta + totalPayments + sumEscrow(result)).toBeCloseTo(0, 8);
   });
 
   it('maintains SFC invariant with a single agent', () => {
@@ -122,10 +127,10 @@ describe('SFC Fiscal: treasuryDelta + sum(agentPayments) === 0', () => {
     });
 
     const totalPayments = [...result.agentPayments.values()].reduce((s, v) => s + v, 0);
-    expect(result.treasuryDelta + totalPayments).toBeCloseTo(0, 8);
+    expect(result.treasuryDelta + totalPayments + sumEscrow(result)).toBeCloseTo(0, 8);
   });
 
-  it('distributes equal payments to all agents', () => {
+  it('distributes equal welfare payments to all agents', () => {
     const agentIds = makeAgentIds(4);
     const result = executeBudget({
       treasuryBalance: 400,
@@ -136,7 +141,7 @@ describe('SFC Fiscal: treasuryDelta + sum(agentPayments) === 0', () => {
       iterationNumber: 1,
     });
 
-    // Each agent gets exactly equal share
+    // Each agent gets exactly equal welfare share (other categories in escrow)
     const payments = [...result.agentPayments.values()];
     expect(payments.length).toBe(4);
     const firstPayment = payments[0];

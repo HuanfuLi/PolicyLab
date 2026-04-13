@@ -82,7 +82,7 @@ describe('executeBudget', () => {
     expect(delta.treasuryDelta).toBeCloseTo(-100, 5);
   });
 
-  it('distributes spending equally to all alive agents', () => {
+  it('distributes welfare portion only to agents; infra/edu/def park in escrow (Phase 11 D-10)', () => {
     const delta = executeBudget({
       treasuryBalance: 1000,
       budgetAllocation: EQUAL_ALLOCATION,
@@ -92,14 +92,18 @@ describe('executeBudget', () => {
       iterationNumber: 2,
     });
 
-    // Each of 4 agents should receive 100/4 = 25
+    // Welfare share = 100 * 0.25 = 25, distributed across 4 agents = 6.25 each
     expect(delta.agentPayments.size).toBe(4);
     for (const agentId of AGENT_IDS) {
-      expect(delta.agentPayments.get(agentId)).toBeCloseTo(25, 5);
+      expect(delta.agentPayments.get(agentId)).toBeCloseTo(6.25, 5);
     }
+    // Infra/edu/def each = 100 * 0.25 = 25 parked in escrow
+    expect(delta.escrowDeltas.infrastructure).toBeCloseTo(25, 5);
+    expect(delta.escrowDeltas.education).toBeCloseTo(25, 5);
+    expect(delta.escrowDeltas.defense).toBeCloseTo(25, 5);
   });
 
-  it('satisfies SFC invariant: treasuryDelta + sum(agentPayments) === 0', () => {
+  it('satisfies SFC invariant: treasuryDelta + sum(agentPayments) + sum(escrowDeltas) === 0 (Phase 11 D-11)', () => {
     const delta = executeBudget({
       treasuryBalance: 1000,
       budgetAllocation: EQUAL_ALLOCATION,
@@ -110,7 +114,58 @@ describe('executeBudget', () => {
     });
 
     const totalPayments = Array.from(delta.agentPayments.values()).reduce((a, b) => a + b, 0);
-    expect(delta.treasuryDelta + totalPayments).toBeCloseTo(0, 8);
+    const totalEscrow = delta.escrowDeltas.infrastructure
+      + delta.escrowDeltas.education
+      + delta.escrowDeltas.defense;
+    expect(delta.treasuryDelta + totalPayments + totalEscrow).toBeCloseTo(0, 8);
+  });
+
+  it('welfare=1.0 allocation distributes all spending to agents; escrow all 0 (Phase 11 D-10)', () => {
+    const welfareOnly: BudgetAllocation = {
+      infrastructure: 0,
+      education: 0,
+      defense: 0,
+      welfare: 1.0,
+    };
+    const delta = executeBudget({
+      treasuryBalance: 1000,
+      budgetAllocation: welfareOnly,
+      economyConfig: DEFAULT_CONFIG,
+      currentPublicGoods: BASE_PUBLIC_GOODS,
+      aliveAgentIds: AGENT_IDS,
+      iterationNumber: 2,
+    });
+    // All 100 fiat distributed across 4 agents = 25 each
+    for (const agentId of AGENT_IDS) {
+      expect(delta.agentPayments.get(agentId)).toBeCloseTo(25, 5);
+    }
+    expect(delta.escrowDeltas.infrastructure).toBe(0);
+    expect(delta.escrowDeltas.education).toBe(0);
+    expect(delta.escrowDeltas.defense).toBe(0);
+  });
+
+  it('welfare=0 allocation parks 100% in escrow; no agent payments (Phase 11 D-10)', () => {
+    const nonWelfare: BudgetAllocation = {
+      infrastructure: 1 / 3,
+      education: 1 / 3,
+      defense: 1 / 3,
+      welfare: 0,
+    };
+    const delta = executeBudget({
+      treasuryBalance: 1000,
+      budgetAllocation: nonWelfare,
+      economyConfig: DEFAULT_CONFIG,
+      currentPublicGoods: BASE_PUBLIC_GOODS,
+      aliveAgentIds: AGENT_IDS,
+      iterationNumber: 2,
+    });
+    // Agents get welfare share = 0 (still zero payments recorded since 0 agents with actual wealth delta)
+    const totalPayments = Array.from(delta.agentPayments.values()).reduce((a, b) => a + b, 0);
+    expect(totalPayments).toBeCloseTo(0, 5);
+    const totalEscrow = delta.escrowDeltas.infrastructure
+      + delta.escrowDeltas.education
+      + delta.escrowDeltas.defense;
+    expect(totalEscrow).toBeCloseTo(100, 5);
   });
 
   it('scales spending down proportionally when treasury is below expected spend (FISC-04)', () => {
