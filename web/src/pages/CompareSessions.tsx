@@ -21,10 +21,78 @@ function downloadBlob(content: string, filename: string, mime: string): void {
   URL.revokeObjectURL(url);
 }
 
+interface TrajectoryRow {
+  iter: number;
+  avgWealth: number | null;
+  avgHealth: number | null;
+  avgHappiness: number | null;
+  gini: number | null;
+  cpi: number | null;
+  m1: number | null;
+}
+
+interface FinalStats {
+  iterationCount: number;
+  avgWealth: number | null;
+  avgHealth: number | null;
+  avgHappiness: number | null;
+  gini: number | null;
+  cpi: number | null;
+  m1: number | null;
+}
+
+// Merge per-iteration `iterations` (statistics) with `telemetry` (macro) into a
+// single trajectory keyed by iteration number. This matches the IterationMetricRow
+// shape that `comparison.ts` feeds the LLM, so the exported report carries the
+// same data the LLM saw.
+function buildTrajectory(
+  iterations: Array<Record<string, unknown>>,
+  telemetry: TelemetryLog[],
+): TrajectoryRow[] {
+  const telemetryByIter = new Map<number, TelemetryLog>();
+  for (const t of telemetry) telemetryByIter.set(t.iterationNumber, t);
+
+  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+  return iterations.map((it, idx) => {
+    const iter = num((it as { number?: unknown }).number) ?? idx + 1;
+    const stats = (it as { statistics?: Record<string, unknown> }).statistics ?? {};
+    const tel = telemetryByIter.get(iter);
+    return {
+      iter,
+      avgWealth: num(stats.avgWealth) ?? num(stats.averageWealth),
+      avgHealth: num(stats.avgHealth) ?? num(stats.averageHealth),
+      avgHappiness: num(stats.avgHappiness) ?? num(stats.averageHappiness),
+      gini: tel?.giniCoefficient ?? null,
+      cpi: tel?.cpi ?? null,
+      m1: tel?.m1 ?? null,
+    };
+  });
+}
+
+function computeFinalStats(traj: TrajectoryRow[]): FinalStats {
+  const last = traj[traj.length - 1];
+  return {
+    iterationCount: traj.length,
+    avgWealth: last?.avgWealth ?? null,
+    avgHealth: last?.avgHealth ?? null,
+    avgHappiness: last?.avgHappiness ?? null,
+    gini: last?.gini ?? null,
+    cpi: last?.cpi ?? null,
+    m1: last?.m1 ?? null,
+  };
+}
+
+function fmtCell(v: number | null, digits = 0): string {
+  return v === null ? 'n/a' : v.toFixed(digits);
+}
+
 function buildComparisonMarkdown(
   comparison: ComparisonResult,
   s1: SessionMetadata | null,
   s2: SessionMetadata | null,
+  traj1: TrajectoryRow[],
+  traj2: TrajectoryRow[],
 ): string {
   const titleA = s1?.title ?? 'Society A';
   const titleB = s2?.title ?? 'Society B';
@@ -51,6 +119,30 @@ function buildComparisonMarkdown(
       lines.push(`| ${d.label} | ${v1} | ${v2} |`);
     }
     lines.push('');
+  }
+
+  if (traj1.length > 0 || traj2.length > 0) {
+    lines.push('## Trajectories');
+    lines.push('');
+    lines.push('Per-iteration data fed to the Central Agent — use this to verify the numeric claims in the narrative below.');
+    lines.push('');
+    const writeTable = (label: string, title: string, rows: TrajectoryRow[]) => {
+      lines.push(`### Society ${label} — ${title}`);
+      lines.push('');
+      if (rows.length === 0) {
+        lines.push('_(no trajectory data available)_');
+        lines.push('');
+        return;
+      }
+      lines.push('| iter | avg wealth | avg health | avg happiness | gini | cpi | m1 |');
+      lines.push('|---:|---:|---:|---:|---:|---:|---:|');
+      for (const r of rows) {
+        lines.push(`| ${r.iter} | ${fmtCell(r.avgWealth)} | ${fmtCell(r.avgHealth)} | ${fmtCell(r.avgHappiness)} | ${fmtCell(r.gini, 3)} | ${fmtCell(r.cpi, 1)} | ${fmtCell(r.m1)} |`);
+      }
+      lines.push('');
+    };
+    writeTable('A', titleA, traj1);
+    writeTable('B', titleB, traj2);
   }
 
   lines.push('## Dimensions');
@@ -523,10 +615,26 @@ const CompareSessions = () => {
 
   const handleDownloadJSON = () => {
     if (!comparison) return;
+    const traj1 = buildTrajectory(session1Iterations, session1Telemetry);
+    const traj2 = buildTrajectory(session2Iterations, session2Telemetry);
     const payload = {
       generatedAt: new Date().toISOString(),
-      session1: { id: comparison.session1Id, title: selected1?.title ?? null, agentCount: selected1?.agentCount ?? null, completedIterations: selected1?.completedIterations ?? null },
-      session2: { id: comparison.session2Id, title: selected2?.title ?? null, agentCount: selected2?.agentCount ?? null, completedIterations: selected2?.completedIterations ?? null },
+      session1: {
+        id: comparison.session1Id,
+        title: selected1?.title ?? null,
+        agentCount: selected1?.agentCount ?? null,
+        completedIterations: selected1?.completedIterations ?? null,
+        finalStats: computeFinalStats(traj1),
+        trajectory: traj1,
+      },
+      session2: {
+        id: comparison.session2Id,
+        title: selected2?.title ?? null,
+        agentCount: selected2?.agentCount ?? null,
+        completedIterations: selected2?.completedIterations ?? null,
+        finalStats: computeFinalStats(traj2),
+        trajectory: traj2,
+      },
       comparison,
     };
     downloadBlob(JSON.stringify(payload, null, 2), buildDownloadFilename('json'), 'application/json');
@@ -534,7 +642,9 @@ const CompareSessions = () => {
 
   const handleDownloadMarkdown = () => {
     if (!comparison) return;
-    downloadBlob(buildComparisonMarkdown(comparison, selected1, selected2), buildDownloadFilename('md'), 'text/markdown');
+    const traj1 = buildTrajectory(session1Iterations, session1Telemetry);
+    const traj2 = buildTrajectory(session2Iterations, session2Telemetry);
+    downloadBlob(buildComparisonMarkdown(comparison, selected1, selected2, traj1, traj2), buildDownloadFilename('md'), 'text/markdown');
   };
 
   return (
