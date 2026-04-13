@@ -107,6 +107,7 @@ import { gini, computeStats } from './helpers/statsUtils.js';
 import { computeSystemFiatTotal } from './helpers/sfcAudit.js';
 import { buildMarketBoardEntries, buildEmploymentBoardEntries, buildPersonalStatus, updatePriceHistory } from './helpers/marketBoard.js';
 import { type AgentWeekState, createAgentWeekState, clampStat, clampWealth } from './helpers/weekState.js';
+import { applyStructuralPressures } from './helpers/structuralPressures.js';
 import { normalizeItemType, industryToItemType, getAgentPeakSkill, distributeProRata } from './helpers/physicsUtils.js';
 import { getInflationBasketPrices, buildInflationContext, applyInflationFeedback } from './helpers/inflationUtils.js';
 import { applyMETMetabolism } from './helpers/metabolismRunner.js';
@@ -1817,8 +1818,15 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
         let newWealth = clampWealth(agent.currentStats.wealth + r4(weekState.wealthDelta));
         let newHealth = clampStat(agent.currentStats.health + weekState.healthDelta);
-        let newHappiness = clampStat(agent.currentStats.happiness + weekState.happinessDelta);
-        let newCortisol = clampStat((agent.currentStats.cortisol ?? 20) + weekState.cortisolDelta);
+        // Phase 11 D-03 / D-08: happiness clamped to [5, 95]; cortisol clamped to [3, 95] at commit.
+        let newHappiness = Math.max(
+          physicsConfig.happinessFloor,
+          Math.min(physicsConfig.happinessCeiling, agent.currentStats.happiness + weekState.happinessDelta),
+        );
+        let newCortisol = Math.max(
+          physicsConfig.cortisolFloor,
+          Math.min(physicsConfig.cortisolCeiling, (agent.currentStats.cortisol ?? 20) + weekState.cortisolDelta),
+        );
 
         // Task 1: Psychological clamping — cap Happiness based on physiological state.
         // Prevents LLM hallucinations of "100 Happiness" while starving to death.
@@ -2373,6 +2381,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         }
       }
 
+      // Phase 11 D-02: hoist inflation signal so structural pressure loop (below)
+      // can read the surprise component without re-computing inflation.
+      let inflationSignalForPressure: { inflationRate: number; inflationExpectations: number } | null = null;
+
       // ── Inflation tick ────────────────────────────────────────────────────
       // Runs after banking/capital/fiscal effects are known so CPI, M1, and treasury
       // all reflect the end-of-iteration macro state before telemetry is recorded.
@@ -2441,6 +2453,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           inflationRate: inflationOutput.inflationRate,
           inflationExpectations: inflationOutput.inflationExpectations,
         };
+        // Phase 11 D-02: surface inflation signal to the structural pressure loop.
+        inflationSignalForPressure = {
+          inflationRate: inflationOutput.inflationRate,
+          inflationExpectations: inflationOutput.inflationExpectations,
+        };
 
         if (Math.abs(inflationOutput.ammFeedbackFactor - 1) > 0.001) {
           const primaryAMM = sessionAMMRegistry.get(sessionId);
@@ -2458,6 +2475,38 @@ export async function runSimulation(sessionId: string, totalIterations: number):
 
         if (inflationOutput.trace.length > 0) {
           appendTrace(sessionId, inflationOutput.trace.join('\n'));
+        }
+      }
+
+      // ── Phase 11 D-02 / D-07: Structural pressure injection ────────────────
+      // Apply 4 cortisol pressures (inflation surprise, Gini bottom-quintile,
+      // unemployment+low-wealth, underfunded public goods) and 5 happiness
+      // pressures (peer death, Gini, unemployment, welfare underfunding,
+      // inflation surprise) to every alive citizen. Bank / central_bank agents
+      // are excluded per D-02 Pitfall 2.
+      //
+      // Mutates weekStateMap (for cognition memories) AND statUpdates (for
+      // persistence / telemetry). Applies final [3,95]/[5,95] clamps per D-03/D-08.
+      {
+        const giniForPressure = gini(statUpdates.map(u => u.wealth));
+        const pressureResult = applyStructuralPressures({
+          aliveAgents,
+          weekStateMap,
+          statUpdates,
+          employmentRegistry,
+          giniCoefficient: giniForPressure,
+          inflationSignal: inflationSignalForPressure,
+          publicGoodsQuality: fiscalPublicGoodsQuality,
+          lifecycleEvents: resolution.lifecycleEvents ?? [],
+        });
+        if (pressureResult.citizensAffected > 0) {
+          appendTrace(
+            sessionId,
+            `[PHYSICS] Structural pressures applied to ${pressureResult.citizensAffected} citizens: ` +
+              `Σcortisol=${pressureResult.totalCortisolPressure.toFixed(2)}, ` +
+              `Σhappiness=${pressureResult.totalHappinessPressure.toFixed(2)}, ` +
+              `deaths=${pressureResult.deathsThisTick}`,
+          );
         }
       }
 
