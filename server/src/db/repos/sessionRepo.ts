@@ -102,6 +102,18 @@ export const sessionRepo = {
       .where(eq(sessions.id, id));
   },
 
+  /**
+   * Replace session.law with a new body. Used by governance law_amendment
+   * ratification (Phase 11 D-18) and by future law refinement flows that
+   * persist outside centralAgent.refineSession.
+   */
+  async updateLaw(id: string, law: string): Promise<void> {
+    await db
+      .update(sessions)
+      .set({ law, updatedAt: now() })
+      .where(eq(sessions.id, id));
+  },
+
   async delete(id: string): Promise<void> {
     await db.delete(sessions).where(eq(sessions.id, id));
   },

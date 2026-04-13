@@ -611,6 +611,48 @@ export interface PublicGoodsEscrow {
   defense: number;
 }
 
+/**
+ * Governance ballot item — discriminated union of a scalar policy change
+ * and a paragraph-level law amendment. Persisted to @policylab/shared so
+ * both the server (governanceManager, prompts) and future client code
+ * share a single source of truth.
+ *
+ * - 'policy' mutates session.config.policy[field]
+ * - 'law_amendment' applies a paragraph-level text diff to session.law
+ *
+ * @see Phase 11 D-18, D-19
+ */
+export type GovernanceBallotItem =
+  | {
+      kind: 'policy';
+      field: 'tax_rate' | 'ubi_allocation' | 'enforcement_level';
+      proposedValue: number;
+      description: string;
+      /** Optional one-sentence economic impact projection from the Central Agent. */
+      impactForecast?: string;
+    }
+  | {
+      kind: 'law_amendment';
+      /** Verbatim (or smart-quote / whitespace normalized) existing paragraph to replace. */
+      oldParagraph: string;
+      /** Proposed replacement text written verbatim into the law. */
+      newParagraph: string;
+      description: string;
+      impactForecast?: string;
+    };
+
+/**
+ * History entry recording a ratified law amendment.
+ * Stored in session.config.lawAmendmentHistory.
+ * @see Phase 11 D-18
+ */
+export interface LawAmendmentHistoryEntry {
+  iteration: number;
+  old: string;
+  new: string;
+  description: string;
+}
+
 export interface EconomyConfig {
   bankingEnabled: boolean;
   reserveRequirement: number;        // 0.0-1.0, e.g. 0.10

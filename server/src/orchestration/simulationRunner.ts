@@ -3041,7 +3041,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       });
 
       // ── Governance Phase (every 5th iteration) ───────────────────────────
-      if (iterNum % 5 === 0 && aliveAgents.length >= 2) {
+      // Phase 11 D-17: economyConfig.governanceEnabled toggle. Legacy sessions
+      // (undefined) default to enabled; explicit false skips the cycle entirely
+      // so A/B scenarios can isolate policy variables. The `!== false` check is
+      // critical — truthy checks would break backward compat (see Pitfall 5).
+      if (iterNum % 5 === 0 && aliveAgents.length >= 2 && economyConfig.governanceEnabled !== false) {
         try {
           const govResult = await runGovernanceCycle({
             sessionId,
