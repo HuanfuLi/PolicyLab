@@ -66,7 +66,7 @@ interface SimulationStore {
   // Live feed
   feed: IterationFeed[];
   pendingIntents: Record<string, string>; // agentId → narrative
-  pendingActionCodes: Record<string, { actionCode: string; actionTarget: string | null; actions: ActionQueueRecord[] }>;
+  pendingActionCodes: Record<string, { iteration: number; actionCode: string; actionTarget: string | null; actions: ActionQueueRecord[] }>;
   agentIntentHistory: Record<string, AgentIntentRecord[]>; // agentId → sorted history
 
   // Stats history
@@ -108,7 +108,7 @@ const initialState = {
   lastSeenId: null as number | null,
   feed: [] as IterationFeed[],
   pendingIntents: {} as Record<string, string>,
-  pendingActionCodes: {} as Record<string, { actionCode: string; actionTarget: string | null; actions: ActionQueueRecord[] }>,
+  pendingActionCodes: {} as Record<string, { iteration: number; actionCode: string; actionTarget: string | null; actions: ActionQueueRecord[] }>,
   agentIntentHistory: {} as Record<string, AgentIntentRecord[]>,
   statsHistory: [] as IterationStats[],
   macroHistory: [] as TelemetryLog[],
@@ -265,7 +265,10 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
               currentIteration = event.iteration;
               totalIterations = event.total;
               pendingIntents = {};
-              pendingActionCodes = {};
+              // pendingActionCodes is intentionally NOT cleared here.
+              // Each agent's entry is tagged with the iteration it was produced in;
+              // AgentIntentCard gates display on (pending.iteration === currentIteration),
+              // and new agent-intent events overwrite stale entries per-agent.
               // Reset lastSeenId on new simulation start to prevent stale
               // sequence IDs from a previous run rejecting new events
               if (event.iteration <= 1) {
@@ -274,24 +277,26 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
               break;
 
             case 'agent-intent': {
-              pendingIntents[event.agentId] = event.intent;
-              pendingActionCodes[event.agentId] = {
-                actionCode: event.actionCode,
-                actionTarget: event.actionTarget,
-                actions: event.actions ?? [],
-              };
               // Use iteration number from the event itself — robust to a missed
               // iteration-start (e.g. when SSE connects after the server has
-              // already broadcast iteration-start with no clients listening).
+              // already broadcast iteration-start with no clients listening:
+              // user clicks Start → navigates → page mounts while server is
+              // already mid-iter-1, so currentIteration is still 0 and iter-1
+              // records would otherwise be dropped).
               // Falls back to currentIteration for older server versions that
               // don't include the field.
               const eventIter = event.iterationNumber ?? currentIteration;
-              // Sync currentIteration so the rest of the UI reflects reality
-              // even if iteration-start was missed for the very first iteration.
               if (eventIter > currentIteration) {
                 currentIteration = eventIter;
                 isRunning = true;
               }
+              pendingIntents[event.agentId] = event.intent;
+              pendingActionCodes[event.agentId] = {
+                iteration: eventIter,
+                actionCode: event.actionCode,
+                actionTarget: event.actionTarget,
+                actions: event.actions ?? [],
+              };
               // Accumulate in history (deduplicate by agentId + iterationNumber)
               // Ring-buffer cap: keep at most 500 entries per agent to prevent
               // unbounded memory growth during long-running simulations (BUG-10).

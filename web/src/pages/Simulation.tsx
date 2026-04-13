@@ -781,7 +781,7 @@ function actionQueueBadges(actions: Array<{ actionCode: string; parameters: Reco
 interface AgentIntentPanelProps {
   agents: Array<{ id: string; name: string; role: string; isAlive: boolean }>;
   agentIntentHistory: Record<string, AgentIntentRecord[]>;
-  pendingActionCodes: Record<string, { actionCode: string; actionTarget: string | null; actions: Array<{ actionCode: string; parameters: Record<string, unknown> }> }>;
+  pendingActionCodes: Record<string, { iteration: number; actionCode: string; actionTarget: string | null; actions: Array<{ actionCode: string; parameters: Record<string, unknown> }> }>;
   currentIteration: number;
 }
 
@@ -817,19 +817,22 @@ function AgentIntentPanel({ agents, agentIntentHistory, pendingActionCodes, curr
 interface AgentIntentCardProps {
   agent: { id: string; name: string; role: string; isAlive: boolean };
   history: AgentIntentRecord[];
-  pending: { actionCode: string; actionTarget: string | null; actions: Array<{ actionCode: string; parameters: Record<string, unknown> }> } | null;
+  pending: { iteration: number; actionCode: string; actionTarget: string | null; actions: Array<{ actionCode: string; parameters: Record<string, unknown> }> } | null;
   currentIteration: number;
 }
 
-function AgentIntentCard({ agent, history, pending }: AgentIntentCardProps) {
+function AgentIntentCard({ agent, history, pending, currentIteration }: AgentIntentCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [expandedIntents, setExpandedIntents] = useState<Set<number>>(new Set());
 
-  // Current action: live pending if it exists, otherwise last in history
+  // Pending is only "fresh" if it was produced for the active iteration.
+  // Stale pending from a prior iteration falls back to the latest history
+  // record so the header never flickers blank at iteration boundaries.
   const latestRecord = history[history.length - 1] ?? null;
-  const currentActionCode = pending?.actionCode ?? latestRecord?.actionCode ?? null;
-  const currentActionTarget = pending !== null ? pending.actionTarget : latestRecord?.actionTarget ?? null;
-  const currentActions = pending?.actions ?? latestRecord?.actions ?? [];
+  const isPendingFresh = pending !== null && pending.iteration === currentIteration;
+  const currentActionCode = isPendingFresh ? pending!.actionCode : latestRecord?.actionCode ?? null;
+  const currentActionTarget = isPendingFresh ? pending!.actionTarget : latestRecord?.actionTarget ?? null;
+  const currentActions = isPendingFresh ? pending!.actions : latestRecord?.actions ?? [];
 
   const toggleIntent = (iterNum: number) => {
     setExpandedIntents(prev => {
