@@ -7,6 +7,8 @@ import type { SessionMetadata, SessionDetail, Agent, ChatMessage, Stage, BudgetA
 import * as fiscalRepo from '../db/repos/fiscalRepo.js';
 import { createScope } from '../db/sessionScope.js';
 import { simulationManager } from '../orchestration/simulationManager.js';
+import { assertPutConfigFiscalFlip } from '../orchestration/helpers/fiscalBudgetGuard.js';
+import type { EconomyConfig } from '@policylab/shared';
 
 const router = Router();
 
@@ -377,6 +379,23 @@ router.put('/:id/config', async (req, res) => {
         try { currentConfig = JSON.parse(row.config); } catch { /* ignore */ }
       }
 
+      // Phase 11 D-15: When the request flips fiscalEnabled from false→true
+      // and no fiscal_budgets row exists, the helper requires budgetAllocation
+      // in the request body (or fails with a 400). flipsTrueFromFalse is
+      // checked inside the helper; this prevents orphaning the simulation
+      // start assertion behind a partially-applied config update.
+      const flipResult = assertPutConfigFiscalFlip({
+        sessionId: id,
+        currentEconomyConfig: (currentConfig.economyConfig ?? undefined) as
+          | Partial<EconomyConfig>
+          | undefined,
+        incomingEconomyConfig: body.economyConfig as Record<string, unknown> | undefined,
+        incomingBudgetAllocation: body.budgetAllocation,
+      });
+      if (!flipResult.ok) {
+        throw Object.assign(new Error(flipResult.error), { status: flipResult.status });
+      }
+
       updatedConfig = { ...currentConfig };
       if (body.totalIterations !== undefined) updatedConfig.totalIterations = body.totalIterations;
       if (body.checklist !== undefined) updatedConfig.checklist = body.checklist;
@@ -421,7 +440,9 @@ router.put('/:id/config', async (req, res) => {
     });
   } catch (err: unknown) {
     const status = (err as { status?: number }).status;
+    const message = err instanceof Error ? err.message : 'Failed to update config';
     if (status === 404) return res.status(404).json({ error: 'Session not found' });
+    if (status === 400) return res.status(400).json({ error: message });
     console.error('PUT /sessions/:id/config error:', err);
     res.status(500).json({ error: 'Failed to update config' });
   }

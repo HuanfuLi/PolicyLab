@@ -22,6 +22,7 @@ import { sessionRepo } from '../db/repos/sessionRepo.js';
 import { runSimulation, getSessionTelemetry } from '../orchestration/simulationRunner.js';
 import { simulationManager } from '../orchestration/simulationManager.js';
 import { asyncLogFlusher } from '../db/asyncLogFlusher.js';
+import { rehydrateFiscalBudgetOnAbortReset } from '../orchestration/helpers/fiscalBudgetGuard.js';
 
 /**
  * Wipes all simulation artifacts for a session and resets agents to their
@@ -112,6 +113,10 @@ router.post('/', async (req, res) => {
       type: 'error',
       message: `Simulation failed: ${err instanceof Error ? err.message : String(err)}`,
     });
+    // Belt-and-suspenders: if the inner lifecycle handler missed this error
+    // path, in-memory status would stay 'running' and block future Start clicks
+    // with a 409. Clear state unconditionally so the session is restartable.
+    simulationManager.finish(id);
   });
 
   return res.json({ ok: true });
@@ -205,6 +210,14 @@ router.post('/abort-reset', async (req, res) => {
   simulationManager.abortAndReset(id);
   // Erase all simulation artifacts and reset agents
   await eraseSimulationData(id);
+  // Phase 11 D-15: eraseSimulationData wipes fiscal_budgets. If the session
+  // was fiscalEnabled, recreate the row from session.config.budgetAllocation
+  // so the next simulation start does not trip assertFiscalBudgetExists.
+  // The helper logs "[SIMULATE] Abort-reset re-created fiscal_budgets ..."
+  // when it actually creates a row; silently no-ops otherwise (fiscalEnabled
+  // false, or no allocation in config — in which case the next start will
+  // throw the descriptive assertion, which is the intended behavior).
+  await rehydrateFiscalBudgetOnAbortReset(id);
   // Return session to design stage
   await sessionRepo.updateStage(id, 'design-review');
   return res.json({ ok: true });
