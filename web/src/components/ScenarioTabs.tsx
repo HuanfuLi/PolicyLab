@@ -14,6 +14,8 @@ interface ScenarioTabsProps {
   onRunAll: () => void;
   bootstrapConfidence?: Record<string, string>;
   bootstrapSources?: Record<string, string>;
+  /** Phase 11 D-17: forwarded to EconomyTab to gate the governance toggle */
+  isPastCheckpoint?: boolean;
 }
 
 export default function ScenarioTabs({
@@ -25,6 +27,7 @@ export default function ScenarioTabs({
   onRunAll,
   bootstrapConfidence,
   bootstrapSources,
+  isPastCheckpoint = false,
 }: ScenarioTabsProps) {
   const {
     tabs,
@@ -262,6 +265,7 @@ export default function ScenarioTabs({
             bootstrapConfidence={bootstrapConfidence}
             bootstrapSources={bootstrapSources}
             tabId={activeTabId}
+            isPastCheckpoint={isPastCheckpoint}
           />
         </div>
       )}

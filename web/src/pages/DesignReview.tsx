@@ -401,6 +401,7 @@ const DesignReview = () => {
                   onRunAll={handleRunAllScenarios}
                   bootstrapConfidence={session.config.bootstrapConfidence}
                   bootstrapSources={session.config.bootstrapSources}
+                  isPastCheckpoint={!!isPastDesign}
                 />
               ) : (
                 <EconomyTab
@@ -412,6 +413,7 @@ const DesignReview = () => {
                   onBudgetChange={(budget) => {
                     saveBudgetAllocation(id!, budget);
                   }}
+                  isPastCheckpoint={!!isPastDesign}
                 />
               )
             )}
