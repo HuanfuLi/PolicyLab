@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 11-02-PLAN.md
-last_updated: "2026-04-13T19:53:51.279Z"
+stopped_at: Completed 11-03-PLAN.md
+last_updated: "2026-04-13T20:05:06.019Z"
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 62
-  completed_plans: 50
+  completed_plans: 51
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 11 (simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure) — EXECUTING
-Plan: 3 of 10
+Plan: 4 of 10
 
 ## Performance Metrics
 
@@ -91,6 +91,7 @@ Plan: 3 of 10
 | Phase 10-fix-simulation-realism PGC3 | 8 | 2 tasks | 3 files |
 | Phase 11 P01 | 5 min | 5 tasks tasks | 16 files files |
 | Phase 11 P02 | 8 min | 2 tasks tasks | 7 files files |
+| Phase 11 P03 | 6 min | 2 tasks tasks | 6 files files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -214,6 +215,10 @@ Recent decisions affecting current work:
 - [Phase 11]: [Phase 11-02]: Institutional-agent exclusion uses TWO predicates (agent.type==='bank' OR agent.role?.toLowerCase()==='central_bank') — bootstrap bank and central bank use different discriminators, both needed
 - [Phase 11]: [Phase 11-02]: Cortisol/happiness clamps applied at BOTH initial stat commit (lines 1820-1822) AND post-pressure re-clamp in helper — defense-in-depth so Phase-11 bounds apply even when structural pressure loop skips
 - [Phase 11]: [Phase 11-02]: HELP action strips cortisol to 0 (D-01) but RETAINS happiness +5 (altruistic outcome per D-06) — reworded trace line to clarify intent
+- [Phase 11-03]: escrowDeltas on FiscalDelta keeps fiscalEngine as single-return delta producer matching bankingEngine/capitalMarketEngine precedent; runner batches escrow credit alongside treasury/wealth updates
+- [Phase 11-03]: Persisted escrow to session.config.economyConfig.publicGoodsEscrow mirroring cpiBasePrices pattern; additionally to AMM snapshot JSON as defense-in-depth (either restores on pause/resume)
+- [Phase 11-03]: Welfare-only distribution via welfarePerAgent=welfareSpend/agentCount; infra/edu/def fiat routes to escrowDeltas not agentPayments; multiplier pipeline unchanged (quality still drives bonuses)
+- [Phase 11-03]: All 4 computeSystemFiatTotal call sites (baseline/inflation M0/telemetry/SFC audit) pass getTotalEscrow(sessionId) as 8th arg — M0 constant through fiscal tick with escrow inside SFC perimeter
 
 ### Roadmap Evolution
 
@@ -237,6 +242,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T19:53:40.373Z
-Stopped at: Completed 11-02-PLAN.md
+Last session: 2026-04-13T20:04:52.973Z
+Stopped at: Completed 11-03-PLAN.md
 Resume file: None
