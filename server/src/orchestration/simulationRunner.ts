@@ -1417,25 +1417,66 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       for (const trade of trades) {
         const buyerState = weekStateMap.get(trade.buyerId);
         const sellerState = weekStateMap.get(trade.sellerId);
+        const basePrice = trade.executionPrice * trade.quantity;
         if (buyerState) {
-          buyerState.wealthDelta -= trade.executionPrice * trade.quantity;
+          // Phase 11 D-12/D-14: VAT added on top of base price. Buyer pays
+          // (base + vat); seller still receives full base. Treasury collects vat.
+          const vat = computeWithholding(basePrice, 'vat', iterEconomyConfig.taxPolicy);
+          buyerState.wealthDelta -= (basePrice + vat);
           buyerState.inventory[trade.itemType].quantity += trade.quantity;
           buyerState.events.push(`Bought ${trade.quantity} ${trade.itemType} at ${trade.executionPrice}`);
+          if (vat > 0) {
+            sessionStateTreasury.set(
+              sessionId,
+              (sessionStateTreasury.get(sessionId) ?? 0) + vat,
+            );
+            appendTrace(
+              sessionId,
+              `[TAX] VAT ${vat.toFixed(2)} on AMM buy ${basePrice.toFixed(2)} (${trade.buyerId})`,
+            );
+          }
         } else if (trade.buyerId === 'SYSTEM_NPC') {
           // SFC fix: SYSTEM_NPC purchases are funded from the state treasury.
-          const cost = trade.executionPrice * trade.quantity;
+          // No VAT applied — SYSTEM_NPC is a liquidity backstop, not a taxable citizen buyer.
+          // Seller still owes income tax on proceeds (handled below via 'amm_sell').
+          const cost = basePrice;
           const treasury = sessionStateTreasury.get(sessionId) ?? 0;
           const fundedCost = Math.min(cost, treasury);
           sessionStateTreasury.set(sessionId, treasury - fundedCost);
           if (sellerState) {
-            sellerState.wealthDelta += fundedCost;
+            const sellTax = computeWithholding(fundedCost, 'amm_sell', iterEconomyConfig.taxPolicy);
+            sellerState.wealthDelta += (fundedCost - sellTax);
             sellerState.events.push(`Sold ${trade.quantity} ${trade.itemType} at ${trade.executionPrice} (treasury-backed)`);
+            if (sellTax > 0) {
+              sessionStateTreasury.set(
+                sessionId,
+                (sessionStateTreasury.get(sessionId) ?? 0) + sellTax,
+              );
+              appendTrace(
+                sessionId,
+                `[TAX] Withheld ${sellTax.toFixed(2)} from AMM sell ${fundedCost.toFixed(2)} (${trade.sellerId})`,
+              );
+            }
           }
           continue; // always skip the unconditional seller block below
         }
         if (sellerState) {
-          sellerState.wealthDelta += trade.executionPrice * trade.quantity;
+          // Phase 11 D-12/D-14: seller owes income tax on AMM sell proceeds.
+          // Seller receives full basePrice (VAT does not reduce seller's take),
+          // then the income-rate tax is withheld out of those proceeds.
+          const sellTax = computeWithholding(basePrice, 'amm_sell', iterEconomyConfig.taxPolicy);
+          sellerState.wealthDelta += (basePrice - sellTax);
           sellerState.events.push(`Sold ${trade.quantity} ${trade.itemType} at ${trade.executionPrice}`);
+          if (sellTax > 0) {
+            sessionStateTreasury.set(
+              sessionId,
+              (sessionStateTreasury.get(sessionId) ?? 0) + sellTax,
+            );
+            appendTrace(
+              sessionId,
+              `[TAX] Withheld ${sellTax.toFixed(2)} from AMM sell ${basePrice.toFixed(2)} (${trade.sellerId})`,
+            );
+          }
         }
       }
 
@@ -2342,10 +2383,32 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           sessionStateTreasury.set(sessionId, Math.max(0, newTreasury));
         }
 
-        // Apply (possibly scaled) wealth deltas in-memory (persisted with statUpdates)
+        // Apply (possibly scaled) wealth deltas in-memory (persisted with statUpdates).
+        //
+        // Phase 11 D-12/D-14: capital-gains withholding on positive cmkt deltas
+        // (SELL_SHARES proceeds, matured-bond payouts, coupon + dividend income).
+        // Applied uniformly to every positive delta for symmetry — treasury collects,
+        // holder nets (delta − tax). Negative deltas (share purchases, corp-bond
+        // issuance cost) flow through untaxed.
         for (const [agentId, delta] of cmktDelta.wealthDeltas) {
           const agentUpdate = statUpdates.find(u => u.id === agentId);
-          if (agentUpdate) agentUpdate.wealth += delta;
+          if (!agentUpdate) continue;
+          if (delta > 0) {
+            const tax = computeWithholding(delta, 'capital_gains', cmktEconomyConfig.taxPolicy);
+            agentUpdate.wealth += (delta - tax);
+            if (tax > 0) {
+              sessionStateTreasury.set(
+                sessionId,
+                (sessionStateTreasury.get(sessionId) ?? 0) + tax,
+              );
+              appendTrace(
+                sessionId,
+                `[TAX] Withheld ${tax.toFixed(2)} from capital market income ${delta.toFixed(2)} (${agentId})`,
+              );
+            }
+          } else {
+            agentUpdate.wealth += delta;
+          }
         }
 
         // Apply enterprise treasury deltas: corporate bond coupon/maturity payments come from

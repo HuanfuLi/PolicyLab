@@ -28,6 +28,8 @@ import {
   processMaturities,
   processIteration,
 } from '../mechanics/capitalMarketEngine.js';
+import { computeWithholding } from '../orchestration/helpers/taxWithholding.js';
+import type { TaxPolicy } from '@policylab/shared';
 
 // ── Test Helpers ──────────────────────────────────────────────────────────────
 
@@ -343,6 +345,79 @@ describe('SFC Capital Market Invariants', () => {
 
     // Total change = agent wealth deltas + enterprise deltas + treasury delta = 0
     expect(totalAgentDelta + totalTreasuryDelta).toBeCloseTo(0, 4);
+  });
+
+  it('Phase 11 D-12/D-14: runner applies capital_gains tax to positive cmktDelta entries, negatives untaxed', () => {
+    // Model the runner's unified positive-delta loop (simulationRunner.ts ~line 2319).
+    // Post-processIteration cmktDelta.wealthDeltas contains per-agent net positions.
+    const taxPolicy: TaxPolicy = {
+      kind: 'flat',
+      rates: { income: 0.15, vat: 0.1, capitalGains: 0.15 },
+    };
+
+    // Simulate cmktDelta output: one SELL_SHARES proceeds, one matured bond, one share purchase (negative).
+    const cmktWealthDeltas = new Map<string, number>([
+      ['seller-1', 100],    // SELL_SHARES proceeds
+      ['holder-1', 50],     // matured bond payout
+      ['buyer-1', -40],     // share purchase cost
+    ]);
+
+    let treasury = 500;
+    const agentWealth = new Map<string, number>([
+      ['seller-1', 1000],
+      ['holder-1', 200],
+      ['buyer-1', 300],
+    ]);
+    const wealthBefore = Array.from(agentWealth.values()).reduce((s, w) => s + w, 0);
+    const treasuryBefore = treasury;
+    const totalCmktIn = Array.from(cmktWealthDeltas.values()).reduce((s, d) => s + d, 0);
+
+    for (const [agentId, delta] of cmktWealthDeltas) {
+      const current = agentWealth.get(agentId) ?? 0;
+      if (delta > 0) {
+        const tax = computeWithholding(delta, 'capital_gains', taxPolicy);
+        agentWealth.set(agentId, current + (delta - tax));
+        treasury += tax;
+      } else {
+        agentWealth.set(agentId, current + delta);
+      }
+    }
+
+    // Verify per-agent net after withholding
+    expect(agentWealth.get('seller-1')).toBeCloseTo(1000 + 100 - 15, 5); // 1085
+    expect(agentWealth.get('holder-1')).toBeCloseTo(200 + 50 - 7.5, 5);  // 242.5
+    expect(agentWealth.get('buyer-1')).toBe(300 - 40);                    // 260 (no tax)
+    expect(treasury).toBeCloseTo(500 + 22.5, 5);                          // 15 + 7.5 = 22.5
+
+    // SFC perimeter invariant: fiat entering the CMKT subsystem equals
+    // (sum of post-tax wealth deltas) + (treasury gain from tax withholding)
+    const wealthAfter = Array.from(agentWealth.values()).reduce((s, w) => s + w, 0);
+    const wealthChange = wealthAfter - wealthBefore;
+    const treasuryChange = treasury - treasuryBefore;
+    expect(wealthChange + treasuryChange).toBeCloseTo(totalCmktIn, 5);
+  });
+
+  it('Phase 11: SELL_SHARES proceeds taxed at capitalGains rate; treasury grows by tax amount', () => {
+    const taxPolicy: TaxPolicy = {
+      kind: 'flat',
+      rates: { income: 0.15, vat: 0.1, capitalGains: 0.20 },
+    };
+    const proceeds = 200;
+    const tax = computeWithholding(proceeds, 'capital_gains', taxPolicy);
+    expect(tax).toBeCloseTo(40, 5);
+    expect(proceeds - tax).toBeCloseTo(160, 5);
+  });
+
+  it('Phase 11: matured bond payout taxed at capitalGains rate', () => {
+    const taxPolicy: TaxPolicy = {
+      kind: 'flat',
+      rates: { income: 0.15, vat: 0.1, capitalGains: 0.15 },
+    };
+    // Matured bond: principal + final coupon flow through cmktDelta.wealthDeltas as one positive entry.
+    const payout = 108; // 100 principal + 8 coupon
+    const tax = computeWithholding(payout, 'capital_gains', taxPolicy);
+    expect(tax).toBeCloseTo(16.2, 5);
+    expect(payout - tax).toBeCloseTo(91.8, 5);
   });
 
   it('export/import round-trip: equity positions and bond holdings survive with remapped IDs', () => {
