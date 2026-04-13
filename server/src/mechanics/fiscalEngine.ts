@@ -16,13 +16,21 @@
  *  - All quality scores: decay by decayRate per iteration when no spending occurs
  *  - All quality scores clamped to [0, 100]
  */
-import type { BudgetAllocation, EconomyConfig, PublicGoodsState } from '@policylab/shared';
+import type { BudgetAllocation, EconomyConfig, PublicGoodsState, TaxPolicy } from '@policylab/shared';
+import { computeWithholding } from '../orchestration/helpers/taxWithholding.js';
 
 // ── Income Tax types ─────────────────────────────────────────────────────────
 
 export interface TaxInput {
   agentIncomes: Array<{ agentId: string; income: number }>; // income earned this iteration (wages, enterprise revenue)
   taxRate: number; // from EconomyConfig.incomeTaxRate
+  /**
+   * Optional Phase-11 tax policy. When provided, computeIncomeTax delegates to
+   * computeWithholding('wage', policy) per agent so flat/progressive dispatch
+   * and per-rate clamping take effect. Falls back to `taxRate` if absent.
+   * @see Phase 11 D-12, D-13
+   */
+  taxPolicy?: TaxPolicy;
 }
 
 export interface TaxOutput {
@@ -33,24 +41,36 @@ export interface TaxOutput {
 
 /**
  * Compute income tax for all agents with positive income.
- * Flat rate applied to each agent's gross income. Zero/negative income is exempt.
- * Returns per-agent deductions and total treasury revenue.
+ *
+ * When `taxPolicy` is provided, delegates to `computeWithholding` so the flat /
+ * progressive dispatch and per-rate clamps in the Phase-11 helper apply. Legacy
+ * callers that pass only `taxRate` continue to get a simple flat calculation.
+ *
+ * Zero/negative income is exempt. Returns per-agent deductions and total treasury revenue.
  */
 export function computeIncomeTax(input: TaxInput): TaxOutput {
   const perAgentTax: Array<{ agentId: string; taxAmount: number }> = [];
   let totalRevenue = 0;
+  const usePolicy = input.taxPolicy !== undefined;
 
   for (const { agentId, income } of input.agentIncomes) {
-    if (income <= 0 || input.taxRate <= 0) continue;
-    const tax = income * input.taxRate;
+    if (income <= 0) continue;
+    const tax = usePolicy
+      ? computeWithholding(income, 'wage', input.taxPolicy)
+      : (input.taxRate > 0 ? income * input.taxRate : 0);
+    if (tax <= 0) continue;
     perAgentTax.push({ agentId, taxAmount: tax });
     totalRevenue += tax;
   }
 
+  const rateLabel = usePolicy
+    ? `${input.taxPolicy!.kind} taxPolicy`
+    : `${(input.taxRate * 100).toFixed(1)}% rate`;
+
   return {
     totalRevenue,
     perAgentTax,
-    trace: [`[FISCAL] Income tax collected: ${totalRevenue.toFixed(2)} from ${perAgentTax.length} agents at ${(input.taxRate * 100).toFixed(1)}% rate`],
+    trace: [`[FISCAL] Income tax collected: ${totalRevenue.toFixed(2)} from ${perAgentTax.length} agents at ${rateLabel}`],
   };
 }
 
