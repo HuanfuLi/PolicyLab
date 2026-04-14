@@ -223,7 +223,7 @@ Plans:
 **Goal:** Simulation outcomes reflect policy trade-offs rather than defaulting to improvement. Cortisol and happiness become signals shaped by macro conditions (inflation surprise, inequality, unemployment, public-goods quality, peer deaths) rather than per-action rewards. Infrastructure/education/defense fiscal spending parks in escrow instead of leaking to agents as de-facto UBI. Taxes withhold at every fiat-bearing event (wages, AMM trades, capital gains, bonds). Central Agent chooses flat-or-progressive taxPolicy at design. Users can disable governance for clean A/B policy comparison; governance can amend law text paragraph-by-paragraph. SFC drift is observable per subsystem so future leaks localize instantly.
 **Requirements**: D-01 through D-23 (see 11-CONTEXT.md)
 **Depends on:** Phase 10
-**Plans:** 9/15 plans executed (10 original + 5 gap-closure)
+**Plans:** 10/15 plans executed
 
 Plans:
 - [x] 11-01-PLAN.md — Wave 0: shared types, physicsConfig coefficients, sfcAudit extension, 14 test scaffolds
@@ -238,6 +238,6 @@ Plans:
 - [ ] 11-10-PLAN.md — Wave 6: VALIDATION.md sign-off + human-approved smoke run vs US baseline
 - [ ] 11-GC1-PLAN.md — Gap closure Wave 1: physics SFC leak (shortfall ledger + order-book ghost guards + bank exclusion) (G1)
 - [ ] 11-GC2-PLAN.md — Gap closure Wave 1: groupResolution prompt bloat fix (trace reset + 8KB cap) (G2)
-- [ ] 11-GC3-PLAN.md — Gap closure Wave 1: bootstrap taxPolicy heuristic recalibration + locationProfile invariant (G3)
+- [x] 11-GC3-PLAN.md — Gap closure Wave 1: bootstrap taxPolicy heuristic recalibration + locationProfile invariant (G3)
 - [ ] 11-GC4-PLAN.md — Gap closure Wave 2: editable TaxPolicyEditor + server-side validateTaxPolicy (G4)
 - [ ] 11-GC5-PLAN.md — Gap closure Wave 3: consolidated verification + live smoke test sign-off
