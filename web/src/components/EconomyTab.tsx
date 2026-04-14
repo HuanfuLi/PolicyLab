@@ -445,10 +445,21 @@ export default function EconomyTab({
             inflationEnabled: 'Inflation',
           };
           const enabled = !!(economyConfig[flag]);
+          // Phase 11 D-15: flipping fiscalEnabled false→true requires a
+          // budgetAllocation in the same request. saveBudgetAllocation bundles
+          // both; the other three flags have no such guard.
+          const handleToggle = () => {
+            const nextEnabled = !enabled;
+            if (flag === 'fiscalEnabled' && nextEnabled) {
+              onBudgetChange(budgetAllocation);
+            } else {
+              onConfigChange({ [flag]: nextEnabled } as Partial<EconomyConfig>);
+            }
+          };
           return (
             <button
               key={flag}
-              onClick={() => onConfigChange({ [flag]: !enabled } as Partial<EconomyConfig>)}
+              onClick={handleToggle}
               style={{
                 padding: '0.3rem 0.75rem',
                 borderRadius: '999px',
