@@ -197,7 +197,7 @@ export async function runReflection(sessionId: string): Promise<void> {
     const avgStat = (key: keyof Agent['currentStats']) =>
       aliveAgents.length === 0
         ? 0
-        : Math.round(aliveAgents.reduce((s, a) => s + a.currentStats[key], 0) / aliveAgents.length);
+        : Math.round(aliveAgents.reduce((s, a) => s + (a.currentStats[key] ?? 0), 0) / aliveAgents.length);
 
     const evalMessages = buildEvaluationPrompt(
       session,

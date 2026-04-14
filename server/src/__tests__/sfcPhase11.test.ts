@@ -25,6 +25,7 @@
  *   - Overall drift ≤ 0.1 on a clean run (D-22, D-23)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { MockInstance } from 'vitest';
 import type {
   TaxPolicy,
   PublicGoodsEscrow,
@@ -131,10 +132,10 @@ describe('Phase 11 SFC integration', () => {
   });
 
   describe('drift reporting threshold (D-22, D-23)', () => {
-    let errorSpy: ReturnType<typeof vi.spyOn>;
+    let errorSpy: MockInstance<any, any>;
 
     beforeEach(() => {
-      errorSpy = vi.spyOn(console, 'error').mockImplementation((() => {}) as never);
+      errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     });
 
     afterEach(() => {
