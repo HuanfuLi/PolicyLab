@@ -1325,6 +1325,10 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // (per planner discretion in 11-07-PLAN.md §Task 2 step 4); a future phase
       // can split them with intermediate snapshots if drift localizes here.
       const physicsBefore = snapshotTotal();
+      // Phase 11 GC1 H3: accumulate shortfalls when clampWealth floors a negative raw balance.
+      // Flushed to treasury before the physicsActions bracket closes so snapshotTotal()
+      // sees the credit — net drift inside the bracket is zero.
+      let physicsUnderflowPool = 0;
 
       // ── Ghost Enterprise Cleanup: dissolve enterprises whose owner died in a prior iteration ──
       // weekStateMap only contains alive agents; if an owner is absent, they are dead.
@@ -1608,6 +1612,21 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       for (const trade of trades) {
         const buyerState = weekStateMap.get(trade.buyerId);
         const sellerState = weekStateMap.get(trade.sellerId);
+        const isSystemNpcBuyer = trade.buyerId === 'SYSTEM_NPC';
+
+        // Phase 11 GC1 H2: void trade when H2 condition — sellerId absent from weekStateMap.
+        // Without this guard, buyer is debited and seller side silently creates no credit → negative leak.
+        if (!sellerState) {
+          appendTrace(sessionId, `[ORDER-BOOK-SKIP] Ghost seller ${trade.sellerId} — trade voided`);
+          continue;
+        }
+        // Phase 11 GC1 H1: void trade when H1 condition — buyerId absent and not SYSTEM_NPC.
+        // Without this guard, seller is credited without buyer debit → positive leak (sign-mirror of H2).
+        if (!buyerState && !isSystemNpcBuyer) {
+          appendTrace(sessionId, `[ORDER-BOOK-SKIP] Ghost buyer ${trade.buyerId} — trade voided`);
+          continue;
+        }
+
         const basePrice = trade.executionPrice * trade.quantity;
         if (buyerState) {
           // Phase 11 D-12/D-14: VAT added on top of base price. Buyer pays
@@ -2235,7 +2254,12 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         const agentIntent = intentMap.get(agent.id);
         const weekState = weekStateMap.get(agent.id)!;
 
-        let newWealth = clampWealth(agent.currentStats.wealth + r4(weekState.wealthDelta));
+        const raw = agent.currentStats.wealth + r4(weekState.wealthDelta);
+        if (raw < 0) {
+          physicsUnderflowPool += -raw;
+          appendTrace(sessionId, `[PHYSICS-UNDERFLOW] agent=${agent.id} overdrawn by ${(-raw).toFixed(2)} fiat — routed to treasury`);
+        }
+        let newWealth = clampWealth(raw);
         let newHealth = clampStat(agent.currentStats.health + weekState.healthDelta);
         // Phase 11 D-03 / D-08: happiness clamped to [5, 95]; cortisol clamped to [3, 95] at commit.
         // Subsumes 10-GC3's cortisol floor intent via physicsConfig.cortisolFloor.
@@ -2452,6 +2476,12 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           const treasury = sessionStateTreasury.get(sessionId) ?? 0;
           sessionStateTreasury.set(sessionId, treasury + seizedWealthPool);
         }
+      }
+
+      // Phase 11 GC1 H3: flush underflow pool to treasury BEFORE the physicsActions
+      // bracket closes so snapshotTotal() captures the treasury credit and net drift = 0.
+      if (physicsUnderflowPool > 0) {
+        sessionStateTreasury.set(sessionId, (sessionStateTreasury.get(sessionId) ?? 0) + physicsUnderflowPool);
       }
 
       // Phase 11 D-20/D-21: snapshot after the physics action resolution block

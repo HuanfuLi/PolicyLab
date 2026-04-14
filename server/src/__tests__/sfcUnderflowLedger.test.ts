@@ -120,16 +120,13 @@ describe('physicsActions bracket: shortfall ledger (H3 — clampWealth underflow
     // Agent starts with 50 fiat, incurs wealthDelta of -80 (e.g. MET auto-buy + VAT cascade).
     // Shortfall = max(0, -(50 + (-80))) = max(0, 30) = 30.
     // After fix: treasury receives 30, agent wealth = 0.
-    // Before fix: treasury receives 0, agent wealth = 0 — 30 fiat destroyed.
     const agent = makeAgent('a1', 50);
 
-    // Call the CURRENT buggy path
-    commitWealthsLegacy([{ agent, wealthDelta: -80 }], SESSION_ID);
+    commitWealthsWithShortfallLedger([{ agent, wealthDelta: -80 }], SESSION_ID);
 
     const finalTreasury = sessionStateTreasury.get(SESSION_ID) ?? 0;
-    // EXPECTED after fix: treasury received 30 (the shortfall)
-    // ACTUAL (buggy): treasury received 0 — fiat destroyed
-    expect(finalTreasury).toBeCloseTo(30, 2); // FAILS until Patch A
+    // After Patch A: treasury received 30 (the shortfall)
+    expect(finalTreasury).toBeCloseTo(30, 2);
   });
 
   it('batch of 3 overdrawn agents: all shortfalls routed to treasury (H3)', () => {
@@ -144,12 +141,11 @@ describe('physicsActions bracket: shortfall ledger (H3 — clampWealth underflow
       { agent: makeAgent('a3', 25), wealthDelta: -55 },
     ];
 
-    commitWealthsLegacy(agentsWithDeltas, SESSION_ID);
+    commitWealthsWithShortfallLedger(agentsWithDeltas, SESSION_ID);
 
     const finalTreasury = sessionStateTreasury.get(SESSION_ID) ?? 0;
-    // EXPECTED after fix: treasury receives 60 fiat
-    // ACTUAL (buggy): treasury receives 0 fiat
-    expect(finalTreasury).toBeCloseTo(60, 2); // FAILS until Patch A
+    // After Patch A: treasury receives 60 fiat
+    expect(finalTreasury).toBeCloseTo(60, 2);
   });
 
   it('agents who finish positive are not charged against the underflow pool (H3)', () => {
@@ -159,7 +155,7 @@ describe('physicsActions bracket: shortfall ledger (H3 — clampWealth underflow
     const agentA = makeAgent('a1', 20);
     const agentB = makeAgent('a2', 200);
 
-    commitWealthsLegacy(
+    const { newWealths } = commitWealthsWithShortfallLedger(
       [
         { agent: agentA, wealthDelta: -50 },
         { agent: agentB, wealthDelta: -100 },
@@ -167,9 +163,15 @@ describe('physicsActions bracket: shortfall ledger (H3 — clampWealth underflow
       SESSION_ID,
     );
 
-    // Treasury received exactly 30 (agentA's shortfall only) — FAILS until Patch A
+    const wealthA = newWealths.get('a1')!;
+    const wealthB = newWealths.get('a2')!;
+    // Agent A clamped to 0
+    expect(wealthA).toBe(0);
+    // Agent B retains full positive balance — not charged for agentA's shortfall
+    expect(wealthB).toBeCloseTo(100, 2);
+    // Treasury received exactly 30 (agentA's shortfall only, not agentB's 100)
     const finalTreasury = sessionStateTreasury.get(SESSION_ID) ?? 0;
-    expect(finalTreasury).toBeCloseTo(30, 2); // FAILS until Patch A
+    expect(finalTreasury).toBeCloseTo(30, 2);
   });
 
   it('fixed shortfall ledger: treasury receives exact shortfall amount (Patch A confirmation)', () => {
