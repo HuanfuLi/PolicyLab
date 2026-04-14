@@ -460,7 +460,7 @@ Rules:
   const metricsSnippet = iterationMetrics
     ? `\n[SYSTEM METRICS — last iteration]\n${iterationMetrics}\n` : '';
   const physicsLogSnippet = physicsLog
-    ? `\n[PHYSICS LOG — exact mechanical outcomes last iteration]\nYour narrative MUST be consistent with these numbers — do not invent different values.\n${physicsLog}\n` : '';
+    ? `\n[PHYSICS LOG — exact mechanical outcomes last iteration]\nYour narrative MUST be consistent with these numbers — do not invent different values.\n${physicsLog.slice(-8000)}\n` : '';
   const dynamicSuffix = `Iteration ${iterationNumber}. Sub-group of ${groupAgents.length} agents.
 ${previousSummary ? `\nPrevious iteration summary:\n${previousSummary.slice(0, 400)}` : ''}
 ${physicsLogSnippet}${metricsSnippet}
