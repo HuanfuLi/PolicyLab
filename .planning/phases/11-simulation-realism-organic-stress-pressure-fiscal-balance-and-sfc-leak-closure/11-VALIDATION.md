@@ -1,25 +1,30 @@
 ---
 phase: 11
 slug: simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure
-status: gaps_found
+status: passed
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-04-13
 updated: 2026-04-13
-smoke_test_result: failed
-smoke_test_findings:
+smoke_test_result: passed
+gap_closure_completed: true
+smoke_test_findings_closed:
   - id: G1
     severity: critical
     summary: "Physics subsystem SFC leak detected in live LLM run (iter 1, -2655.17 fiat drift) despite all 104 SFC unit tests passing. Breaks D-20/D-21/D-22 phase goal."
+    closed_by: "11-GC1 — physicsUnderflowPool shortfall ledger, ghost-side order book guards (H1/H2), bank-type exclusion in sfcAudit"
   - id: G2
     severity: high
     summary: "LLM context size exceeded (400) on groupResolution cluster calls with 20k-window local model. May be Phase 11-caused (drift telemetry/prompt bloat) or pre-existing; blocks further smoke testing either way."
+    closed_by: "11-GC2 — per-iteration physicsLog capture-then-reset, 8KB hard cap at prompt boundary for buildGroupResolutionMessages and buildResolutionPrompt"
   - id: G3
     severity: medium
     summary: "Central Agent chose flat taxPolicy for US bootstrap instead of expected progressive; threshold heuristic (GDPpc>25k && govExp>30%) may be too strict, or LLM is free-choosing flat."
+    closed_by: "11-GC3 — composite welfare-state gate (govExpensePct>18 || taxRevenuePct>15 || govDebtPct>60) + bootstrap route invariant assertion"
   - id: G4
     severity: medium
     summary: "User-requested scope extension: TaxPolicyReadout should be editable (currently read-only per UI-SPEC)."
+    closed_by: "11-GC4 — TaxPolicyEditor component replacing TaxPolicyReadout; server-side validateTaxPolicy; editor disabled-state post-sim lock"
 deferred_to_followup:
   - "China bootstrap: all agents use PRODUCE_AND_SELL instead of WORK (agent role/action distribution; out of Phase 11 SFC/stress/governance scope)"
   - "Duplicated agent names in roster (logged in deferred-items.md)"
@@ -91,7 +96,7 @@ All 23 Phase-11 decisions are traced to at least one automated test above:
 - **D-10 (welfare-only distribution):** sfcEscrow, sfcPhase11 umbrella
 - **D-11 (public goods escrow in M0):** sfcEscrow, sfcPhase11 umbrella
 - **D-12 (extended tax base):** sfcTaxation, sfcPhase11 umbrella
-- **D-13 (Central-Agent taxPolicy):** centralAgentTaxPolicy, sfcPhase11 umbrella
+- **D-13 — Central Agent selects taxPolicy at design stage — 11-05 (prompt schema + validator) + 11-GC3 (heuristic recalibration + locationProfile invariant):** centralAgentTaxPolicy, sfcPhase11 umbrella, bootstrapTaxPolicyFixtures
 - **D-14 (inline tax withholding):** sfcTaxation, sfcPhase11 umbrella
 - **D-15 (fiscal_budgets startup assertion):** fiscalBudgetAssertion
 - **D-16 (franchise sizing unchanged):** *no test — intentional; franchise mechanic confirmed complete pre-Phase-11*
@@ -150,3 +155,56 @@ Full `npm run test -w server` result after Plan 11-10 umbrella consolidation:
   - `server/src/mechanics/__tests__/banking.test.ts` — 1 failure on `canIssueLoan(0, 0, 0, 0.10)` (stale test vs. logic change)
 - **New in Plan 11-10:** +11 umbrella tests in `sfcPhase11.test.ts` — all green
 - **Phase-11-owned tests:** 100% green (cortisolStrip, happinessStrip, structuralPressures, physicsConfig.thresholds, sfcEscrow, sfcTaxation, centralAgentTaxPolicy, fiscalBudgetAssertion, governanceToggle, governanceAmendment, sfcSubsystemDrift, statClamping, sfcPhase11 umbrella)
+
+### Gap-Closure Cycle Baseline (at 11-GC5 verification — 2026-04-13)
+
+Full `npm run test -w server` result after GC1-GC5 gap closure cycle:
+
+- **Test Files:** 47 (45 passed, 2 pre-existing failures — unchanged)
+- **Tests:** 524 (519 passed, 5 pre-existing failures — unchanged)
+- **GC-cycle new test files (+6 files, +34 tests — all green):**
+  - `server/src/__tests__/sfcUnderflowLedger.test.ts` — GC1: H3 shortfall ledger (4 tests)
+  - `server/src/__tests__/orderBookGhostGuards.test.ts` — GC1: H1+H2 ghost-side guards (5 tests)
+  - `server/src/__tests__/sfcAuditBankExclusion.test.ts` — GC1: H6 bank filter (3 tests)
+  - `server/src/__tests__/groupResolutionPromptSize.test.ts` — GC2: prompt-size regression (3 tests)
+  - `server/src/__tests__/bootstrapTaxPolicyFixtures.test.ts` — GC3: 7-country fixtures + invariant (8 tests)
+  - `server/src/__tests__/putConfigTaxPolicyValidation.test.ts` — GC4: PUT /config validation (10 tests)
+- **Pre-existing failures:** unchanged (economyConfig: 4, banking: 1 — documented in deferred-items.md)
+- **GC plan commits:**
+  - GC1: physics shortfall ledger + ghost guards + bank exclusion
+  - GC2: per-iteration physicsLog reset + 8KB prompt cap
+  - GC3: composite welfare-state gate (govExpensePct>18||taxRevenuePct>15||govDebtPct>60) + bootstrap invariant
+  - GC4: TaxPolicyEditor component + server-side validateTaxPolicy + editor lock state
+  - GC5: static harness (gc5-static.sh, 24/24 criteria) + live US smoke test (a4bd4e0)
+
+---
+
+## Follow-up
+
+Items discovered during Phase 11 gap-closure cycle that are intentionally deferred. Not Phase 11 regressions.
+
+### bootstrapRoster batch spam
+
+Commit ad9df7d extracted roster enrichment with bisection retry in `bootstrapRoster.ts`. When running a
+20k-context-window local model, multi-agent batches are frequently undersized by the model, causing
+recursive bisection down to 1-agent calls. Server logs produce messages like:
+
+```
+[bootstrap] Batch N returned the wrong agent count; splitting X -> Y + Z
+...
+[bootstrap] Exactly 1 agents — cannot split further
+```
+
+This is expected behavior from the bisection algorithm under constrained context. Not a Phase 11
+regression (the WIP refactor predates Phase 11). Candidate follow-ups:
+- Adaptive batch size by provider context window (e.g., smaller initial batch for 20k models)
+- Shorter background-generation target (fewer characters per agent bio reduces token load per batch)
+
+### All-API badge label across Economy tab
+
+`source: 'api'` is set for every bootstrap-derived parameter regardless of whether the value came from
+the World Bank API or an LLM fallback heuristic. Badge colors (confidence level) are accurate, but the
+"API" label does not differentiate WB-fetched values from LLM-estimated ones. Candidate follow-up:
+- Audit the source-tracking pipeline in `dataBootstrapPipeline.ts` / `locationDataService.ts`
+- Introduce `source: 'llm'` tagging for heuristic-derived params (e.g., `taxPolicy`, `govBondCouponRate`
+  when WB data is unavailable or low-confidence)
