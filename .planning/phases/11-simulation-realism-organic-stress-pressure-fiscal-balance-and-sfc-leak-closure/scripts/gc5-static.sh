@@ -28,7 +28,10 @@ check_count() {
   local label="$1"; shift
   local expected="$1"; shift
   local actual
-  actual=$(grep -c "$@" 2>/dev/null || echo 0)
+  # grep -c exits 1 when count=0; the || echo 0 would then produce "0\n0".
+  # Suppress the exit-code only (|| true) — grep -c always prints the count on stdout.
+  actual=$(grep -c "$@" 2>/dev/null || true)
+  actual="${actual//[$'\n\r ']/}"  # strip any whitespace/newlines
   local status="FAIL"
   if [[ "$expected" == +* ]]; then
     local min="${expected#+}"
@@ -95,7 +98,7 @@ check_count "GC1: sfcAudit bank-type filter"                    "1"  "agent.type
 echo
 echo "--- 11-GC2 (context bloat) ---"
 check_count "GC2: per-iteration trace reset"                    "1"  "sessionLastPhysicsTraces.set(sessionId, '')" "server/src/orchestration/simulationRunner.ts"
-check_count "GC2: 8KB physicsLog slice"                         "1"  "physicsLog.slice(-8000)" "server/src/llm/prompts/central-agent.ts"
+check_count "GC2: 8KB physicsLog slice"                         "+1" "physicsLog.slice(-8000)" "server/src/llm/prompts/central-agent.ts"
 
 echo
 echo "--- 11-GC3 (taxPolicy heuristic) ---"
