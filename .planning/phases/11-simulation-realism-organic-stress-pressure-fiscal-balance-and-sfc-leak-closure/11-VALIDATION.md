@@ -1,7 +1,7 @@
 ---
 phase: 11
 slug: simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure
-status: passed
+status: approved
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-04-13
@@ -208,3 +208,27 @@ the World Bank API or an LLM fallback heuristic. Badge colors (confidence level)
 - Audit the source-tracking pipeline in `dataBootstrapPipeline.ts` / `locationDataService.ts`
 - Introduce `source: 'llm'` tagging for heuristic-derived params (e.g., `taxPolicy`, `govBondCouponRate`
   when WB data is unavailable or low-confidence)
+
+### Thread AbortSignal through LLM provider chat calls
+
+Commit `fa6eddc` (11-audit fixes for findings #1 and #3) closed the bootstrap concurrency race and
+blocked DB mutation after client disconnect, but it did NOT cancel in-flight LLM calls. When a
+bootstrap client disconnects mid-pipeline, `fetchLocationData` (WB HTTP fetches), `enrichRosterBatch`
+(LLM roster generation, potentially dozens of provider.chat calls), and `generateLaw` (another LLM
+call) all still run to completion before the `abortController.signal.aborted` check in the
+persistence gates short-circuits.
+
+Impact:
+- Wasted LLM tokens + API cost on abandoned sessions
+- Wasted wall-clock time on worker resources
+
+Candidate follow-up:
+- Extend `LLMProvider.chat(messages, options)` signature so `options.signal?: AbortSignal` is
+  honored by Anthropic / OpenAI / Gemini / Ollama adapters in `server/src/llm/providers/*`
+- Thread the bootstrap `abortController.signal` through `withRetry` and `retryWithHealing` into
+  every provider chat call inside `enrichRosterBatch` and the law-generation block in
+  `bootstrap.ts`
+- Similarly thread into `fetchLocationData` for the WB HTTP fetches (use `fetch(url, { signal })`)
+
+Scope: non-trivial — touches the LLM gateway contract. Defer until the gateway is otherwise being
+refactored, or a cost postmortem shows it is material.
