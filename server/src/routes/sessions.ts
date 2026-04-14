@@ -8,6 +8,7 @@ import * as fiscalRepo from '../db/repos/fiscalRepo.js';
 import { createScope } from '../db/sessionScope.js';
 import { simulationManager } from '../orchestration/simulationManager.js';
 import { assertPutConfigFiscalFlip } from '../orchestration/helpers/fiscalBudgetGuard.js';
+import { validateTaxPolicy } from '../mechanics/economyConfigUtils.js';
 import type { EconomyConfig } from '@policylab/shared';
 
 const router = Router();
@@ -402,8 +403,31 @@ router.put('/:id/config', async (req, res) => {
       if (body.readyForDesign !== undefined) updatedConfig.readyForDesign = body.readyForDesign;
       if (body.lockedVariables !== undefined) updatedConfig.lockedVariables = body.lockedVariables;
       if (body.economyConfig !== undefined) {
+        // Phase 11 GC4 / forensics-G3 §5: server-side taxPolicy validation.
+        // PUT path previously bypassed validateTaxPolicy (invoked only at bootstrap +
+        // creative-design paths); without this guard, malformed shapes from the UI (or
+        // a rogue client) would silently merge and corrupt session state.
+        const incoming = body.economyConfig as Record<string, unknown>;
+        if (incoming.taxPolicy !== undefined) {
+          const validated = validateTaxPolicy(incoming.taxPolicy);
+          // Reject if validator coerced the input (shape mismatch). We accept clamped
+          // values — validateTaxPolicy clamps rates to [0, 0.5] silently, which is a
+          // documented part of its total contract — but we refuse structural corruption
+          // (wrong kind, non-increasing brackets, non-object).
+          const looksCoerced =
+            (typeof incoming.taxPolicy !== 'object' || incoming.taxPolicy === null) ||
+            (incoming.taxPolicy as { kind?: string }).kind !== validated.kind ||
+            (validated.kind === 'progressive' && !Array.isArray((incoming.taxPolicy as { brackets?: unknown }).brackets));
+          if (looksCoerced) {
+            throw Object.assign(
+              new Error('Invalid taxPolicy shape — must be { kind: "flat"|"progressive", rates: {...}, brackets?: [{upto, rate}] with strictly-increasing upto }'),
+              { status: 400 }
+            );
+          }
+          incoming.taxPolicy = validated;
+        }
         const existingEconomy = (currentConfig.economyConfig ?? {}) as Record<string, unknown>;
-        updatedConfig.economyConfig = { ...existingEconomy, ...body.economyConfig };
+        updatedConfig.economyConfig = { ...existingEconomy, ...incoming };
       }
       // Persist budgetAllocation in session.config JSON so the frontend sees it on reload.
       // The authoritative copy is in fiscal_budgets table (read by simulation runner),
