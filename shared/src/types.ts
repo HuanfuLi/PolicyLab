@@ -1095,7 +1095,7 @@ export {
 export { distributeProRata } from './math.js';
 
 // ── Phase 7: Real-World Scenario Bootstrap ────────────────────────────────
-export type DataSource = 'api' | 'web' | 'llm';
+export type DataSource = 'api' | 'web' | 'llm' | 'user';
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
 export interface DataPoint<T = number> {
