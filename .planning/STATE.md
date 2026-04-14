@@ -271,6 +271,7 @@ Recent decisions affecting current work:
 - Phase 9 added: redesign prompts for all
 - Phase 10 added: Fix simulation realism — agent economic behavior, inflation response, narrative grounding
 - Phase 11 added: Simulation realism — organic stress pressure, fiscal balance, and SFC leak closure
+- Phase 12 added: Labor market realism — enterprise-demographic alignment, wage discovery, and subsistence fallback for PRODUCE_AND_SELL
 
 ### Pending Todos
 

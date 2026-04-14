@@ -241,3 +241,29 @@ Plans:
 - [x] 11-GC3-PLAN.md — Gap closure Wave 1: bootstrap taxPolicy heuristic recalibration + locationProfile invariant (G3)
 - [x] 11-GC4-PLAN.md — Gap closure Wave 2: editable TaxPolicyEditor + server-side validateTaxPolicy (G4)
 - [x] 11-GC5-PLAN.md — Gap closure Wave 3: consolidated verification + live smoke test sign-off
+
+### Phase 12: Labor market realism — enterprise-demographic alignment, wage discovery, and subsistence fallback for PRODUCE_AND_SELL
+
+**Goal:** Make paid employment the primary livelihood for citizen agents and PRODUCE_AND_SELL a genuine subsistence fallback for those who cannot find work. Three coupled deliverables: (1) demographic-aligned enterprise generation in both location and creative modes so every employable agent has at least one plausible employer; (2) a dynamic labor market where enterprises post wages that adjust per-iteration against applicant pressure, vacancy pressure, and P&L, bounded by marginal revenue product of labor, with agents using a reservation-wage anchor from last-period self-production; (3) PRODUCE_AND_SELL recalibrated (physics yield + AMM sell-price drag + prompt copy) so its net proceeds barely cover subsistence food cost and the LLM no longer treats it as an entrepreneurship shortcut.
+
+**Requirements**: L-01 through L-11 (see 12-CONTEXT.md)
+- L-01 — Location-mode enterprise generation matches WB sectorEmployment distribution
+- L-02 — Creative-mode Central Agent generates enterprises matching the designed society's sector breakdown
+- L-03 — Every employable citizen has at least one candidate employer after bootstrap (no starved-sector mismatch)
+- L-04 — Per-agent reservation wage = last-period PRODUCE_AND_SELL net proceeds
+- L-05 — Enterprises adjust posted wage each iteration from (applicants, vacancies, P&L)
+- L-06 — Wage upper bound enforced at marginal revenue product of labor
+- L-07 — PRODUCE_AND_SELL physics + AMM sell-price calibrated to subsistence-margin only
+- L-08 — Action-dictionary prompts rewritten (PRODUCE_AND_SELL subsistence framing; WORK_AT_ENTERPRISE with per-agent wage interpolated)
+- L-09 — APPLY_FOR_JOB auto-match from enterprises with open vacancies, wired into sim loop
+- L-10 — QUIT_JOB + reapply path so employed agents can migrate to higher-paying work
+- L-11 — Wage history + labor-market telemetry (avg posted wage, unemployment rate, reservation-wage distribution)
+
+**Depends on:** Phase 10 (enterprise engine, bootstrap enterprise generation), Phase 11 (structural pressures, fiscal, tax withholding through wages)
+
+**SFC invariant:** No monetary injection. All wage flows are transfers inside the perimeter (enterprise treasury ↔ worker wealth). Reservation-wage computation is read-only. Enterprise insolvency (Phase 10) handles enterprises that cannot pay.
+
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 12 to break down)
