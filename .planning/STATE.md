@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 11-GC1-PLAN.md
-last_updated: "2026-04-14T02:26:25.597Z"
+stopped_at: Completed 11-GC2-PLAN.md
+last_updated: "2026-04-14T02:32:26.969Z"
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 67
-  completed_plans: 59
+  completed_plans: 60
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 11 (simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure) — EXECUTING
-Plan: 3 of 15
+Plan: 4 of 15
 
 ## Performance Metrics
 
@@ -100,6 +100,7 @@ Plan: 3 of 15
 | Phase 11 P09 | ~2h | 3 tasks tasks | 7 files files |
 | Phase 11 PGC3 | 2 min | 2 tasks | 4 files |
 | Phase 11 PGC1 | 3 | 2 tasks | 5 files |
+| Phase 11 PGC2 | 3m28s | 2 tasks | 3 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -257,6 +258,9 @@ Recent decisions affecting current work:
 - [Phase 11]: GC1: physicsUnderflowPool shortfall ledger inside physicsActions bracket routes negative raw-wealth to treasury — net bracket drift = 0
 - [Phase 11]: GC1: H1/H2 ghost-side order-book guards use early-continue pattern — sellerState check first (H2/negative-leak), then buyerState check (H1/positive-leak), SYSTEM_NPC path preserved
 - [Phase 11]: GC1: sfcAudit.ts bank-type filter aligns code with JSDoc promise — single .filter() chain addition, no caller changes needed
+- [Phase 11]: GC2: capture-then-reset physicsLog buffer at iteration entry (simulationRunner.ts:978-982) restores per-iteration semantics broken by fdcd6ce
+- [Phase 11]: GC2: 8KB hard cap at prompt boundary for buildGroupResolutionMessages and buildResolutionPrompt — both physicsLog embeds now sliced, matching law/previousSummary/allIntentsBrief convention
+- [Phase 11]: GC2: Fix C (drop [TAX] appendTrace sites) intentionally NOT applied — tax-log visibility needed for G1 live debugging
 
 ### Roadmap Evolution
 
@@ -280,6 +284,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-14T02:26:25.593Z
-Stopped at: Completed 11-GC1-PLAN.md
+Last session: 2026-04-14T02:32:26.964Z
+Stopped at: Completed 11-GC2-PLAN.md
 Resume file: None
