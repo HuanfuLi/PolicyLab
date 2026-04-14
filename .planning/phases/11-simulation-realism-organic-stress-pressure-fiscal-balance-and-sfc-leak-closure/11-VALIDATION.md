@@ -1,10 +1,29 @@
 ---
 phase: 11
 slug: simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure
-status: approved
+status: gaps_found
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-04-13
+updated: 2026-04-13
+smoke_test_result: failed
+smoke_test_findings:
+  - id: G1
+    severity: critical
+    summary: "Physics subsystem SFC leak detected in live LLM run (iter 1, -2655.17 fiat drift) despite all 104 SFC unit tests passing. Breaks D-20/D-21/D-22 phase goal."
+  - id: G2
+    severity: high
+    summary: "LLM context size exceeded (400) on groupResolution cluster calls with 20k-window local model. May be Phase 11-caused (drift telemetry/prompt bloat) or pre-existing; blocks further smoke testing either way."
+  - id: G3
+    severity: medium
+    summary: "Central Agent chose flat taxPolicy for US bootstrap instead of expected progressive; threshold heuristic (GDPpc>25k && govExp>30%) may be too strict, or LLM is free-choosing flat."
+  - id: G4
+    severity: medium
+    summary: "User-requested scope extension: TaxPolicyReadout should be editable (currently read-only per UI-SPEC)."
+deferred_to_followup:
+  - "China bootstrap: all agents use PRODUCE_AND_SELL instead of WORK (agent role/action distribution; out of Phase 11 SFC/stress/governance scope)"
+  - "Duplicated agent names in roster (logged in deferred-items.md)"
+  - "All-Hanzi names on China bootstrap with no romanization (logged in deferred-items.md)"
 ---
 
 # Phase 11 — Validation Strategy
