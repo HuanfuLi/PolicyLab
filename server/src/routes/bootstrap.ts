@@ -120,11 +120,17 @@ router.post('/:id/bootstrap', async (req, res) => {
     if (!clientDisconnected) sendEvent({ type: 'heartbeat' });
   }, 10_000);
 
-  // Clean up heartbeat and concurrency guard if client disconnects mid-bootstrap
+  // Audit-finding-1/3 fix: the concurrency guard MUST live for the full
+  // pipeline lifetime (fetch → LLM → DB writes), not just the SSE connection.
+  // Use AbortController so persistence gates can short-circuit when the client
+  // leaves. Guard release happens in the finally clause below.
+  const abortController = new AbortController();
   req.on('close', () => {
     clientDisconnected = true;
+    abortController.abort();
     clearInterval(heartbeatInterval);
-    bootstrappingSessionIds.delete(id);
+    // NOTE: bootstrappingSessionIds.delete(id) is in the `finally` below so
+    // the guard is held until the async pipeline actually stops.
   });
 
   const now = () => new Date().toISOString();
@@ -483,6 +489,14 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
       });
     }
 
+    // Audit-finding-3 fix: do not mutate session state after the caller left.
+    // Earlier aborts (before this point) still cost LLM work, but no DB writes
+    // will be persisted on an abandoned request.
+    if (abortController.signal.aborted) {
+      console.warn(`[bootstrap] Client disconnected before DB write — aborting persistence for session ${id}`);
+      return;
+    }
+
     // Fix B: Wrap delete + batch insert in a single transaction so a partial
     // batch failure never leaves the session with 0 agents.
     // Fix A (enterprise delete) is included here so re-running bootstrap
@@ -535,6 +549,12 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
       );
     }
 
+    // Audit-finding-3 fix: second gate right before the session-level update.
+    if (abortController.signal.aborted) {
+      console.warn(`[bootstrap] Client disconnected before session update — aborting persistence for session ${id}`);
+      return;
+    }
+
     // Atomic dual-write: session.config + fiscal_budgets + enterprises must all succeed
     // or none should — prevents inconsistency between session.config.budgetAllocation
     // (read by UI) and fiscal_budgets table (read by simulation runner).
@@ -557,16 +577,17 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
     // Send completion event
     sendEvent({ type: 'complete', message: `Bootstrap complete for ${location}` });
 
-    clearInterval(heartbeatInterval);
-    bootstrappingSessionIds.delete(id);
     res.end();
   } catch (err) {
-    clearInterval(heartbeatInterval);
-    bootstrappingSessionIds.delete(id);
     console.error('[bootstrap] Pipeline error:', err);
     const message = err instanceof Error ? err.message : String(err);
     sendEvent({ type: 'error', step: 'generation', message });
     res.end();
+  } finally {
+    // Audit-finding-1 fix: guard release happens here, not in req.on('close'),
+    // so a reconnect cannot race the still-running pipeline.
+    clearInterval(heartbeatInterval);
+    bootstrappingSessionIds.delete(id);
   }
 });
 
