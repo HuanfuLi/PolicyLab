@@ -217,6 +217,7 @@ From 11-UI-SPEC.md §Component Inventory (lines ~195-210): `TaxPolicyReadout` li
     - grep `Invalid taxPolicy shape` in server/src/routes/sessions.ts returns 1 match
     - grep `import.*validateTaxPolicy.*economyConfigUtils` in server/src/routes/sessions.ts returns 1 match
     - `npx vitest run server/src/__tests__/putConfigTaxPolicyValidation.test.ts` shows 5 passed, 0 failed
+    - `npx vitest run server/src/__tests__/sfcPhase11.test.ts` shows all passing (INFO-9 belt-and-suspenders — transitively covered by full suite but explicit for clarity)
     - `npm run test -w server` shows no new failures (≥ 506 passed, ≤ 5 pre-existing failures)
     - git log -3 --format=%s contains `test(11-GC4)` and `fix(11-GC4)`
   </acceptance_criteria>
@@ -357,6 +358,10 @@ From 11-UI-SPEC.md §Component Inventory (lines ~195-210): `TaxPolicyReadout` li
     - grep `opacity: 0.5` in web/src/components/TaxPolicyEditor.tsx returns 1 match (disabled state)
     - grep `TaxPolicyEditor` in .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-UI-SPEC.md returns ≥ 3 matches (section heading + inventory + interaction)
     - grep `#[0-9a-fA-F]\{3,6\}` in web/src/components/TaxPolicyEditor.tsx returns 0 matches (theme-token-only rule)
+    - **WARNING 5 — validation-logic grep acceptance (editor validates, not just exists):**
+      - grep `strictly increasing` in web/src/components/TaxPolicyEditor.tsx returns ≥ 1 match (non-increasing bracket error string present)
+      - grep `At least one bracket` in web/src/components/TaxPolicyEditor.tsx returns ≥ 1 match (empty-bracket error string present)
+      - grep -E `First bracket must start above zero|first bracket must start` web/src/components/TaxPolicyEditor.tsx returns ≥ 1 match (zero-upto error string present)
     - `npm run build -w web` exits 0
     - git log -2 --format=%s contains `feat(11-GC4)` and `docs(11-GC4)`
   </acceptance_criteria>

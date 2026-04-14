@@ -116,9 +116,10 @@ From forensics-G2-context-bloat.md §4 acceptance criterion:
       - Assert: `JSON.stringify(messages).length < 32_000` (≈ 8,000 tokens)
       - Assert: `messages[0].content[1].text.indexOf(physicsLog substring) !== -1 || messages[0].content.some(c => c.text?.includes('[PHYSICS LOG'))` — sanity check the embed still renders
 
-    Test 2: "steady-state prompt size is stable across iterations"
+    Test 2: "steady-state prompt size is stable AND within budget across iterations"
       - Build prompts for iter 2 and iter 5 with the same per-iteration trace volume
-      - Assert: `|len(iter5) - len(iter2)| / len(iter2) < 0.10` (within 10%)
+      - Assert (single conjunction): `len(iter2) <= 32000 AND len(iter5) <= 32000 AND |len(iter5) - len(iter2)| / len(iter2) < 0.10`
+      - All three clauses fail today (iter 2 already saturates at ~55KB with today's 50KB cap); all three pass post-fix.
 
     Test 3: "physicsLog embed is tail-sliced to 8KB max at the prompt boundary"
       - Build a prompt directly with a 40KB `physicsLog` argument
@@ -133,13 +134,13 @@ From forensics-G2-context-bloat.md §4 acceptance criterion:
     - In `beforeEach`, clear `sessionLastPhysicsTraces` to ensure clean state.
     - Test 1 should FAIL TODAY because:
       - Today's 50KB cap × 5 iterations worth of accumulation → prompt composes to ~55KB ≈ 13.8k tokens, well over the 32KB bound.
-    - Test 2 should FAIL TODAY because iter 2 is already at 50KB saturation so iter 5 is within 10% — actually this test will coincidentally PASS today by the forensics note ("iter 2 ≈ iter 5 ≈ 13,800 tokens because the cap is saturated"). Mark this test `it.todo` or rewrite it to instead require the iter 2 prompt to be ≤ 32KB (which will fail today). Prefer: assert BOTH iter2 ≤ 32KB AND iter5 ≤ 32KB — the conjunction fails today since iter 2 already saturates.
+    - Test 2 should FAIL TODAY because its conjunction requires BOTH iter2 ≤ 32KB AND iter5 ≤ 32KB AND stability-within-10%. Today iter 2 already saturates at ~55KB, so the ≤ 32KB clauses fail immediately. Post-fix all three clauses pass (iter 2 and iter 5 both ≤ 32KB, within 10% of each other).
     - Test 3 will fail today because the physicsLog embed has no slice.
 
     **Commit message:** `test(11-GC2): add failing prompt-size regression tests for groupResolution`
 
     **Run after writing:** `npx vitest run server/src/__tests__/groupResolutionPromptSize.test.ts`
-    Expected: at least tests 1 and 3 FAIL (RED).
+    Expected: all three tests FAIL (RED) — tests 1 and 2 fail on the 32KB bound; test 3 fails because no slice is applied.
   </action>
   <verify>
     <automated>npx vitest run server/src/__tests__/groupResolutionPromptSize.test.ts 2>&1 | grep -E "FAIL|failed"</automated>

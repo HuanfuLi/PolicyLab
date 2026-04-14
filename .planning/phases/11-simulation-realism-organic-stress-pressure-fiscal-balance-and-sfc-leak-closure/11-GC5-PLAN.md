@@ -7,6 +7,7 @@ depends_on: [GC1, GC2, GC3, GC4]
 files_modified:
   - .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-VALIDATION.md
   - .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC5-VERIFICATION.md
+  - .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/scripts/gc5-static.sh
 autonomous: false
 gap_closure: true
 requirements: [D-20, D-21, D-22, D-13, GC-01, GC-02]
@@ -82,10 +83,11 @@ Output: VERIFICATION.md with a checklist-style table + raw evidence excerpts; 11
 <tasks>
 
 <task type="auto">
-  <name>Task 1: Run full server suite + grep-verify all gap-closure acceptance criteria</name>
-  <files>.planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC5-VERIFICATION.md</files>
+  <name>Task 1a: Run GC5 static harness — execute every grep acceptance criterion, write results into VERIFICATION.md</name>
+  <files>.planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC5-VERIFICATION.md, .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/scripts/gc5-static.sh</files>
   <read_first>
-    - .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC1-PLAN.md (acceptance_criteria section)
+    - .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/scripts/gc5-static.sh (the prebuilt harness — confirm it exists and is executable)
+    - .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC1-PLAN.md (acceptance_criteria section — cross-reference vs harness coverage)
     - .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC2-PLAN.md (acceptance_criteria section)
     - .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC3-PLAN.md (acceptance_criteria section)
     - .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC4-PLAN.md (acceptance_criteria section)
@@ -95,7 +97,8 @@ Output: VERIFICATION.md with a checklist-style table + raw evidence excerpts; 11
     - .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC4-SUMMARY.md
   </read_first>
   <action>
-    Create `.planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC5-VERIFICATION.md` with this structure:
+    **Step 1 — Create the verification file with sections §1, §3, §4 (the harness will populate §2).**
+    Write `.planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC5-VERIFICATION.md` with this frame:
 
     ```markdown
     ---
@@ -108,7 +111,7 @@ Output: VERIFICATION.md with a checklist-style table + raw evidence excerpts; 11
 
     # Phase 11 Gap Closure — Verification Report
 
-    ## 1. Test Suite Summary
+    ## §1 Test Suite Summary
 
     | Suite | Pre-GC Baseline | Post-GC5 | Status |
     |-------|-----------------|----------|--------|
@@ -117,78 +120,76 @@ Output: VERIFICATION.md with a checklist-style table + raw evidence excerpts; 11
     | Full suite | 485/498 | {actual} | ✅ / ❌ |
     | TypeScript (`tsc --noEmit -p server/tsconfig.json`) | 3 errors (pre-existing) | {actual} | ✅ flat / ❌ new errors |
 
-    ## 2. Automated Acceptance Criteria — Per-Plan
+    <!-- §2 is populated by scripts/gc5-static.sh --write-verification -->
 
-    ### 11-GC1 (physics SFC leak)
-    - [ ] `grep physicsUnderflowPool server/src/orchestration/simulationRunner.ts`: 3+ matches
-    - [ ] `grep '\[PHYSICS-UNDERFLOW\]' server/src/orchestration/simulationRunner.ts`: 1 match
-    - [ ] `grep ORDER-BOOK-SKIP server/src/orchestration/simulationRunner.ts`: 2 matches
-    - [ ] `grep "agent.type !== 'bank'" server/src/orchestration/helpers/sfcAudit.ts`: 1 match
-    - [ ] `npx vitest run server/src/__tests__/sfcUnderflowLedger.test.ts server/src/__tests__/orderBookGhostGuards.test.ts server/src/__tests__/sfcAuditBankExclusion.test.ts`: 8 passed / 0 failed
-
-    ### 11-GC2 (context bloat)
-    - [ ] `grep "sessionLastPhysicsTraces.set(sessionId, '')" server/src/orchestration/simulationRunner.ts`: 1 match
-    - [ ] `grep "physicsLog.slice(-8000)" server/src/llm/prompts/central-agent.ts`: 1 match
-    - [ ] `npx vitest run server/src/__tests__/groupResolutionPromptSize.test.ts`: all passed
-
-    ### 11-GC3 (taxPolicy heuristic)
-    - [ ] `grep "govExpensePct > 18" server/src/data/dataBootstrapPipeline.ts`: 1 match
-    - [ ] `grep "govExpensePct > 30" server/src/data/dataBootstrapPipeline.ts`: 0 matches
-    - [ ] `grep "Bootstrap invariant violation" server/src/routes/bootstrap.ts`: 1 match
-    - [ ] `npx vitest run server/src/__tests__/bootstrapTaxPolicyFixtures.test.ts`: 8 passed / 0 failed
-
-    ### 11-GC4 (editable TaxPolicy)
-    - [ ] `grep "export function TaxPolicyEditor" web/src/components/TaxPolicyEditor.tsx`: 1 match
-    - [ ] `grep TaxPolicyReadout web/src/components/EconomyTab.tsx`: 0 matches (old component removed)
-    - [ ] `grep "validateTaxPolicy(incoming.taxPolicy)" server/src/routes/sessions.ts`: 1 match
-    - [ ] `grep "#[0-9a-fA-F]\{3,6\}" web/src/components/TaxPolicyEditor.tsx`: 0 matches (theme-token-only)
-    - [ ] `npm run build -w web`: exits 0
-    - [ ] `npx vitest run server/src/__tests__/putConfigTaxPolicyValidation.test.ts`: 5 passed / 0 failed
-
-    ## 3. Live Smoke Test (populated in Task 2)
+    ## §3 Live Smoke Test (populated in Task 2)
     _See Task 2 output._
 
-    ## 4. Sign-Off
+    ## §4 Sign-Off
 
-    - [ ] All static grep criteria ✅
+    - [ ] All static grep criteria pass (harness exits 0; §2 has zero ❌ and zero unchecked ⬜)
     - [ ] Full test suite green (no new regressions)
     - [ ] Live smoke test: 5 iterations completed with |sfcDrift| ≤ 0.1 per iter
     - [ ] [TAX] trace sites fire in physics log
     - [ ] TaxPolicyEditor end-to-end manually verified
     ```
 
-    **Execute all grep checks and full test suite NOW**. For each item on the checklist, run the command and record ✅/❌ in the VERIFICATION.md. If any criterion fails, STOP and report the failure — do not proceed to Task 2 until all static checks pass.
+    **Step 2 — Fill §1 with actual results.** Run (commands, not one-liner — capture each output verbatim):
+    - `npm run test -w server` → record full-suite pass/fail counts into the §1 table
+    - `npx tsc --noEmit -p server/tsconfig.json` → record error count
+    - `npm run build -w web` → confirm exit 0 (no cell needed; §2 harness covers the grep side)
 
-    **Commands to run:**
+    **Step 3 — Run the static harness with --write-verification. This APPENDS §2 with per-criterion checkbox lines.**
     ```bash
-    # Full server suite
-    npm run test -w server
-
-    # TypeScript
-    npx tsc --noEmit -p server/tsconfig.json
-
-    # Web build
-    npm run build -w web
-
-    # All individual grep acceptance criteria from each GC plan (see list above)
+    bash .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/scripts/gc5-static.sh --write-verification
     ```
+    The harness exits non-zero if ANY criterion fails. If it fails, STOP — the gap is not actually closed; diagnose and loop back to GC1/GC2/GC3/GC4.
 
-    Record each result verbatim into the VERIFICATION.md checklist (exact pass/fail, actual test counts, any unexpected output).
-
-    **Commit message:** `docs(11-GC5): static verification report — all GC plan acceptance criteria ✅`
+    **Commit message:** `docs(11-GC5): run static harness — all acceptance criteria ✅`
   </action>
   <verify>
-    <automated>npm run test -w server && npm run build -w web && npx tsc --noEmit -p server/tsconfig.json</automated>
+    <automated>bash .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/scripts/gc5-static.sh --write-verification && npm run test -w server && npm run build -w web && npx tsc --noEmit -p server/tsconfig.json</automated>
   </verify>
   <acceptance_criteria>
     - File `.planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC5-VERIFICATION.md` exists
-    - grep `## 2. Automated Acceptance Criteria` in 11-GC5-VERIFICATION.md returns 1 match
-    - grep `✅` in 11-GC5-VERIFICATION.md returns ≥ 15 matches (all listed criteria checked)
+    - grep `## §2 Automated Acceptance Criteria — Harness Output` in 11-GC5-VERIFICATION.md returns 1 match (written by harness)
+    - grep `^- \[x\] ✅` in 11-GC5-VERIFICATION.md returns ≥ 24 matches (all harness checks pass)
+    - `bash .../scripts/gc5-static.sh` exits 0 (reported by the harness itself)
     - `npm run test -w server` exits 0
     - `npm run build -w web` exits 0
     - git log -1 --format=%s contains `docs(11-GC5)`
   </acceptance_criteria>
-  <done>All static/automated acceptance criteria from GC1-GC4 verified in a single report. Full test suite green. No web/tsc regressions.</done>
+  <done>VERIFICATION.md has §1 test-suite table filled, §2 harness block appended with ≥ 24 ✅ boxes and 0 ❌. Full test suite green. No web/tsc regressions. Harness script exited 0.</done>
+</task>
+
+<task type="auto">
+  <name>Task 1b: Assert harness output is fully-checked — zero unchecked or failed boxes allowed before committing Task 1</name>
+  <files>.planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC5-VERIFICATION.md</files>
+  <read_first>
+    - .planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC5-VERIFICATION.md (just populated in Task 1a)
+  </read_first>
+  <action>
+    **BLOCKER 1 gate.** This task exists so the `<automated>` check below genuinely forces every static criterion to PASS before the plan advances. Without this step, Task 1a's npm/build/tsc gates don't evaluate the 25+ grep criteria at all.
+
+    Assertion protocol:
+    - Every line in §2 must be `- [x] ✅ ...`
+    - Zero `- [ ] ❌ ...` lines (harness found a failing check)
+    - Zero `- [ ] ⬜ ...` or unchecked stragglers (unfilled manual boxes)
+
+    If any ❌ or ⬜ present, DO NOT PROCEED. Loop back to the failing GC plan, fix the underlying issue, re-run Task 1a.
+
+    **Commit message:** `docs(11-GC5): assert zero unchecked/failed static criteria`
+  </action>
+  <verify>
+    <automated>bash -c 'VERIF=.planning/phases/11-simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure/11-GC5-VERIFICATION.md; UNCHECKED=$(grep -c "^- \[ \] ⬜" "$VERIF" 2>/dev/null || echo 0); FAILED=$(grep -c "^- \[ \] ❌" "$VERIF" 2>/dev/null || echo 0); echo "unchecked=$UNCHECKED failed=$FAILED"; test "$UNCHECKED" = "0" && test "$FAILED" = "0"'</automated>
+  </verify>
+  <acceptance_criteria>
+    - `grep -c "^- \[ \] ⬜" 11-GC5-VERIFICATION.md` returns 0
+    - `grep -c "^- \[ \] ❌" 11-GC5-VERIFICATION.md` returns 0
+    - `grep -c "^- \[x\] ✅" 11-GC5-VERIFICATION.md` returns ≥ 24
+    - git log -1 --format=%s contains `docs(11-GC5)`
+  </acceptance_criteria>
+  <done>VERIFICATION.md §2 is 100% ✅ checked; no ❌ or ⬜ remain. BLOCKER-1 gate passed — the ≥ 15 matches requirement from the original checker feedback is now an ENFORCED assertion, not a passive count.</done>
 </task>
 
 <task type="checkpoint:human-verify" gate="blocking">
@@ -217,7 +218,7 @@ Output: VERIFICATION.md with a checklist-style table + raw evidence excerpts; 11
        - **Expected (G1):** Console does NOT print any `🚨 CRITICAL` SFC drift line on iter 1 through 5.
        - **Expected (G1):** Console DOES print `[SFC] iter=N total drift=±X.XXXX` with `|X.XXXX| ≤ 0.1` for every iteration (the subsystem breakdown may be non-zero inside but total stays bounded).
        - **Expected (G2):** Console does NOT print `Context size has been exceeded` on any `groupResolution` retry.
-       - **Expected (Phase-11 baseline):** [TAX] trace lines appear in the simulation's physics log (visible in dev console or via a query of sessionLastPhysicsTraces); cortisol/happiness are non-monotonic; wealth trajectory is non-monotonic (not uniformly +49% as in Results/session-united-states.json).
+       - **Expected (Phase-11 baseline — testable condition, WARNING-7 clarification):** [TAX] trace lines appear in the simulation's physics log (visible in dev console or via a query of sessionLastPhysicsTraces); at least 1 of iterations 2-5 shows agent-average wealth decrease OR cortisol increase of ≥ 5% vs the prior iteration (numeric proof that the simulation is no longer uniformly-utopian as in Results/session-united-states.json's +49% baseline). **This bullet is informational only** — the §4 Sign-off checklist does not depend on it; the blocking gates are |sfcDrift| ≤ 0.1 and zero context-size 400s.
 
     4. **Verify editor lock state.** Navigate back to Design Review after the simulation has advanced past iter 1. Confirm the TaxPolicyEditor now renders with `opacity: 0.5`, inputs are non-interactive, and hover shows "Locked after simulation starts."
 
@@ -281,6 +282,9 @@ Output: VERIFICATION.md with a checklist-style table + raw evidence excerpts; 11
     - Updated test count (expected 485 + N_GC additions)
     - Note that pre-existing failures unchanged
     - Commits referenced for each GC plan
+    - **WARNING 6 — D-13 dual attribution:** Locate the Decisions Coverage line/block for D-13 (originally green in VALIDATION.md with sole attribution to 11-05). Rewrite it VERBATIM as:
+      `D-13 — Central Agent selects taxPolicy at design stage — 11-05 (prompt schema + validator) + 11-GC3 (heuristic recalibration + locationProfile invariant)`
+      This removes the audit ambiguity where re-grepping "which plan implements D-13" would otherwise hit two plans with no clear successor.
 
     **Commit message:** `docs(11-GC5): verify gap closure complete — G1/G2/G3/G4 all passed live smoke test`
   </action>
@@ -292,6 +296,7 @@ Output: VERIFICATION.md with a checklist-style table + raw evidence excerpts; 11
     - grep `gap_closure_completed: true` in 11-VALIDATION.md returns 1 match
     - grep `Sign-off: APPROVED` in 11-GC5-VERIFICATION.md returns 1 match
     - The Per-iteration sfcDrift table in 11-GC5-VERIFICATION.md contains 5 data rows (iter 1-5) with numeric values, not placeholder `?.???`
+    - **WARNING 6 — D-13 dual attribution:** grep -E `D-13.*11-05.*11-GC3` in 11-VALIDATION.md returns ≥ 1 match (both plans cited on the same line)
     - git log -1 --format=%s contains `docs(11-GC5)`
   </acceptance_criteria>
   <done>VERIFICATION.md populated with live smoke-test evidence; VALIDATION.md flipped to passed; Phase 11 gap closure cycle closed.</done>
@@ -300,8 +305,12 @@ Output: VERIFICATION.md with a checklist-style table + raw evidence excerpts; 11
 </tasks>
 
 <verification>
+- `bash .planning/phases/11-.../scripts/gc5-static.sh`: exits 0 (every grep criterion PASS)
+- grep `^- \[ \] ❌` 11-GC5-VERIFICATION.md: 0 matches
+- grep `^- \[ \] ⬜` 11-GC5-VERIFICATION.md: 0 matches
 - grep `smoke_test_result: passed` 11-VALIDATION.md: 1 match
 - grep `Sign-off: APPROVED` 11-GC5-VERIFICATION.md: 1 match
+- grep -E `D-13.*11-05.*11-GC3` 11-VALIDATION.md: ≥ 1 match (WARNING 6 dual attribution)
 - Full npm run test -w server: no new regressions vs baseline
 - Live US bootstrap 5-iter smoke test: |sfcDrift| ≤ 0.1 per iter, no context-size 400s, progressive taxPolicy, editor works end-to-end
 </verification>
