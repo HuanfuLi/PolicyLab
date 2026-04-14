@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 11-GC3-PLAN.md
-last_updated: "2026-04-14T02:21:48.164Z"
+stopped_at: Completed 11-GC1-PLAN.md
+last_updated: "2026-04-14T02:26:25.597Z"
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 67
-  completed_plans: 58
+  completed_plans: 59
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 11 (simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure) — EXECUTING
-Plan: 2 of 15
+Plan: 3 of 15
 
 ## Performance Metrics
 
@@ -99,6 +99,7 @@ Plan: 2 of 15
 | Phase 11 P08 | 6 min | 2 tasks | 5 files |
 | Phase 11 P09 | ~2h | 3 tasks tasks | 7 files files |
 | Phase 11 PGC3 | 2 min | 2 tasks | 4 files |
+| Phase 11 PGC1 | 3 | 2 tasks | 5 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -253,6 +254,9 @@ Recent decisions affecting current work:
 - [Phase 11]: [Phase 11-09]: Two UAT findings deferred as out-of-scope — duplicate agent names and all-Hanzi names on China bootstrap — logged to deferred-items.md for a future roster-generation hardening phase, do not touch Phase 11 stress/fiscal/SFC contract surface
 - [Phase 11]: GC3: Composite welfare-state gate (govExpensePct>18 || taxRevenuePct>15 || govDebtPct>60) replaces single govExpensePct>30 threshold — calibrated against WB GC.XPN.TOTL.GD.ZS central-gov scale; catches US/DE/UK/JP progressive, excludes IN/BR/NG flat
 - [Phase 11]: GC3: Bootstrap route invariant asserts dataSources.taxPolicy === 'api' when locationProfile is set — throws before DB write to catch silent downstream mutations
+- [Phase 11]: GC1: physicsUnderflowPool shortfall ledger inside physicsActions bracket routes negative raw-wealth to treasury — net bracket drift = 0
+- [Phase 11]: GC1: H1/H2 ghost-side order-book guards use early-continue pattern — sellerState check first (H2/negative-leak), then buyerState check (H1/positive-leak), SYSTEM_NPC path preserved
+- [Phase 11]: GC1: sfcAudit.ts bank-type filter aligns code with JSDoc promise — single .filter() chain addition, no caller changes needed
 
 ### Roadmap Evolution
 
@@ -276,6 +280,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-14T02:21:48.160Z
-Stopped at: Completed 11-GC3-PLAN.md
+Last session: 2026-04-14T02:26:25.593Z
+Stopped at: Completed 11-GC1-PLAN.md
 Resume file: None
