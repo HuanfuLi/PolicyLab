@@ -26,12 +26,12 @@ import { getCachedLLMData, setCachedLLMData } from '../data/locationCache.js';
 import { getProvider } from '../llm/gateway.js';
 import { withRetry } from '../llm/retry.js';
 import {
-  buildLocationAgentRosterMessages,
   buildLocationLawMessages,
   buildScenarioInterpretationMessages,
 } from '../llm/prompts/index.js';
 import { parseJSON } from '../parsers/json.js';
 import { createScope } from '../db/sessionScope.js';
+import { enrichRosterBatch } from './bootstrapRoster.js';
 import type { BootstrapProgressEvent, LocationProfile, Stage } from '@policylab/shared';
 import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
 
@@ -319,46 +319,21 @@ router.post('/:id/bootstrap', async (req, res) => {
     let rosterEnrichmentFailed = false;
     let rosterEnrichmentError: string | undefined;
 
-    const rosterJsonSchema = {
-      name: 'agent_roster',
-      strict: true,
-      schema: {
-        type: 'object',
-        properties: {
-          agents: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
-                background: { type: 'string' },
-              },
-              required: ['name', 'background'],
-              additionalProperties: false,
-            },
-          },
-        },
-        required: ['agents'],
-        additionalProperties: false,
-      } as Record<string, unknown>,
-    };
-
     for (let batchStart = 0; batchStart < blueprints.length; batchStart += ROSTER_BATCH_SIZE) {
       const batchBlueprints = blueprints.slice(batchStart, batchStart + ROSTER_BATCH_SIZE);
       try {
-        const rosterRaw = await withRetry(() =>
-          provider.chat(
-            buildLocationAgentRosterMessages(profile, batchBlueprints, scenario),
-            { jsonSchema: rosterJsonSchema },
-          ));
-        const rosterData = parseJSON<{ agents: Array<{ name: string; background: string }> }>(rosterRaw);
-
-        if (Array.isArray(rosterData.agents)) {
-          for (let i = 0; i < Math.min(rosterData.agents.length, batchBlueprints.length); i++) {
-            const globalIdx = batchStart + i;
-            if (rosterData.agents[i].name) blueprints[globalIdx].name = rosterData.agents[i].name;
-            if (rosterData.agents[i].background) blueprints[globalIdx].background = rosterData.agents[i].background;
-          }
+        const enrichedAgents = await enrichRosterBatch({
+          provider,
+          profile,
+          batchBlueprints,
+          scenario,
+          batchStart,
+        });
+        for (let i = 0; i < batchBlueprints.length; i++) {
+          const entry = enrichedAgents[i];
+          const globalIdx = batchStart + i;
+          if (entry.name) blueprints[globalIdx].name = entry.name;
+          blueprints[globalIdx].background = entry.background;
         }
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);

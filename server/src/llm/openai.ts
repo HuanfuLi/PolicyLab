@@ -13,14 +13,27 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   async chat(messages: LLMMessage[], options: LLMOptions = {}): Promise<string> {
-    const response = await this.client.chat.completions.create({
+    const params: Record<string, unknown> = {
       model: options.model ?? this.defaultModel,
       max_completion_tokens: options.maxTokens ?? 65536,
       messages: messages.map(m => ({
         role: m.role as any,
         content: typeof m.content === 'string' ? m.content : m.content.map(b => b.text).join('\n'),
       })),
-    });
+    };
+
+    if (options.jsonSchema) {
+      params.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: options.jsonSchema.name,
+          strict: options.jsonSchema.strict ?? true,
+          schema: options.jsonSchema.schema,
+        },
+      };
+    }
+
+    const response = await this.client.chat.completions.create(params as any);
 
     const content = response.choices[0]?.message?.content ?? '';
     if (response.choices[0]?.finish_reason === 'length') {
