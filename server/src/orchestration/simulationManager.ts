@@ -42,7 +42,6 @@ export type SimulationEvent =
   | { type: 'simulation-complete'; finalReport: string }
   | { type: 'paused'; iteration: number }
   | { type: 'error'; message: string }
-  | { type: 'warning'; message: string }
   | { type: 'aborted-reset' };
 
 class SimulationManager {

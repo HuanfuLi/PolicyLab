@@ -788,6 +788,14 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           const ownedEnterprise = [...enterpriseRegistry.values()].find(enterprise => enterprise.ownerId === agent.id);
           const personalStatus = buildPersonalStatus(sessionId, agent.id, ownedEnterprise?.id, agent.currentStats.wealth);
           const inflationContext = iterInflationContext;
+          // Compute system-wide observed reserve ratio for the central-bank LLM.
+          // Previously reported reserveRequirement (policy target), which hid real
+          // banking-system health from the central bank's decisions.
+          const systemBankReserves = iterBankAgents.reduce((s, b) => s + b.currentStats.wealth, 0);
+          const systemTotalDeposits = iterBankingDeposits.reduce((s, d) => s + d.balance, 0);
+          const observedReserveRatio = systemTotalDeposits > 0
+            ? systemBankReserves / systemTotalDeposits
+            : 1;
           const centralBankContext = agent.role === 'central_bank' && iterInflationState
             ? {
                 cpi: iterInflationState.cpi,
@@ -795,7 +803,7 @@ export async function runSimulation(sessionId: string, totalIterations: number):
                 inflationExpectations: iterInflationState.inflationExpectations,
                 m1Current: iterLatestMacro?.m1 ?? 0,
                 m1GrowthRate: iterM1GrowthRate,
-                currentReserveRatio: iterEconomyConfig.reserveRequirement ?? DEFAULT_ECONOMY_CONFIG.reserveRequirement,
+                currentReserveRatio: observedReserveRatio,
                 currentBaseRate: iterEconomyConfig.baseLoanInterestRate ?? DEFAULT_ECONOMY_CONFIG.baseLoanInterestRate,
               }
             : undefined;

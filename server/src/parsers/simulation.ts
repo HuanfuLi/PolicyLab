@@ -64,25 +64,6 @@ export function parseAgentIntent(text: string): ParsedAgentIntent {
 }
 
 /**
- * Strict version of parseAgentIntent that throws on failure.
- * Used with retryWithHealing so the retry loop can detect failures and heal.
- */
-export function parseAgentIntentStrict(text: string): ParsedAgentIntent {
-  const raw = parseJSON<Record<string, unknown>>(text);
-  const intent = String(raw.intent ?? '').trim();
-  if (!intent) throw new Error('Missing or empty "intent" field');
-  const actionCode = normalizeActionCode(String(raw.actionCode ?? 'NONE'));
-  const actionTarget = raw.actionTarget ? String(raw.actionTarget) : null;
-  return {
-    intent,
-    reasoning: String(raw.reasoning ?? '').trim(),
-    actions: [{ actionCode, parameters: actionTarget ? { target: actionTarget } : {} }],
-    primaryActionCode: actionCode,
-    primaryActionTarget: actionTarget,
-  };
-}
-
-/**
  * Parse the single-pass structured JSON output from buildNaturalIntentPrompt.
  *
  * Expected schema:
