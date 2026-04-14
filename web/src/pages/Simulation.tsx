@@ -412,9 +412,9 @@ const Simulation = () => {
                       </span>
                     )}
                   </h4>
-                  <p style={{ fontSize: '0.95rem', lineHeight: 1.5, color: 'var(--text-main)' }}>
+                  <div style={{ fontSize: '0.95rem', lineHeight: 1.5, color: 'var(--text-main)' }}>
                     <MarkdownText>{entry.narrativeSummary}</MarkdownText>
-                  </p>
+                  </div>
                 </div>
               </div>
             ))}
