@@ -532,6 +532,17 @@ The title should be descriptive (e.g., "Brazil: Tariff Impact Simulation" or "De
       bootstrapSources: dataSources,
     };
 
+    // Phase 11 GC3 / forensics-G3 §4b: when bootstrap runs (locationProfile set),
+    // taxPolicy MUST be bootstrap-derived. Catches silent regressions where a
+    // downstream mutation (scenario LLM override, creative-mode collision) bypasses
+    // the derivation.
+    if (profile && dataSources['taxPolicy'] !== 'api') {
+      throw new Error(
+        `Bootstrap invariant violation: locationProfile is set but sources.taxPolicy='${dataSources['taxPolicy']}' (expected 'api'). ` +
+        `Check profileToEconomyConfig output and scenario-override guard (forensics-G3 §4c).`
+      );
+    }
+
     await db
       .update(sessions)
       .set({
