@@ -55,10 +55,10 @@ const errorStyle: React.CSSProperties = {
   marginTop: '4px',
 };
 
-/** Default bracket seeded when user adds a row */
+/** Default bracket seeded when user adds a row — rate stored in percent form (20 = 20%) */
 function nextBracketDefault(brackets: Array<{ upto: number; rate: number }>): { upto: number; rate: number } {
   const last = brackets[brackets.length - 1];
-  return { upto: last ? last.upto + 1000 : 1000, rate: 0.20 };
+  return { upto: last ? last.upto + 1000 : 1000, rate: 20 };
 }
 
 /** Validate bracket array: non-empty, strictly-increasing upto, first upto > 0 */
@@ -106,6 +106,9 @@ export function TaxPolicyEditor({
   const [rates, setRates] = useState(initialRates);
   const [brackets, setBrackets] = useState(initialBrackets);
   const [bracketError, setBracketError] = useState<string | null>(null);
+  // Local edit flag — the parent store does not persist bootstrapSources.taxPolicy,
+  // so the `source` prop never flips to 'user'. Track user edits here instead.
+  const [hasUserEdited, setHasUserEdited] = useState(false);
 
   // Sync form state when policy prop changes (e.g. scenario tab switch)
   useEffect(() => {
@@ -120,6 +123,7 @@ export function TaxPolicyEditor({
       [{ upto: 1000, rate: 10 }, { upto: 10000, rate: 20 }]
     );
     setBracketError(null);
+    setHasUserEdited(false);
   }, [policy]);
 
   // ── Emit change upward ─────────────────────────────────────────────────────
@@ -139,6 +143,7 @@ export function TaxPolicyEditor({
       rate: clamp(b.rate),
     }));
     const taxPolicy = buildPolicy(newKind, normalizedRates, normalizedBrackets);
+    setHasUserEdited(true);
     onChange({ taxPolicy, source: 'user' });
   }
 
@@ -193,7 +198,9 @@ export function TaxPolicyEditor({
     : {};
 
   // ── Badge ──────────────────────────────────────────────────────────────────
-  const isUserSource = source === 'user';
+  // Parent store does not persist bootstrapSources.taxPolicy, so prefer local
+  // hasUserEdited flag. Fall back to source prop for initial bootstrap state.
+  const isUserSource = hasUserEdited || source === 'user';
   const badgeSource: DataSource = isUserSource ? 'user' : (source ?? 'llm');
   const badgeConfidence = isUserSource ? 'high' : 'medium';
   const badgeNote = isUserSource
