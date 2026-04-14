@@ -19,11 +19,11 @@ must_haves:
   truths:
     - "A US bootstrap 5-iteration run shows |sfcDrift| ≤ 0.1 for every iteration (iter 1 included)"
     - "When an agent's wealth + wealthDelta goes negative at commit, the shortfall is routed to treasury — not silently destroyed"
-    - "Order-book matches where either buyer or seller is missing from weekStateMap are voided, not half-applied"
+    - "Order-book matches where EITHER the buyer is missing from weekStateMap (ghost buyer — H1 positive leak) OR the seller is missing (ghost seller — H2 negative leak) are voided, not half-applied"
     - "computeSystemFiatTotal filters out bank agents from the agent fiat sum (honoring the JSDoc contract)"
   artifacts:
     - path: "server/src/orchestration/simulationRunner.ts"
-      provides: "physicsUnderflowPool accumulator inside physicsActions bracket; ghost-side guards on order-book path"
+      provides: "physicsUnderflowPool accumulator inside physicsActions bracket; ghost-buyer AND ghost-seller guards on order-book path"
       contains: "physicsUnderflowPool"
     - path: "server/src/orchestration/helpers/sfcAudit.ts"
       provides: "Bank-type exclusion filter matching the JSDoc"
@@ -31,18 +31,18 @@ must_haves:
     - path: "server/src/__tests__/sfcUnderflowLedger.test.ts"
       provides: "Regression test — agent overdrawn by MET+VAT cascade does not destroy fiat"
     - path: "server/src/__tests__/orderBookGhostGuards.test.ts"
-      provides: "Regression test — ghost seller / ghost buyer trades void cleanly"
+      provides: "Regression test — ghost seller (H2) AND ghost buyer (H1) trades void cleanly"
     - path: "server/src/__tests__/sfcAuditBankExclusion.test.ts"
       provides: "Regression test — bank-agent wealth not double-counted with depositBalances"
   key_links:
     - from: "server/src/orchestration/simulationRunner.ts:1987 (clampWealth commit)"
       to: "sessionStateTreasury (via physicsUnderflowPool)"
-      via: "underflow shortfall ledger accumulated inside physicsActions bracket"
+      via: "underflow shortfall ledger accumulated inside physicsActions bracket (declaration + flush both between physicsBefore line ~1197 and bracket close ~2208)"
       pattern: "physicsUnderflowPool"
     - from: "server/src/orchestration/simulationRunner.ts:1478-1541 (order-book loop)"
       to: "weekStateMap lookup guards"
-      via: "early continue when sellerState or buyerState missing (except SYSTEM_NPC buyer)"
-      pattern: "ORDER-BOOK-SKIP"
+      via: "early continue when sellerState OR buyerState missing (SYSTEM_NPC buyer remains allowed)"
+      pattern: "Ghost (seller|buyer)"
     - from: "server/src/orchestration/helpers/sfcAudit.ts:25"
       to: "agent.type filter"
       via: "agent.isAlive && agent.type !== 'bank'"
@@ -51,6 +51,12 @@ must_haves:
 
 <objective>
 Close the physics-subsystem SFC leak that produced −2655.17 fiat drift on iter 1 of the US bootstrap smoke test. Primary cause per forensics-G1 §H3: `clampWealth(value) = Math.max(0, value)` at `server/src/orchestration/helpers/weekState.ts:55-57` silently destroys fiat when an agent's running wealth goes negative after Phase-11's VAT + amm_sell + wage + MET auto-buy cascade. Secondary fix per §H2: order-book path at `simulationRunner.ts:1478-1541` debits buyer unconditionally but only credits seller when seller is in `weekStateMap` — voiding stale cross-iteration orders from evicted agents. Tertiary fix per §H6: `helpers/sfcAudit.ts:25-27` JSDoc claims bank-agent exclusion but the code does NOT implement it.
+
+**Forensics-G1 distinguishes TWO sign-mirrored ghost-side failure modes:**
+- **H1 — Ghost BUYER (positive leak):** buyer missing from weekStateMap; seller is credited (treasury moves to seller) without any buyer debit → net system fiat INCREASES. Not observed in the −2655 case but a future possibility if any cross-iteration buy-side eviction races execute.
+- **H2 — Ghost SELLER (negative leak):** seller missing; buyer is debited without any seller credit → net system fiat DECREASES. This was the observed −2655 leak.
+
+Both must be explicitly guarded — otherwise a future positive-leak bug slips through with only a single check.
 
 Purpose: Without this fix, D-20/D-21/D-22 ship as telemetry theater — the dashboard correctly flags drift but the underlying leak is unfixable because it is the product of a hot-path silent-destruction pattern. The LLM smoke test cannot be re-run until G1 is closed.
 
@@ -114,7 +120,7 @@ From simulationRunner.ts physicsActions bracket:
 <tasks>
 
 <task type="auto" tdd="true">
-  <name>Task 1: RED — failing regression tests for H3 (clampWealth underflow) + H2 (order-book ghost sides) + H6 (sfcAudit bank double-count)</name>
+  <name>Task 1: RED — failing regression tests for H3 (clampWealth underflow) + H1/H2 (order-book ghost sides) + H6 (sfcAudit bank double-count)</name>
   <files>server/src/__tests__/sfcUnderflowLedger.test.ts, server/src/__tests__/orderBookGhostGuards.test.ts, server/src/__tests__/sfcAuditBankExclusion.test.ts</files>
   <read_first>
     - server/src/__tests__/sfcUnderflowLedger.test.ts (new — will not exist, confirm)
@@ -141,12 +147,12 @@ From simulationRunner.ts physicsActions bracket:
       - Assert: the positive agent's final wealth is NOT reduced by the overdrawn agent's 30
 
     orderBookGhostGuards.test.ts:
-    - Test 1 (H2): "ghost seller trade voids cleanly — buyer not debited"
+    - Test 1 (H2 — negative leak / ghost seller): "ghost seller trade voids cleanly — buyer not debited"
       - Submit sell order from agentId='ghost-uuid-not-in-weekStateMap' and matching buy from real buyer
       - Assert: after clearing, buyer's wealthDelta is unchanged (0), no [TAX] VAT trace emitted, no treasury credit
-    - Test 2 (H1, sign-mirror sanity): "ghost buyer trade voids cleanly — seller not credited"
+    - Test 2 (H1 — positive leak / ghost buyer): "ghost buyer trade voids cleanly — seller not credited"
       - Submit buy order from agentId='ghost-buyer-uuid' (not SYSTEM_NPC) and matching sell from real seller
-      - Assert: after clearing, seller's wealthDelta is unchanged (0)
+      - Assert: after clearing, seller's wealthDelta is unchanged (0); no treasury debit
     - Test 3 (regression): "SYSTEM_NPC buyer path still works (not broken by guards)"
       - Submit buy from SYSTEM_NPC + sell from real seller, with treasury=1000
       - Assert: seller credited (fundedCost - sellTax), treasury debited fundedCost then credited sellTax
@@ -163,7 +169,7 @@ From simulationRunner.ts physicsActions bracket:
   <action>
     Create three new test files matching existing sfcPhase11.test.ts import + scaffolding style. Use vitest describe/it/expect. Import `computeSystemFiatTotal` from `../orchestration/helpers/sfcAudit.ts` for test 3. For orderBook tests, import `OrderBook` from `../mechanics/orderBook.ts` and test via a helper function `driveOrderBookClearing` that YOU MUST extract from simulationRunner.ts:1477-1542 as a pure helper (see Task 2). Until the helper exists, mark orderBookGhostGuards.test.ts tests with a clear TODO note — they will go GREEN after Task 2. For underflow tests, use a small helper that applies the clampWealth+shortfall pattern to a batch of agents.
 
-    **Commit message:** `test(11-GC1): add failing tests for physics underflow ledger + order-book ghost guards + sfcAudit bank exclusion`
+    **Commit message:** `test(11-GC1): add failing tests for physics underflow ledger + order-book ghost guards (H1+H2) + sfcAudit bank exclusion`
 
     **Run after writing:** `npx vitest run server/src/__tests__/sfcUnderflowLedger.test.ts server/src/__tests__/orderBookGhostGuards.test.ts server/src/__tests__/sfcAuditBankExclusion.test.ts`
     Expected: all tests FAIL (RED).
@@ -174,6 +180,7 @@ From simulationRunner.ts physicsActions bracket:
   <acceptance_criteria>
     - grep `test.*shortfall ledger routes underflow to treasury` in server/src/__tests__/sfcUnderflowLedger.test.ts returns 1+ match
     - grep `ghost seller trade voids cleanly` in server/src/__tests__/orderBookGhostGuards.test.ts returns 1+ match
+    - grep `ghost buyer trade voids cleanly` in server/src/__tests__/orderBookGhostGuards.test.ts returns 1+ match (H1 coverage — distinct from H2)
     - grep `computeSystemFiatTotal excludes bank-agent wealth` in server/src/__tests__/sfcAuditBankExclusion.test.ts returns 1+ match
     - `npx vitest run server/src/__tests__/sfcUnderflowLedger.test.ts` output contains "FAIL" or "failed"
     - git log -1 --format=%s contains `test(11-GC1)`
@@ -182,7 +189,7 @@ From simulationRunner.ts physicsActions bracket:
 </task>
 
 <task type="auto" tdd="true">
-  <name>Task 2: GREEN — H3 shortfall ledger, H2 ghost-side guards, H6 bank-type filter</name>
+  <name>Task 2: GREEN — H3 shortfall ledger, H1+H2 ghost-side guards (both sign mirrors), H6 bank-type filter</name>
   <files>server/src/orchestration/simulationRunner.ts, server/src/orchestration/helpers/sfcAudit.ts, server/src/__tests__/sfcUnderflowLedger.test.ts, server/src/__tests__/orderBookGhostGuards.test.ts, server/src/__tests__/sfcAuditBankExclusion.test.ts</files>
   <read_first>
     - server/src/orchestration/simulationRunner.ts (read lines 1190-1210, 1475-1545, 1980-2010, 2200-2215 — physicsActions bracket boundaries + commit loop + order-book loop)
@@ -197,7 +204,7 @@ From simulationRunner.ts physicsActions bracket:
   <behavior>
     After this task:
     - sfcUnderflowLedger.test.ts: all 3 tests GREEN
-    - orderBookGhostGuards.test.ts: all 3 tests GREEN
+    - orderBookGhostGuards.test.ts: all 3 tests GREEN (H1 + H2 + SYSTEM_NPC regression)
     - sfcAuditBankExclusion.test.ts: all 2 tests GREEN
     - Pre-existing sfcPhase11.test.ts + sfcTaxation.test.ts + sfcEscrow.test.ts + all other Phase-11 tests remain GREEN
     - `npm run test -w server` shows 485+ passing (baseline was 485 per 11-VALIDATION.md; exactly 485 + 8 new GC1 tests = 493; 5 pre-existing failures unchanged)
@@ -228,18 +235,20 @@ From simulationRunner.ts physicsActions bracket:
        ```
        This keeps the shortfall inside the physicsActions bracket so snapshotTotal() after sees treasury credited — net zero drift.
 
-    **Patch B — H2 order-book ghost guards (simulationRunner.ts):**
-    At `simulationRunner.ts:1478-1482`, restructure the loop header. Forensics §4 "Fix for H2" pseudocode:
+    **Patch B — H1+H2 order-book ghost guards (simulationRunner.ts):**
+    At `simulationRunner.ts:1478-1482`, restructure the loop header. Forensics §4 "Fix for H1+H2" pseudocode:
     ```ts
     for (const trade of trades) {
       const buyerState  = weekStateMap.get(trade.buyerId);
       const sellerState = weekStateMap.get(trade.sellerId);
       const isSystemNpcBuyer = trade.buyerId === 'SYSTEM_NPC';
       if (!sellerState) {
+        // H2 — ghost seller: prevents negative leak (observed −2655 case)
         appendTrace(sessionId, `[ORDER-BOOK-SKIP] Ghost seller ${trade.sellerId} — trade voided`);
         continue;
       }
       if (!buyerState && !isSystemNpcBuyer) {
+        // H1 — ghost buyer: prevents positive leak (sign-mirror of H2)
         appendTrace(sessionId, `[ORDER-BOOK-SKIP] Ghost buyer ${trade.buyerId} — trade voided`);
         continue;
       }
@@ -247,7 +256,7 @@ From simulationRunner.ts physicsActions bracket:
       // ... existing path A / B / C logic unchanged ...
     }
     ```
-    The SYSTEM_NPC-buyer path (existing `else if (trade.buyerId === 'SYSTEM_NPC')` at `:1499`) already `continue`s, so keep its body as-is. The early-continue guards above PRE-EMPT path A from firing when sellerState is absent (which was the observed leak).
+    The SYSTEM_NPC-buyer path (existing `else if (trade.buyerId === 'SYSTEM_NPC')` at `:1499`) already `continue`s, so keep its body as-is. The early-continue guards above PRE-EMPT path A from firing when sellerState is absent (which was the observed leak) AND when buyerState is absent for non-SYSTEM_NPC buyers (which is the sign-mirror failure mode).
 
     **Patch C — H6 sfcAudit bank filter (helpers/sfcAudit.ts):**
     At `server/src/orchestration/helpers/sfcAudit.ts:25-27`, replace:
@@ -269,7 +278,7 @@ From simulationRunner.ts physicsActions bracket:
 
     **Commit messages (atomic):**
     1. `fix(11-GC1): shortfall ledger preserves fiat when wealth underflows at commit`
-    2. `fix(11-GC1): order-book requires both buyer and seller states before mutation`
+    2. `fix(11-GC1): order-book requires both buyer and seller states before mutation (H1+H2)`
     3. `fix(11-GC1): sfcAudit excludes bank agents from agent fiat sum per JSDoc`
 
     **Run after each patch:** `npm run test -w server -- --reporter=default` — verify the target test turns GREEN and no regressions in other Phase-11 tests.
@@ -280,23 +289,27 @@ From simulationRunner.ts physicsActions bracket:
   <acceptance_criteria>
     - grep `physicsUnderflowPool` in server/src/orchestration/simulationRunner.ts returns ≥ 3 matches (declaration + accumulation + flush)
     - grep `\[PHYSICS-UNDERFLOW\]` in server/src/orchestration/simulationRunner.ts returns 1 match (the appendTrace call)
-    - grep `ORDER-BOOK-SKIP` in server/src/orchestration/simulationRunner.ts returns 2 matches (ghost seller + ghost buyer)
+    - **H1/H2 distinct coverage (BLOCKER 2 fix):**
+      - grep `Ghost seller` in server/src/orchestration/simulationRunner.ts returns exactly 1 match (H2 guard — negative-leak prevention)
+      - grep `Ghost buyer` in server/src/orchestration/simulationRunner.ts returns exactly 1 match (H1 guard — positive-leak prevention)
     - grep `agent.type !== 'bank'` in server/src/orchestration/helpers/sfcAudit.ts returns 1 match
     - grep `\.filter\(agent => agent.isAlive\)\.reduce` in server/src/orchestration/helpers/sfcAudit.ts returns 0 matches (old pattern removed)
+    - **INFO 8 — line-number scope check for physicsUnderflowPool:** `awk '/physicsUnderflowPool/ {print NR}' server/src/orchestration/simulationRunner.ts` — every printed line number MUST fall within the physicsActions bracket range. Locate bracket boundaries first (`grep -n 'const physicsBefore = snapshotTotal' simulationRunner.ts` for the open at ~line 1197; `grep -n 'sfcBySubsystem.physicsActions +=' simulationRunner.ts` for the close at ~line 2208). Assert every physicsUnderflowPool occurrence's line is > open AND < close. If the exact lines drift (code has moved), use the greps to recompute the interval rather than hard-coding 1197/2208.
     - `npx vitest run server/src/__tests__/sfcUnderflowLedger.test.ts` shows 3 passed, 0 failed
     - `npx vitest run server/src/__tests__/orderBookGhostGuards.test.ts` shows 3 passed, 0 failed
     - `npx vitest run server/src/__tests__/sfcAuditBankExclusion.test.ts` shows 2 passed, 0 failed
     - `npm run test -w server` shows ≥ 493 passed (485 baseline + 8 new), ≤ 5 failed (pre-existing only)
     - git log -3 --format=%s contains three `fix(11-GC1):` commits
   </acceptance_criteria>
-  <done>All 3 hypotheses' regression tests GREEN. Full server suite passes 493+/498 (pre-existing 5 failures unchanged). No new TypeScript errors (`tsc --noEmit -p server/tsconfig.json` diff vs base: flat).</done>
+  <done>All 3 hypotheses' regression tests GREEN. H1 + H2 have DISTINCT guard lines ("Ghost buyer" and "Ghost seller" — not duplicated). Full server suite passes 493+/498 (pre-existing 5 failures unchanged). No new TypeScript errors (`tsc --noEmit -p server/tsconfig.json` diff vs base: flat).</done>
 </task>
 
 </tasks>
 
 <verification>
-- grep `physicsUnderflowPool` server/src/orchestration/simulationRunner.ts: ≥ 3 matches
-- grep `ORDER-BOOK-SKIP` server/src/orchestration/simulationRunner.ts: 2 matches
+- grep `physicsUnderflowPool` server/src/orchestration/simulationRunner.ts: ≥ 3 matches (all within physicsActions bracket per INFO 8 awk check)
+- grep `Ghost seller` server/src/orchestration/simulationRunner.ts: exactly 1 match (H2)
+- grep `Ghost buyer` server/src/orchestration/simulationRunner.ts: exactly 1 match (H1)
 - grep `agent.type !== 'bank'` server/src/orchestration/helpers/sfcAudit.ts: 1 match
 - `npx vitest run server/src/__tests__/sfcUnderflowLedger.test.ts server/src/__tests__/orderBookGhostGuards.test.ts server/src/__tests__/sfcAuditBankExclusion.test.ts`: 8 passed, 0 failed
 - `npm run test -w server`: ≥ 493 passed
@@ -306,7 +319,8 @@ From simulationRunner.ts physicsActions bracket:
 
 <success_criteria>
 - H3 fix: when any citizen agent's `currentStats.wealth + wealthDelta < 0`, the shortfall routes to treasury; net M0 unchanged.
-- H2 fix: stale cross-iteration or typo'd-buyerId order-book orders void cleanly with no half-applied wealth mutation.
+- H1 fix: stale cross-iteration buyer evictions cannot produce a positive-leak (seller-credited-without-buyer-debit).
+- H2 fix: stale cross-iteration or typo'd-sellerId order-book orders void cleanly with no half-applied wealth mutation.
 - H6 fix: `computeSystemFiatTotal` no longer double-counts bank-agent wealth alongside `depositBalances`.
 - Live smoke test (executed in 11-GC5) shows |sfcDrift| ≤ 0.1 on every iteration of a US bootstrap.
 </success_criteria>
@@ -316,6 +330,7 @@ After completion, create `.planning/phases/11-simulation-realism-organic-stress-
 - Commits list (expected: 1 test commit + 3 fix commits)
 - Confirmation that all 3 hypotheses' regression tests are GREEN
 - Confirmation of full-suite test count (expected 493/498 passing; 5 pre-existing failures unchanged)
+- Confirmation H1 and H2 have DISTINCT guard lines (grep counts for both literals)
 - Any deviations from the plan pseudocode (e.g., orderBookClearing helper extracted or not)
 - Hand-off note: ready for 11-GC5 verification plan to execute the live US smoke test
 </output>

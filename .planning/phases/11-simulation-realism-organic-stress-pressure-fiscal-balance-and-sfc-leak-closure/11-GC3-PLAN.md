@@ -213,11 +213,30 @@ From server/src/llm/__tests__/centralAgentTaxPolicy.test.ts: existing test at li
     Two patches:
 
     **Patch A — Recalibrate heuristic (dataBootstrapPipeline.ts:209-242):**
-    Replace the current gate:
+
+    The existing block at lines 221-238 reads (CURRENT — verbatim from codebase):
     ```ts
+    let taxPolicyDerived: TaxPolicy;
     if (gdpPC > 25000 && govExpensePct > 30) {
+      // Progressive — 3 brackets tiered on wealth percentiles (bootstrap baseFiat ≈ 10k scale)
+      taxPolicyDerived = {
+        kind: 'progressive',
+        rates: { income: incomeSeed, vat: vatSeed, capitalGains: incomeSeed },
+        brackets: [
+          { upto: 500,   rate: Math.max(0.05, incomeSeed / 2) },      // low bracket
+          { upto: 2000,  rate: Math.max(0.10, incomeSeed * 0.8) },    // mid bracket
+          { upto: 10000, rate: incomeSeed },                           // high bracket (top marginal)
+        ],
+      };
+    } else {
+      taxPolicyDerived = {
+        kind: 'flat',
+        rates: { income: incomeSeed, vat: vatSeed, capitalGains: incomeSeed },
+      };
+    }
     ```
-    with the composite:
+
+    Replace with (NEW — only gate changes; progressive body and flat body byte-preserved):
     ```ts
     // Phase 11 GC3 / forensics-G3 §4a: WB-scale heuristic recalibration.
     // WB `GC.XPN.TOTL.GD.ZS` measures central-gov expense only (US=24.9%, DE=26%),
@@ -227,13 +246,27 @@ From server/src/llm/__tests__/centralAgentTaxPolicy.test.ts: existing test at li
     const taxRevenuePct = profile.fiscal.taxRevenuePctGdp?.value ?? 0;
     const govDebtPct = profile.fiscal.govDebtPctGdp?.value ?? 0;
     const isWelfareState = govExpensePct > 18 || taxRevenuePct > 15 || govDebtPct > 60;
+    let taxPolicyDerived: TaxPolicy;
     if (gdpPC > 25000 && isWelfareState) {
-      // Progressive 3-bracket (rest unchanged)
+      // Progressive — 3 brackets tiered on wealth percentiles (bootstrap baseFiat ≈ 10k scale)
+      taxPolicyDerived = {
+        kind: 'progressive',
+        rates: { income: incomeSeed, vat: vatSeed, capitalGains: incomeSeed },
+        brackets: [
+          { upto: 500,   rate: Math.max(0.05, incomeSeed / 2) },      // low bracket
+          { upto: 2000,  rate: Math.max(0.10, incomeSeed * 0.8) },    // mid bracket
+          { upto: 10000, rate: incomeSeed },                           // high bracket (top marginal)
+        ],
+      };
     } else {
-      // flat (unchanged)
+      taxPolicyDerived = {
+        kind: 'flat',
+        rates: { income: incomeSeed, vat: vatSeed, capitalGains: incomeSeed },
+      };
     }
     ```
-    Keep the existing progressive brackets + rates + flat fallback body verbatim. Only the gate condition and the three new variable extractions change.
+
+    **Byte-preservation invariant (WARNING 4 fix):** The progressive body (lines 224-232 in the NEW block) and flat body (lines 234-237) are identical byte-for-byte to the CURRENT block. Only the gate condition on line 222 and the three new variable extractions (lines inserted before `let taxPolicyDerived`) change. Do NOT reformat, re-indent, or reorder the progressive brackets. Verify with `git diff server/src/data/dataBootstrapPipeline.ts` — the hunk should show exactly 1 line removed (old gate) + 4 lines added (3 variable extractions + new gate) relative to the original; progressive/flat body lines should be untouched.
 
     **Patch B — bootstrap.ts invariant assertion:**
     Locate the bootstrap commit path in `server/src/routes/bootstrap.ts` (near the `economyConfig: finalConfig` persistence, typically lines 500-540). After finalConfig + paramSources are assembled and BEFORE the DB write, add:
@@ -268,6 +301,11 @@ From server/src/llm/__tests__/centralAgentTaxPolicy.test.ts: existing test at li
     - grep `taxRevenuePct > 15` in server/src/data/dataBootstrapPipeline.ts returns 1 match
     - grep `govDebtPct > 60` in server/src/data/dataBootstrapPipeline.ts returns 1 match
     - grep `govExpensePct > 30` in server/src/data/dataBootstrapPipeline.ts returns 0 matches (old threshold removed)
+    - **WARNING 4 byte-preservation (progressive body untouched):** grep exact-literal strings from the original progressive brackets — each should still return 1 match:
+      - `grep "upto: 500,   rate: Math.max(0.05, incomeSeed / 2)"`: 1 match (low bracket byte-preserved)
+      - `grep "upto: 2000,  rate: Math.max(0.10, incomeSeed \* 0.8)"`: 1 match (mid bracket byte-preserved)
+      - `grep "upto: 10000, rate: incomeSeed"`: 1 match (high bracket byte-preserved)
+      - `git diff server/src/data/dataBootstrapPipeline.ts` hunk size: ≤ 10 lines changed in this block (gate replacement only)
     - grep `Bootstrap invariant violation` in server/src/routes/bootstrap.ts returns 1 match
     - `npx vitest run server/src/__tests__/bootstrapTaxPolicyFixtures.test.ts` shows 8 passed, 0 failed
     - `npx vitest run server/src/llm/__tests__/centralAgentTaxPolicy.test.ts` shows all passing (18+ tests; no regressions from Plan 11-05)
@@ -275,7 +313,7 @@ From server/src/llm/__tests__/centralAgentTaxPolicy.test.ts: existing test at li
     - git log -2 --format=%s contains two `fix(11-GC3):` commits
     - `tsc --noEmit -p server/tsconfig.json` diff vs base: flat
   </acceptance_criteria>
-  <done>Heuristic composite gate applied; US/DE/JP now derive progressive; invariant assertion throws on silent fallback; full test suite green.</done>
+  <done>Heuristic composite gate applied (1-line gate change; progressive/flat body bytes preserved per WARNING-4 invariant); US/DE/JP now derive progressive; invariant assertion throws on silent fallback; full test suite green. D-13 is now co-owned by 11-05 (original prompt schema + validator) and 11-GC3 (heuristic recalibration + locationProfile invariant) — GC5 Task 3 Step 4 updates Decisions Coverage to reflect this.</done>
 </task>
 
 </tasks>
