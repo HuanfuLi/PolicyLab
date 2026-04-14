@@ -410,7 +410,7 @@ const Reflection = () => {
                   <div style={{
                     overflow: 'hidden',
                     transition: 'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out',
-                    maxHeight: isExpanded ? '220px' : '0',
+                    maxHeight: isExpanded ? '280px' : '0',
                     opacity: isExpanded ? 1 : 0,
                   }}>
                     {isExpanded && agentHistory && agentHistory.length > 1 ? (

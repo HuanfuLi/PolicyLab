@@ -92,6 +92,12 @@ export class OrderBook {
      * Submit a new order to the book.
      * The order is inserted into the DB synchronously before being added to
      * the in-memory working set so it will survive a restart.
+     *
+     * SYSTEM_NPC orders (synthetic liquidity injected each iteration) are
+     * sentinels with no agents-table row, so persisting them would violate
+     * order_book.agent_id → agents.id. They're re-injected every iteration
+     * and consumed in the same matchOrders() call, so skipping persistence
+     * is safe.
      */
     submitOrder(order: Omit<MarketOrder, 'id' | 'filled' | 'filledQuantity'>): MarketOrder {
         const fullOrder: MarketOrder = {
@@ -101,8 +107,10 @@ export class OrderBook {
             filledQuantity: 0,
         };
 
-        // Persist immediately (synchronous via better-sqlite3 under the hood)
-        orderBookRepo.insertOrder(fullOrder);
+        if (order.agentId !== 'SYSTEM_NPC') {
+            // Persist immediately (synchronous via better-sqlite3 under the hood)
+            orderBookRepo.insertOrder(fullOrder);
+        }
 
         if (order.side === 'buy') {
             this.buyOrders.push(fullOrder);

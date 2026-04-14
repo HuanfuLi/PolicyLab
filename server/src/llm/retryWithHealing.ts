@@ -42,6 +42,9 @@ const CONNECTION_ERROR_RE = /channel error|econnreset|econnrefused|socket hang u
 /** Patterns that indicate the LLM response was truncated (hit token limit). */
 const TRUNCATION_RE = /truncated|hit max_tokens|hit max_completion_tokens|hit maxOutputTokens/i;
 
+/** Patterns that indicate the request itself is too large for the provider context window. */
+const REQUEST_TOO_LARGE_RE = /context.?length|maximum.?context|maximum.?token|token.?limit|too.?long|exceeds.?context|context.?window|context_length_exceeded|content.?too.?large|request.?too.?large|prompt.?too.?long/i;
+
 /**
  * Calls the LLM, parses the result. On parse failure, appends the error
  * to the conversation and retries up to MAX_RETRIES times.
@@ -85,9 +88,18 @@ export async function retryWithHealing<T>({
     if (chatError) {
       const errorMsg = chatError.message;
       const isConnErr = CONNECTION_ERROR_RE.test(errorMsg);
+      const isRequestTooLarge = REQUEST_TOO_LARGE_RE.test(errorMsg);
 
       if (label) {
-        console.warn(`[retryWithHealing] ${label} attempt ${attempt + 1} — ${isConnErr ? 'connection' : 'chat'} error: ${errorMsg.slice(0, 120)}`);
+        const kind = isConnErr ? 'connection' : isRequestTooLarge ? 'request-too-large' : 'chat';
+        console.warn(`[retryWithHealing] ${label} attempt ${attempt + 1} — ${kind} error: ${errorMsg.slice(0, 120)}`);
+      }
+
+      // Request-side context overflow cannot be fixed by asking the model to
+      // rewrite JSON. Retrying with extra healing messages only makes the
+      // payload larger and can destabilize local providers like LM Studio.
+      if (isRequestTooLarge) {
+        throw chatError;
       }
 
       if (attempt < MAX_RETRIES) {
