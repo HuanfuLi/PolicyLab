@@ -218,8 +218,16 @@ export function profileToEconomyConfig(profile: LocationProfile): {
   const incomeSeed = Math.max(0.08, Math.min(0.30, (lendingRatePct / 100) * 2));
   const vatSeed = Math.max(0.05, Math.min(0.20, govExpensePct / 300));
 
+  // Phase 11 GC3 / forensics-G3 §4a: WB-scale heuristic recalibration.
+  // WB `GC.XPN.TOTL.GD.ZS` measures central-gov expense only (US=24.9%, DE=26%),
+  // not OECD general-gov scale (~37% US). 30% threshold missed all modern welfare states.
+  // Composite signal: high GDP + EITHER sizable central-gov expense OR meaningful tax
+  // revenue share OR substantial public debt — catches US/DE/UK/JP; excludes IN/BR/NG.
+  const taxRevenuePct = profile.fiscal.taxRevenuePctGdp?.value ?? 0;
+  const govDebtPct = profile.fiscal.govDebtPctGdp?.value ?? 0;
+  const isWelfareState = govExpensePct > 18 || taxRevenuePct > 15 || govDebtPct > 60;
   let taxPolicyDerived: TaxPolicy;
-  if (gdpPC > 25000 && govExpensePct > 30) {
+  if (gdpPC > 25000 && isWelfareState) {
     // Progressive — 3 brackets tiered on wealth percentiles (bootstrap baseFiat ≈ 10k scale)
     taxPolicyDerived = {
       kind: 'progressive',
