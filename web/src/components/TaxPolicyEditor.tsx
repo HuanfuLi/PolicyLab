@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { TaxPolicy, DataSource } from '@policylab/shared';
 import DataConfidenceBadge from './DataConfidenceBadge';
 
@@ -85,6 +85,22 @@ function buildPolicy(
   return { kind: 'progressive', rates, brackets };
 }
 
+/** Deep-equality check for echo detection in the sync effect */
+function policyEquals(a: TaxPolicy, b: TaxPolicy): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.rates.income !== b.rates.income) return false;
+  if (a.rates.vat !== b.rates.vat) return false;
+  if (a.rates.capitalGains !== b.rates.capitalGains) return false;
+  const aBrackets = a.brackets ?? [];
+  const bBrackets = b.brackets ?? [];
+  if (aBrackets.length !== bBrackets.length) return false;
+  for (let i = 0; i < aBrackets.length; i++) {
+    if (aBrackets[i].upto !== bBrackets[i].upto) return false;
+    if (aBrackets[i].rate !== bBrackets[i].rate) return false;
+  }
+  return true;
+}
+
 export function TaxPolicyEditor({
   policy,
   source,
@@ -109,9 +125,17 @@ export function TaxPolicyEditor({
   // Local edit flag — the parent store does not persist bootstrapSources.taxPolicy,
   // so the `source` prop never flips to 'user'. Track user edits here instead.
   const [hasUserEdited, setHasUserEdited] = useState(false);
+  // Ref to last policy emitted upward. When the `policy` prop updates from our
+  // own onChange echo, it will deep-match this. We skip the sync effect in that
+  // case so hasUserEdited does not get reset on every keystroke.
+  const lastEmittedRef = useRef<TaxPolicy | null>(null);
 
-  // Sync form state when policy prop changes (e.g. scenario tab switch)
+  // Sync form state only when policy prop changes from an EXTERNAL source
+  // (scenario tab switch, session reload) — not from our own onChange echo.
   useEffect(() => {
+    if (policy && lastEmittedRef.current && policyEquals(policy, lastEmittedRef.current)) {
+      return;
+    }
     setKind(policy?.kind ?? 'flat');
     setRates({
       income: (policy?.rates?.income ?? 0.15) * 100,
@@ -143,6 +167,7 @@ export function TaxPolicyEditor({
       rate: clamp(b.rate),
     }));
     const taxPolicy = buildPolicy(newKind, normalizedRates, normalizedBrackets);
+    lastEmittedRef.current = taxPolicy;
     setHasUserEdited(true);
     onChange({ taxPolicy, source: 'user' });
   }
