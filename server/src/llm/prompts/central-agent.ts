@@ -296,7 +296,7 @@ export function buildResolutionPrompt(
     : '';
 
   const physicsLogBlock = physicsLog
-    ? `\n\n[PHYSICS LOG — exact mechanical outcomes last iteration]\nThe following math log shows the precise stat changes the physics engine computed. Your narrative MUST be consistent with these numbers — do not invent different values.\n${physicsLog}`
+    ? `\n\n[PHYSICS LOG — exact mechanical outcomes last iteration]\nThe following math log shows the precise stat changes the physics engine computed. Your narrative MUST be consistent with these numbers — do not invent different values.\n${physicsLog.slice(-8000)}`
     : '';
 
   const lockedNote = lockedVariables && lockedVariables.length > 0
