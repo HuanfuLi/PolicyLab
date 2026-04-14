@@ -974,8 +974,12 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       let resolution: import('../parsers/simulation.js').ParsedResolution;
 
       const prevIterMetrics = sessionIterationMetrics.get(sessionId) ?? null;
-      // D4: Physics log from last iteration — grounding data for the narrator
+      // D4: Physics log from last iteration — grounding data for the narrator.
+      // Capture-then-reset: appendTrace() accumulates within the iteration, but the
+      // prompt contract says "last iteration" — clear the buffer so this iteration's
+      // traces don't collide with next iteration's read. (11-GC2 / forensics-G2 Fix A)
       const prevPhysicsLog = sessionLastPhysicsTraces.get(sessionId) ?? null;
+      sessionLastPhysicsTraces.set(sessionId, '');
 
       if (aliveAgents.length > MAPREDUCE_THRESHOLD) {
         // ── Map-Reduce path for large sessions (role-based clustering) ──
