@@ -23,7 +23,7 @@ export function computeSystemFiatTotal(
   publicGoodsEscrow: number = 0,
 ): number {
   const agentFiat = agents
-    .filter(agent => agent.isAlive)
+    .filter(agent => agent.isAlive && agent.type !== 'bank')  // honour the JSDoc contract — bank reserves counted via depositBalances
     .reduce((sum, agent) => sum + (wealthOverrides?.get(agent.id) ?? agent.currentStats.wealth), 0);
   const multiAMMFiat = multiAMMs
     ? [...multiAMMs.values()].reduce((sum, pool) => sum + pool.currentFiatReserve, 0)
