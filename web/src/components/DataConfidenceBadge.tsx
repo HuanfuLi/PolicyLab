@@ -11,6 +11,7 @@ const sourceLabels: Record<DataSource, string> = {
   api: 'API',
   web: 'Web',
   llm: 'Estimate',
+  user: 'Custom',
 };
 
 const confidenceColors: Record<ConfidenceLevel, string> = {
