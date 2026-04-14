@@ -211,6 +211,29 @@ describe('profileToEconomyConfig taxPolicy derivation (Phase 11 D-13)', () => {
     expect(sources['taxPolicy']).toBe('api');
     expect(confidence['taxPolicy']).toBe('medium');
   });
+
+  it('emits progressive via taxRevenuePct > 15 composite gate (low govExpense, high revenue)', () => {
+    // Phase 11 GC3: explicitly exercise the taxRevenuePct > 15 composite arm.
+    // govExpensePctGdp=10 would fail the old 30% gate AND the new 18% single threshold,
+    // but taxRevenuePctGdp=20 > 15 triggers isWelfareState=true → progressive.
+    const profile = makeProfile({
+      gdpPerCapita: 40000,
+      govExpensePctGdp: 10,
+      lendingInterestRate: 4.0,
+    } as Parameters<typeof makeProfile>[0] & { taxRevenuePctGdp?: number });
+    // Build a profile with taxRevenuePctGdp manually since makeProfile doesn't have that field:
+    const profileWithRevenue = {
+      ...profile,
+      fiscal: {
+        ...profile.fiscal,
+        taxRevenuePctGdp: { value: 20, year: 2023, source: 'api' as const, confidence: 'high' as const },
+      },
+    };
+    const { config } = profileToEconomyConfig(profileWithRevenue as typeof profile);
+    expect(config.taxPolicy).toBeDefined();
+    expect(config.taxPolicy!.kind).toBe('progressive');
+    expect(config.taxPolicy!.brackets).toBeDefined();
+  });
 });
 
 describe('Central Agent design-generation prompt extension (Phase 11 D-13)', () => {
