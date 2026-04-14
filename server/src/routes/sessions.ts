@@ -350,6 +350,13 @@ router.put('/:id/config', async (req, res) => {
     lockedVariables?: string[];
     economyConfig?: Partial<Record<string, unknown>>;
     budgetAllocation?: BudgetAllocation;
+    /**
+     * Audit R1: per-field provenance patch. The editor sends this alongside
+     * a user-driven economyConfig change so the badge reflects "Custom" on
+     * reload. Merges into session.config.bootstrapSources rather than
+     * overwriting; omitted fields keep their existing source.
+     */
+    bootstrapSources?: Record<string, string>;
   };
 
   // Budget validation — reject invalid allocations before any DB writes
@@ -434,6 +441,14 @@ router.put('/:id/config', async (req, res) => {
       // but the UI reads from session.config.budgetAllocation for display.
       if (body.budgetAllocation !== undefined) {
         updatedConfig.budgetAllocation = body.budgetAllocation;
+      }
+
+      // Audit R1: merge per-field provenance into existing bootstrapSources so
+      // user edits (e.g. taxPolicy flipping 'api' → 'user') persist across reloads.
+      // Uses shallow merge: omitted fields retain their existing source.
+      if (body.bootstrapSources !== undefined) {
+        const existingSources = (currentConfig.bootstrapSources ?? {}) as Record<string, string>;
+        updatedConfig.bootstrapSources = { ...existingSources, ...body.bootstrapSources };
       }
 
       const now = new Date().toISOString();

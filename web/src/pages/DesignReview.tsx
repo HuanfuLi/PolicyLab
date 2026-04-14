@@ -401,7 +401,7 @@ const DesignReview = () => {
                   sessionId={id!}
                   economyConfig={session.config.economyConfig ?? {}}
                   budgetAllocation={session.config.budgetAllocation ?? DEFAULT_BUDGET_ALLOCATION}
-                  onConfigChange={(patch) => updateEconomyConfig(id!, patch)}
+                  onConfigChange={(patch, sourcesPatch) => updateEconomyConfig(id!, patch, sourcesPatch)}
                   onBudgetChange={(budget) => {
                     saveBudgetAllocation(id!, budget);
                   }}
@@ -415,7 +415,7 @@ const DesignReview = () => {
                   sessionId={id!}
                   economyConfig={session.config.economyConfig ?? {}}
                   budgetAllocation={session.config.budgetAllocation ?? DEFAULT_BUDGET_ALLOCATION}
-                  onConfigChange={(patch) => updateEconomyConfig(id!, patch)}
+                  onConfigChange={(patch, sourcesPatch) => updateEconomyConfig(id!, patch, sourcesPatch)}
                   bootstrapConfidence={session.config.bootstrapConfidence}
                   onBudgetChange={(budget) => {
                     saveBudgetAllocation(id!, budget);

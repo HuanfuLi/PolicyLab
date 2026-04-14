@@ -189,7 +189,7 @@ interface EconomyTabProps {
   sessionId: string;
   economyConfig: Partial<EconomyConfig>;
   budgetAllocation: BudgetAllocation;
-  onConfigChange: (patch: Partial<EconomyConfig>) => void;
+  onConfigChange: (patch: Partial<EconomyConfig>, sourcesPatch?: Record<string, string>) => void;
   onBudgetChange: (budget: BudgetAllocation) => void;
   /** Confidence metadata from bootstrap — maps param key → 'high' | 'medium' | 'low' */
   bootstrapConfidence?: Record<string, string>;
@@ -580,16 +580,18 @@ export default function EconomyTab({
             {isOpen && isVisible && (
               <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
 
-                {/* Phase 11 GC4: Editable TaxPolicyEditor at top of Fiscal section */}
+                {/* Phase 11 GC4 + audit-R1: editable TaxPolicyEditor.
+                    Emits economyConfig.taxPolicy AND a per-field sourcesPatch so the
+                    'Custom' badge persists across reloads. */}
                 {section === 'fiscal' && (
                   <TaxPolicyEditor
                     policy={economyConfig.taxPolicy}
                     source={bootstrapSources?.taxPolicy as DataSource | undefined}
                     isPastCheckpoint={isPastCheckpoint ?? false}
-                    onChange={({ taxPolicy, source }) => onConfigChange({
-                      taxPolicy,
-                      sources: { ...(bootstrapSources ?? {}), taxPolicy: source },
-                    } as Partial<EconomyConfig>)}
+                    onChange={({ taxPolicy, source }) => onConfigChange(
+                      { taxPolicy } as Partial<EconomyConfig>,
+                      { taxPolicy: source },
+                    )}
                   />
                 )}
 

@@ -29,7 +29,11 @@ interface SessionDetailStore {
   startSimulation: (id: string, totalIterations: number) => Promise<void>;
   forkSession: (id: string, iterations: number) => Promise<string>;
   updateLockedVariables: (id: string, lockedVars: string[]) => Promise<void>;
-  updateEconomyConfig: (id: string, patch: Partial<EconomyConfig>) => Promise<void>;
+  updateEconomyConfig: (
+    id: string,
+    patch: Partial<EconomyConfig>,
+    sourcesPatch?: Record<string, string>,
+  ) => Promise<void>;
   saveBudgetAllocation: (sessionId: string, allocation: BudgetAllocation) => Promise<void>;
   reset: () => void;
 }
@@ -369,15 +373,32 @@ export const useSessionDetailStore = create<SessionDetailStore>((set, get) => ({
     }
   },
 
-  updateEconomyConfig: async (id: string, patch: Partial<EconomyConfig>) => {
+  updateEconomyConfig: async (
+    id: string,
+    patch: Partial<EconomyConfig>,
+    sourcesPatch?: Record<string, string>,
+  ) => {
     try {
-      await brainstormApi.patchConfig(id, { economyConfig: patch });
+      const payload: Record<string, unknown> = { economyConfig: patch };
+      if (sourcesPatch) payload.bootstrapSources = sourcesPatch;
+      await brainstormApi.patchConfig(id, payload);
       set(state => ({
         session: state.session
           ? {
               ...state.session,
               config: state.session.config
-                ? { ...state.session.config, economyConfig: { ...(state.session.config.economyConfig ?? {}), ...patch } }
+                ? {
+                    ...state.session.config,
+                    economyConfig: { ...(state.session.config.economyConfig ?? {}), ...patch },
+                    ...(sourcesPatch
+                      ? {
+                          bootstrapSources: {
+                            ...(state.session.config.bootstrapSources ?? {}),
+                            ...sourcesPatch,
+                          },
+                        }
+                      : {}),
+                  }
                 : state.session.config,
             }
           : state.session,

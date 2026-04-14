@@ -9,7 +9,7 @@ interface ScenarioTabsProps {
   sessionId: string;
   economyConfig: Partial<EconomyConfig>;
   budgetAllocation: BudgetAllocation;
-  onConfigChange: (config: Partial<EconomyConfig>) => void;
+  onConfigChange: (config: Partial<EconomyConfig>, sourcesPatch?: Record<string, string>) => void;
   onBudgetChange: (budget: BudgetAllocation) => void;
   onRunAll: () => void;
   bootstrapConfidence?: Record<string, string>;
@@ -59,12 +59,12 @@ export default function ScenarioTabs({
   const activeTab = tabs.find(t => t.id === activeTabId);
   const hasNonBaseline = tabs.some(t => !t.isBaseline);
 
-  const handleTabConfigChange = (patch: Partial<EconomyConfig>) => {
+  const handleTabConfigChange = (patch: Partial<EconomyConfig>, sourcesPatch?: Record<string, string>) => {
     if (!activeTab) return;
     updateScenarioConfig(activeTabId, patch);
     // Also propagate baseline changes to the session store
     if (activeTab.isBaseline) {
-      onConfigChange(patch);
+      onConfigChange(patch, sourcesPatch);
     }
   };
 
