@@ -77,8 +77,8 @@ describe('canIssueLoan', () => {
     expect(canIssueLoan(50, 500, 500, 0.10)).toBe(false);
   });
 
-  it('returns true when totalDeposits + principal === 0 (no deposits yet)', () => {
-    expect(canIssueLoan(0, 0, 0, 0.10)).toBe(true);
+  it('returns false when totalDeposits + principal === 0 (no deposit base to lend against)', () => {
+    expect(canIssueLoan(0, 0, 0, 0.10)).toBe(false);
   });
 
   it('returns false when reserves are zero but deposits+principal > 0', () => {

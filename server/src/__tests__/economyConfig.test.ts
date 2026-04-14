@@ -18,8 +18,8 @@ describe('EconomyConfig type and DEFAULT_ECONOMY_CONFIG', () => {
     expect(DEFAULT_ECONOMY_CONFIG.reserveRequirement).toBe(0.10);
   });
 
-  it('DEFAULT_ECONOMY_CONFIG has baseLoanInterestRate=0.005', () => {
-    expect(DEFAULT_ECONOMY_CONFIG.baseLoanInterestRate).toBe(0.005);
+  it('DEFAULT_ECONOMY_CONFIG has baseLoanInterestRate=0.001', () => {
+    expect(DEFAULT_ECONOMY_CONFIG.baseLoanInterestRate).toBe(0.001);
   });
 
   it('DEFAULT_ECONOMY_CONFIG has defaultLoanTermIterations=20', () => {
@@ -30,26 +30,26 @@ describe('EconomyConfig type and DEFAULT_ECONOMY_CONFIG', () => {
     expect(DEFAULT_ECONOMY_CONFIG.defaultThresholdIterations).toBe(3);
   });
 
-  it('DEFAULT_ECONOMY_CONFIG has depositInterestRate=0.002', () => {
-    expect(DEFAULT_ECONOMY_CONFIG.depositInterestRate).toBe(0.002);
+  it('DEFAULT_ECONOMY_CONFIG has depositInterestRate=0.0004', () => {
+    expect(DEFAULT_ECONOMY_CONFIG.depositInterestRate).toBe(0.0004);
   });
 
   it('EconomyConfig type has all 6 required banking fields', () => {
     const config: EconomyConfig = {
       bankingEnabled: true,
       reserveRequirement: 0.10,
-      baseLoanInterestRate: 0.005,
+      baseLoanInterestRate: 0.001,
       defaultLoanTermIterations: 20,
       defaultThresholdIterations: 3,
-      depositInterestRate: 0.002,
+      depositInterestRate: 0.0004,
     };
     expect(config).toBeDefined();
     expect(config.bankingEnabled).toBe(true);
     expect(config.reserveRequirement).toBe(0.10);
-    expect(config.baseLoanInterestRate).toBe(0.005);
+    expect(config.baseLoanInterestRate).toBe(0.001);
     expect(config.defaultLoanTermIterations).toBe(20);
     expect(config.defaultThresholdIterations).toBe(3);
-    expect(config.depositInterestRate).toBe(0.002);
+    expect(config.depositInterestRate).toBe(0.0004);
   });
 });
 
@@ -71,16 +71,16 @@ describe('getEconomyConfig', () => {
     expect(result.bankingEnabled).toBe(true);
     expect(result.reserveRequirement).toBe(0.15);
     // Other fields fall back to defaults
-    expect(result.baseLoanInterestRate).toBe(0.005);
+    expect(result.baseLoanInterestRate).toBe(0.001);
     expect(result.defaultLoanTermIterations).toBe(20);
     expect(result.defaultThresholdIterations).toBe(3);
-    expect(result.depositInterestRate).toBe(0.002);
+    expect(result.depositInterestRate).toBe(0.0004);
   });
 
   it('returns full default config (with bankingEnabled=true) when economyConfig provided without overrides', () => {
     const result = getEconomyConfig({ economyConfig: {} });
     expect(result.reserveRequirement).toBe(0.10);
-    expect(result.baseLoanInterestRate).toBe(0.005);
+    expect(result.baseLoanInterestRate).toBe(0.001);
   });
 });
 
