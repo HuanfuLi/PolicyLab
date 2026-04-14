@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 11-GC2-PLAN.md
-last_updated: "2026-04-14T02:32:26.969Z"
+stopped_at: Completed 11-GC5-PLAN.md
+last_updated: "2026-04-14T03:32:38.735Z"
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 67
-  completed_plans: 60
+  completed_plans: 61
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 11 (simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure) — EXECUTING
-Plan: 4 of 15
+Plan: 5 of 15
 
 ## Performance Metrics
 
@@ -101,6 +101,7 @@ Plan: 4 of 15
 | Phase 11 PGC3 | 2 min | 2 tasks | 4 files |
 | Phase 11 PGC1 | 3 | 2 tasks | 5 files |
 | Phase 11 PGC2 | 3m28s | 2 tasks | 3 files |
+| Phase 11 PGC5 | 15 | 3 tasks | 3 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -261,6 +262,7 @@ Recent decisions affecting current work:
 - [Phase 11]: GC2: capture-then-reset physicsLog buffer at iteration entry (simulationRunner.ts:978-982) restores per-iteration semantics broken by fdcd6ce
 - [Phase 11]: GC2: 8KB hard cap at prompt boundary for buildGroupResolutionMessages and buildResolutionPrompt — both physicsLog embeds now sliced, matching law/previousSummary/allIntentsBrief convention
 - [Phase 11]: GC2: Fix C (drop [TAX] appendTrace sites) intentionally NOT applied — tax-log visibility needed for G1 live debugging
+- [Phase 11]: D-13 dual attribution: 11-05 owns prompt schema + validator; 11-GC3 owns heuristic recalibration + locationProfile bootstrap invariant
 
 ### Roadmap Evolution
 
@@ -284,6 +286,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-14T02:32:26.964Z
-Stopped at: Completed 11-GC2-PLAN.md
+Last session: 2026-04-14T03:32:32.436Z
+Stopped at: Completed 11-GC5-PLAN.md
 Resume file: None

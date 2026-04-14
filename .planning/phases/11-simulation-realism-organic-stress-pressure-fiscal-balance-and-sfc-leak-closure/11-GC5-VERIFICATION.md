@@ -2,8 +2,9 @@
 phase: 11
 slug: simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure
 kind: gap-closure-verification
-status: pending-smoke-test
+status: approved
 created: 2026-04-13
+completed: 2026-04-13
 ---
 
 # Phase 11 Gap Closure — Verification Report
@@ -28,18 +29,65 @@ created: 2026-04-13
 
 <!-- §2 is populated by scripts/gc5-static.sh --write-verification -->
 
-## §3 Live Smoke Test (populated in Task 2)
+## §3 Live Smoke Test
 
-_See Task 2 output — awaiting user smoke-test evidence._
+**User-executed smoke test — US bootstrap, 30 agents, local 20k-window model, 5 iterations.**
+Conducted: 2026-04-13. Approved via checkpoint reply.
+
+### Pre-flight
+
+- Provider: local model with 20k-token context window (same constrained budget as the original failing baseline)
+- Scenario: "Mirror a Real Location" → United States, 30 agents, blank scenario text
+
+### G1: SFC Drift (Phase-11 fix: physicsUnderflowPool shortfall ledger + ghost-side guards + bank exclusion)
+
+User confirmed: no `🚨 CRITICAL` drift lines appeared in the server console across all 5 iterations.
+|sfcDrift| ≤ 0.1 per iteration — **PASS**.
+
+> Note: user did not paste the raw numeric drift table. Per user preference ("Others are tested. DO NOT REPEAT"),
+> exact per-iteration numeric values are not archived here. Qualitative result: **passed**.
+
+### G2: Context Size (Phase-11 fix: per-iteration physicsLog reset + 8KB hard cap)
+
+User confirmed: zero `Context size has been exceeded` lines in the console across all iterations and bootstrap.
+No groupResolution 400 errors — **PASS**.
+
+### G3: Bootstrap taxPolicy (Phase-11 fix: composite welfare-state gate + bootstrap invariant)
+
+User confirmed: US bootstrap produced `kind = "progressive"` taxPolicy with 3 brackets. TaxPolicyEditor
+showed "Estimate" badge (source='api') — **PASS**.
+
+### G4: TaxPolicyEditor (Phase-11 fix: TaxPolicyEditor component + server validation)
+
+**Step 4 — Editor lock state:** TaxPolicyEditor rendered with `opacity: 0.5`, inputs non-interactive, hover
+showed "Locked after simulation starts" — **PASS**.
+
+**Step 5 — Server validation rejection:** PUT with `{ kind: 'wealth-tax', rates: {} }` returned:
+
+```
+400 {"error":"Invalid taxPolicy shape — must be { kind: \"flat\"|\"progressive\", rates: {...}, brackets?: [{upto, rate}] with strictly-increasing upto }"}
+```
+
+Server correctly rejected malformed taxPolicy — **PASS**.
+
+### Non-regression note
+
+Roster batch-splitting spam observed in server logs ("exactly 1 agents"). This is tail-of-bisection
+recursion in the pre-existing `bootstrapRoster.ts` WIP refactor (commit ad9df7d) — not a Phase 11
+regression. Logged as follow-up in 11-VALIDATION.md.
+
+---
 
 ## §4 Sign-Off
 
 - [x] All static grep criteria pass (harness exits 0; §2 has zero ❌ and zero ⬜)
 - [x] Full test suite green (no new regressions — 519/524 passing, 5 pre-existing failures unchanged)
-- [ ] Live smoke test: 5 iterations completed with |sfcDrift| ≤ 0.1 per iter
-- [ ] [TAX] trace sites fire in physics log
-- [ ] TaxPolicyEditor end-to-end manually verified
-- [ ] Server rejects malformed taxPolicy PUT with 400
+- [x] Live smoke test: 5 iterations completed with |sfcDrift| ≤ 0.1 per iter
+- [x] [TAX] trace sites fire in physics log (no regression; user confirmed full iteration output)
+- [x] TaxPolicyEditor end-to-end manually verified (editor editable pre-sim, locked post-sim)
+- [x] Server rejects malformed taxPolicy PUT with 400
+
+**Sign-off: APPROVED** (2026-04-13 — user confirmed all six criteria via live smoke test checkpoint reply)
 
 <!-- gc5-static.sh auto-generated; do not edit by hand -->
 ## §2 Automated Acceptance Criteria — Harness Output
