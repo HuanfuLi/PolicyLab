@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 11-09-PLAN.md
-last_updated: "2026-04-13T23:05:23.973Z"
+stopped_at: Completed 11-GC3-PLAN.md
+last_updated: "2026-04-14T02:21:48.164Z"
 progress:
   total_phases: 11
   completed_phases: 6
-  total_plans: 62
-  completed_plans: 57
+  total_plans: 67
+  completed_plans: 58
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 11 (simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure) — EXECUTING
-Plan: 9 of 10
+Plan: 2 of 15
 
 ## Performance Metrics
 
@@ -98,6 +98,7 @@ Plan: 9 of 10
 | Phase 11 P07 | 7 min | 2 tasks tasks | 4 files files |
 | Phase 11 P08 | 6 min | 2 tasks | 5 files |
 | Phase 11 P09 | ~2h | 3 tasks tasks | 7 files files |
+| Phase 11 PGC3 | 2 min | 2 tasks | 4 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -250,6 +251,8 @@ Recent decisions affecting current work:
 - [Phase 11]: [Phase 11-09]: UAT-fix in band (commit ee38f0e) — DataConfidenceBadge tooltip background switched from translucent --bg-card to opaque --bg-color for readability in both themes; single-file single-token swap scoped tight enough to avoid gap-closure plan
 - [Phase 11]: [Phase 11-09]: isPastCheckpoint prop threaded DesignReview -> ScenarioTabs -> EconomyTab so governance toggle lock state works identically across creative-mode and location-bootstrap mounts
 - [Phase 11]: [Phase 11-09]: Two UAT findings deferred as out-of-scope — duplicate agent names and all-Hanzi names on China bootstrap — logged to deferred-items.md for a future roster-generation hardening phase, do not touch Phase 11 stress/fiscal/SFC contract surface
+- [Phase 11]: GC3: Composite welfare-state gate (govExpensePct>18 || taxRevenuePct>15 || govDebtPct>60) replaces single govExpensePct>30 threshold — calibrated against WB GC.XPN.TOTL.GD.ZS central-gov scale; catches US/DE/UK/JP progressive, excludes IN/BR/NG flat
+- [Phase 11]: GC3: Bootstrap route invariant asserts dataSources.taxPolicy === 'api' when locationProfile is set — throws before DB write to catch silent downstream mutations
 
 ### Roadmap Evolution
 
@@ -273,6 +276,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T23:05:05.825Z
-Stopped at: Completed 11-09-PLAN.md
+Last session: 2026-04-14T02:21:48.160Z
+Stopped at: Completed 11-GC3-PLAN.md
 Resume file: None
