@@ -23,6 +23,12 @@ export interface EnterpriseRecord {
   applicants: Set<string>;
   wage: number;
   minSkill: number;
+  /** Max workforce (employees.size + open vacancies). Phase 12 D-04. */
+  capacity: number;
+  /** Applicant count measured at the end of the previous iteration's matching pass. Phase 12 D-03. */
+  lastApplicants: number;
+  /** Open vacancies measured at the end of the previous iteration's matching pass. Phase 12 D-03. */
+  lastVacancies: number;
 }
 
 export interface EmploymentRecord {
@@ -46,6 +52,18 @@ export const sessionPriceHistory = new Map<string, Map<ItemType, number>>();
 export const sessionEnterpriseInsolvency = new Map<string, Map<string, number>>();
 export const sessionAgentIdleCounter = new Map<string, Map<string, number>>();
 export const sessionPreviousWageCosts = new Map<string, Map<string, number>>();
+
+/**
+ * Per-session agent reservation wage map, populated end-of-iteration after PRODUCE_AND_SELL
+ * resolution and read start-of-next-iteration for matching pass + prompt context. Phase 12 D-12.
+ */
+export const sessionReservationWages = new Map<string, Map<string, number>>();
+
+/**
+ * Agents who used QUIT_JOB last iteration. Auto-reapply pool for next iteration's matching pass.
+ * Cleared by the matching pass itself after consumption. Phase 12 D-14.
+ */
+export const sessionQuitLastIteration = new Map<string, Set<string>>();
 
 export function getEnterpriseRegistry(sessionId: string): Map<string, EnterpriseRecord> {
   let m = sessionEnterpriseRegistry.get(sessionId);
@@ -153,4 +171,6 @@ export function cleanupSessionState(sessionId: string): void {
   sessionEnterpriseInsolvency.delete(sessionId);
   sessionAgentIdleCounter.delete(sessionId);
   sessionPreviousWageCosts.delete(sessionId);
+  sessionReservationWages.delete(sessionId);
+  sessionQuitLastIteration.delete(sessionId);
 }

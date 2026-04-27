@@ -75,6 +75,9 @@ export function applyEnterpriseAction(params: {
           applicants: new Set(),
           wage: 0,
           minSkill: 0,
+          capacity: 20, // Phase 12 default — downstream plan 12-02 populates
+          lastApplicants: 0, // Phase 12 D-03 — populated by matching pass
+          lastVacancies: 0,  // Phase 12 D-03 — populated by matching pass
         });
         economyDelta.wealthDelta -= FOUNDING_COST;
         // SFC fix: Registration fee goes to state treasury instead of injecting into

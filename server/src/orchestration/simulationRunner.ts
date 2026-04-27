@@ -175,8 +175,10 @@ export class SimulationPausedError extends Error {
 
 /** Regex to identify context-length errors from LLM providers */
 const CONTEXT_OVERFLOW_RE = /context.?length|maximum.?context|maximum.?token|token.?limit|too.?long|exceeds.?context|context.?window|context_length_exceeded/i;
-/** Regex to identify connection/channel failures from local OpenAI-compatible providers. */
-const PROVIDER_CONNECTION_RE = /channel error|econnreset|econnrefused|socket hang up|network error|fetch failed|connection reset|etimedout|epipe/i;
+/** Regex to identify connection/channel failures from local OpenAI-compatible providers.
+ *  "request timed out" matches the OpenAI SDK's APIConnectionTimeoutError, which fires
+ *  when LM Studio / Ollama hangs past the per-request timeout. */
+const PROVIDER_CONNECTION_RE = /channel error|econnreset|econnrefused|socket hang up|network error|fetch failed|connection reset|etimedout|epipe|request timed out|connection timeout/i;
 
 /** Agents per resolution batch when session is large */
 const MAPREDUCE_THRESHOLD = 30;
@@ -297,6 +299,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           applicants: new Set(),
           wage: bp.wage ?? 5,
           minSkill: 0,
+          capacity: bp.capacity != null && bp.capacity > 0 ? bp.capacity : Math.max((bp.employees ?? []).length, 20), // Phase 12 D-04
+          lastApplicants: 0, // Phase 12 D-03 — populated by matching pass
+          lastVacancies: 0,  // Phase 12 D-03 — populated by matching pass
         });
         // Populate employment registry for each bootstrapped employee
         for (const employeeId of bp.employees ?? []) {
