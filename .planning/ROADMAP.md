@@ -133,7 +133,13 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. Economic Dashboard | 2/2 | Complete | 2026-04-02 |
 | 6. Scenario Entry | 4/4 | Complete | 2026-04-02 |
 | 7. Real-World Scenario Bootstrap | 5/5 | Complete | 2026-04-03 |
-| 8. Live Scenario Comparison | 4/8 | Skipped | — |
+| 8. Live Scenario Comparison | 6/8 | **REMOVED — descoped to v2** | — |
+| 9. Redesign Prompts for All | 5/5 | Complete | 2026-04-07 |
+| 10. Fix Simulation Realism | 14/14 | Complete | 2026-04-08 |
+| 11. Simulation Realism — Stress + Fiscal + SFC | 15/15 | Complete | 2026-04-13 |
+| 12. Labor Market Realism | 0/7 | Plans authored, awaiting execution | — |
+| 13. Central Bank Rate Telemetry Close-out | 0/1 | Planned (gap closure) | — |
+| 14. v1.0 Housekeeping | 0/1 | Planned (gap closure) | — |
 
 ### Phase 7: Real-World Scenario Bootstrap — location-based data-driven society design for policymakers
 
@@ -157,34 +163,33 @@ Plans:
 - [x] 07-04-PLAN.md — ScenarioTabs component, DiffMarker, scenarioStore, DesignReview integration
 - [x] 07-05-PLAN.md — End-to-end integration wiring, polish, human verification
 
-### Phase 8: Live Scenario Comparison — real-time overlaid economic charts during parallel simulation runs
+### Phase 8: Live Scenario Comparison — REMOVED FROM v1.0
 
-**Goal:** Policymakers see CPI, money supply, fiscal, and bond yield curves from up to 4 scenarios updating simultaneously on a redesigned Simulation page with collapsible panels, multi-provider LLM load balancing for parallel execution, session grouping for scenario management, and multi-scenario adaptations to Reflection, Review, and Artifacts stages producing a combined policy brief
-**Requirements**: LSC-01, LSC-02, LSC-03, LSC-04, LSC-05, LSC-06, LSC-07, LSC-08, LSC-09, LSC-10, LSC-11
-**Depends on:** Phase 7
-**Success Criteria** (what must be TRUE):
-  1. Simulation page Statistics panel shows all economic + agent stat charts as recharts LineCharts with multi-scenario overlaid lines (color + dash patterns), shared crosshair tooltips, and live stat badges — identical layout for N=1 and N>1
-  2. Live Feed and Agent Status panels have collapse buttons; when collapsed, Statistics auto-expands to 2-column grid with responsive chart flow
-  3. "Run All Scenarios" launches true parallel simulations with separate SSE streams per scenario; multi-progress bars in top bar; pause/resume/abort applies to all scenarios simultaneously
-  4. Multi-provider LLM load balancer distributes requests round-robin across configured providers in ~/.policylab/config.json with per-provider rate limits; local providers can have no cap
-  5. Sessions table has groupId and scenarioLabel columns; forked scenarios share a groupId; Home page shows grouped sessions as single card with scenario count badge
-  6. Reflection page shows side-by-side society evaluations with cross-scenario data table + LLM narrative; per-agent comparison cards across all scenarios
-  7. Review page agent chat includes context from all scenarios for cross-scenario questions
-  8. Artifacts page produces per-scenario exports plus a combined markdown policy brief
-  9. Users can add new scenarios to existing groups from Design Review; only new scenarios run
-  10. After all scenarios finish, "View Full Comparison" button links to Phase 6's 8-dimension comparison page
-  11. TelemetryPanel modal Economic tab removed (data now inline); Classic tab preserved
-**Status:** SKIPPED — Deprioritized in favor of simulation realism (Phase 10). Partial work exists on branch but is incomplete. May be revisited in a future milestone.
+**Status:** REMOVED — descoped from the v1.0 milestone on 2026-04-26. Live multi-scenario comparison (real-time overlaid charts, multi-provider LLM load balancing for parallel execution, group-level policy brief) is no longer a v1.0 deliverable. Requirements LSC-01 through LSC-11 moved to v2 in REQUIREMENTS.md.
 
-Plans (partial — not completed):
+**Phase slot retained** to preserve numbering (9-12 keep their numbers; existing artifacts and commits remain valid). Partial implementation on the branch (multi-scenario fork via `scenarioStore.runAllScenarios`, `groupId`/`scenarioLabel` DB columns, `getLoadBalancer` orphan, AgentReview cross-scenario context, Artifacts policy brief) is left in place as inert scaffolding for a potential v2 revival. No further work in v1.0.
+
+Original goal and plan history archived inline below for traceability:
+
+<details>
+<summary>Original Phase 8 spec (descoped — for reference only)</summary>
+
+**Original Goal:** Policymakers see CPI, money supply, fiscal, and bond yield curves from up to 4 scenarios updating simultaneously on a redesigned Simulation page with collapsible panels, multi-provider LLM load balancing for parallel execution, session grouping for scenario management, and multi-scenario adaptations to Reflection, Review, and Artifacts stages producing a combined policy brief.
+
+Original Requirements: LSC-01..LSC-11 (now v2)
+Original dependency: Phase 7
+
+Plans (frozen state at descope):
 - [x] 08-01-PLAN.md — DB schema (groupId/scenarioLabel), shared types, fork endpoint upgrade
 - [x] 08-02-PLAN.md — Multi-provider LLM load balancer with token bucket rate limiting
 - [x] 08-03-PLAN.md — multiScenarioStore (N SSE connections), scenarioStore parallel execution
 - [x] 08-04-PLAN.md — ScenarioChart, CollapsiblePanel, ConfigDiffHeader, ProgressBar, TelemetryPanel cleanup
 - [x] 08-05-PLAN.md — Simulation page rewrite with multi-scenario charts, collapsible panels, top bar
-- [ ] ~~08-06-PLAN.md — Home page grouping, Reflection multi-scenario layout~~ (skipped)
+- [ ] 08-06-PLAN.md — Home page grouping, Reflection multi-scenario layout (skipped)
+- [ ] 08-07-PLAN.md — Load balancer wiring, integration fixes (skipped → drives LSC-04 orphan)
 - [x] 08-08-PLAN.md — AgentReview cross-scenario context, Artifacts combined policy brief
-- [ ] ~~08-07-PLAN.md — Load balancer wiring, integration fixes~~ (skipped)
+
+</details>
 
 ### Phase 9: Redesign Prompts for All
 
@@ -263,7 +268,64 @@ Plans:
 
 **SFC invariant:** No monetary injection. All wage flows are transfers inside the perimeter (enterprise treasury ↔ worker wealth). Reservation-wage computation is read-only. Enterprise insolvency (Phase 10) handles enterprises that cannot pay.
 
-**Plans:** 0 plans
+**Plans:** 7 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 12 to break down)
+- [ ] 12-01-PLAN.md — Wave 0: types, DB schema, EconomyConfig + TelemetryLog + EnterpriseRecord extensions, 4 test scaffolds, session Maps
+- [ ] 12-02-PLAN.md — Wave 1: demographic-aligned enterprise generation (location mode) with 110% vacancy target + D-05 invariant + auto-inflation
+- [ ] 12-03-PLAN.md — Wave 1: creative-mode Central Agent enterprise generation with retryWithHealing validator (N=3, same invariant)
+- [ ] 12-04-PLAN.md — Wave 1: wage-adjustment engine (linear nudge + profit-share + MRP ceiling + min floor) wired at per-iteration preamble
+- [ ] 12-05-PLAN.md — Wave 2: reservation wage populator + APPLY_FOR_JOB matching pass at line ~1296 + QUIT_JOB auto-reapply
+- [ ] 12-06-PLAN.md — Wave 2: PRODUCE_AND_SELL recalibration (ammSubsistenceCalibrationFactor + D-18 subsistence prompt copy)
+- [ ] 12-07-PLAN.md — Wave 3: D-17 wage interpolation + D-19 employment board + D-20/21 telemetry & dashboard + D-16 displacement + 20-iter live smoke
+
+### Phase 13: Central Bank Rate Telemetry Close-out
+
+**Goal:** Surface the per-iteration central bank policy rate as a first-class telemetry field and dashboard panel, closing the BANK-07 dead-stub gap that has persisted since the 2026-04-07 audit.
+
+**Requirements**: BANK-07 (partial → satisfied)
+**Depends on:** Phase 4 (action codes already wired); no dependency on Phase 12
+**Gap closure:** Closes BANK-07 partial gap from `.planning/v1.0-MILESTONE-AUDIT.md` (2026-04-26)
+
+**Success Criteria** (what must be TRUE):
+  1. `iterTelemetry.centralBankRate` is populated every iteration from `persistedEconomyConfig.baseLoanInterestRate` (or the just-applied Taylor Rule output) at `simulationRunner.ts:~3504`
+  2. The `EconomicDashboard` renders a Central Bank Rate panel (recharts LineChart) showing the rate timeseries; rate changes from `SET_BASE_RATE` actions or Taylor Rule are visually distinct between iterations
+  3. REQUIREMENTS.md BANK-07 checkbox flips from `[ ]` to `[x]` and the partial-status note is removed
+
+**Plans:** 1 plan
+
+Plans:
+- [ ] 13-01-PLAN.md — Populate centralBankRate in iterTelemetry; add Central Bank Rate panel to EconomicDashboard; flip REQUIREMENTS.md checkbox
+
+### Phase 14: v1.0 Housekeeping
+
+**Goal:** Close non-blocking tech debt and verification gaps surfaced by the 2026-04-26 audit so the v1.0 milestone can be archived cleanly. Also serves as the merge target for findings from a separate code audit (to be folded in before execution).
+
+**Requirements**: (none — housekeeping phase; no new functional requirements)
+**Depends on:** Phase 13 (BANK-07 close-out should land first to keep verification clean)
+**Gap closure:** Closes tech-debt items from `.planning/v1.0-MILESTONE-AUDIT.md` (2026-04-26)
+
+**Scope (initial — to be expanded after code audit):**
+
+1. **VERIFICATION.md backfill** — Authoritative goal-backward verification for phases 01, 02, 04, 05, 07, 10, 11. Phase 11 has only the gap-closure verification (`11-GC5-VERIFICATION.md`); needs a top-level goal-backward report.
+2. **Phase 03 re-verification** — `03-VERIFICATION.md` is stale (`status=gaps_found` from 2026-04-02 before 03-04 / 03-05 closed both gaps).
+3. **VALIDATION.md finalization** — Phase 06 and Phase 09 currently `status=draft`, `nyquist_compliant=false`, `wave_0_complete=false`. Run `/gsd:validate-phase 06` and `/gsd:validate-phase 09`.
+4. **Taylor Rule bootstrap mapping** — Map `taylorInflationTarget`, `taylorNeutralRate`, `taylorInflationCoeff`, `taylorOutputCoeff` from World Bank data in `dataBootstrapPipeline.ts`. Currently all location-bootstrapped sessions use generic defaults.
+5. **Pre-existing test failures** — Fix 4 failures in `economyConfig.test.ts` (`baseLoanInterestRate` / `depositInterestRate` default mismatch) and 1 failure in `banking.test.ts` (`canIssueLoan` logic change). Logged in Phase 11 `deferred-items.md`.
+6. **API client consistency** — Convert `saveBudgetAllocation` raw fetch in `web/src/stores/sessionDetailStore.ts:398-406` to `brainstormApi.patchConfig` (logged in Phase 06 verification).
+7. **Real prompt tests** — Strengthen `server/src/__tests__/scenarioEntry.test.ts` comparison-prompt tests: replace hardcoded string assertions with imports of real `buildComparisonMessages` (logged 2026-04-01).
+8. **Roster polish** — Name uniqueness pass in `generateAgentRoster()`; romanization for non-Latin scripts (deferred from Phase 11).
+
+**(Reserved for code-audit findings — to be appended before plan creation.)**
+
+**Success Criteria** (what must be TRUE):
+  1. Every phase 01-11 has a goal-backward `VERIFICATION.md` with `status=passed` (or `gaps_found` with all gaps either closed or explicitly deferred to v2)
+  2. Phase 06 and Phase 09 `VALIDATION.md` show `status=approved` (or equivalent terminal state) and `nyquist_compliant=true`
+  3. `npm run test -w server` exits 0 — no pre-existing failures
+  4. Location bootstrap with `inflationTarget` data sets non-default Taylor Rule params (verified by smoke test diff against US baseline)
+  5. `saveBudgetAllocation` uses `brainstormApi.patchConfig`; no raw `fetch` in any frontend store action that has an API client equivalent
+  6. `scenarioEntry.test.ts` imports and exercises real `buildComparisonMessages` for at least one prompt assertion
+  7. `generateAgentRoster()` produces no duplicate display names within a single session
+  8. (Reserved) all code-audit findings folded into this phase have terminal status
+
+**Plans:** TBD (estimate 3-5 plans; will be authored after code audit results merged)

@@ -47,23 +47,25 @@ Requirements for the Real Economy Engine milestone. Each maps to roadmap phases.
 - [x] **CONF-02**: All economic parameters (reserve ratio, interest rates, bond coupon, budget allocation, CPI basket weights) stored as session-level config, not hardcoded
 - [x] **CONF-03**: Backward compatibility — existing sessions run with legacy mechanics; new economy activates for new sessions
 
-### Live Scenario Comparison
-
-- [x] **LSC-01**: Simulation page Statistics panel shows all charts as recharts LineCharts with multi-scenario overlaid lines (color + dash patterns), shared crosshair tooltips, live stat badges
-- [x] **LSC-02**: Live Feed and Agent Status panels have collapse buttons; Statistics auto-expands to 2-column grid when neighbors collapse
-- [ ] **LSC-03**: True parallel simulation execution with separate SSE streams per scenario; multi-progress bars; global pause/resume/abort
-- [ ] **LSC-04**: Multi-provider LLM load balancer with round-robin distribution and per-provider rate limits configured in ~/.policylab/config.json
-- [x] **LSC-05**: Sessions table groupId + scenarioLabel columns; Home page shows grouped sessions as single card with badge
-- [x] **LSC-06**: Reflection page side-by-side society evaluations with cross-scenario data table + LLM narrative; per-agent comparison cards
-- [x] **LSC-07**: Review page agent chat with cross-scenario context for multi-scenario questions
-- [x] **LSC-08**: Artifacts page per-scenario exports + combined markdown policy brief
-- [ ] **LSC-09**: Add new scenarios to existing groups from Design Review; only new scenarios run
-- [x] **LSC-10**: "View Full Comparison" button after all scenarios complete, linking to Phase 6 comparison
-- [x] **LSC-11**: TelemetryPanel Economic tab removed (inline in Statistics); Classic tab modal preserved
-
 ## v2 Requirements
 
 Deferred to future milestones. Tracked but not in current roadmap.
+
+### Live Scenario Comparison (DESCOPED FROM v1.0 on 2026-04-26)
+
+Phase 8 was removed from v1.0. Partial implementation exists on the branch as inert scaffolding.
+
+- **LSC-01**: Simulation page Statistics panel shows all charts as recharts LineCharts with multi-scenario overlaid lines (color + dash patterns), shared crosshair tooltips, live stat badges
+- **LSC-02**: Live Feed and Agent Status panels have collapse buttons; Statistics auto-expands to 2-column grid when neighbors collapse
+- **LSC-03**: True parallel simulation execution with separate SSE streams per scenario; multi-progress bars; global pause/resume/abort
+- **LSC-04**: Multi-provider LLM load balancer with round-robin distribution and per-provider rate limits configured in ~/.policylab/config.json
+- **LSC-05**: Sessions table groupId + scenarioLabel columns; Home page shows grouped sessions as single card with badge
+- **LSC-06**: Reflection page side-by-side society evaluations with cross-scenario data table + LLM narrative; per-agent comparison cards
+- **LSC-07**: Review page agent chat with cross-scenario context for multi-scenario questions
+- **LSC-08**: Artifacts page per-scenario exports + combined markdown policy brief
+- **LSC-09**: Add new scenarios to existing groups from Design Review; only new scenarios run
+- **LSC-10**: "View Full Comparison" button after all scenarios complete, linking to Phase 6 comparison
+- **LSC-11**: TelemetryPanel Economic tab removed (inline in Statistics); Classic tab modal preserved
 
 ### Governance Enhancement
 
@@ -130,25 +132,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFL-02 | Phase 4 | Complete |
 | INFL-03 | Phase 4 | Complete |
 | INFL-04 | Phase 4 | Complete |
-| BANK-07 | Phase 4 | Partial — central bank observes CPI/M1 and responds via action codes; full autonomous policy agent deferred |
-
-| LSC-01 | Phase 8 | Planned |
-| LSC-02 | Phase 8 | Planned |
-| LSC-03 | Phase 8 | Planned |
-| LSC-04 | Phase 8 | Planned |
-| LSC-05 | Phase 8 | Planned |
-| LSC-06 | Phase 8 | Planned |
-| LSC-07 | Phase 8 | Planned |
-| LSC-08 | Phase 8 | Planned |
-| LSC-09 | Phase 8 | Planned |
-| LSC-10 | Phase 8 | Planned |
-| LSC-11 | Phase 8 | Planned |
+| BANK-07 | Phase 4 → Phase 13 (gap closure) | Pending — action codes wired and central bank observes CPI/M1, but `centralBankRate` telemetry field never populated; closure scheduled in Phase 13 |
 
 **Coverage:**
-- v1.0 requirements: 25 total — 24 complete, 1 partial (BANK-07)
-- Phase 8 requirements: 11 total — 0 complete
+- v1.0 requirements: 25 total — 24 complete, 1 pending (BANK-07, scheduled for Phase 13 close-out)
+- Descoped to v2: LSC-01 through LSC-11 (Phase 8 removed from v1.0 on 2026-04-26)
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-01*
-*Last updated: 2026-04-07 after Phase 8 planning*
+*Last updated: 2026-04-26 — Phase 8 (Live Scenario Comparison) descoped to v2; BANK-07 reassigned to Phase 13 gap closure*
