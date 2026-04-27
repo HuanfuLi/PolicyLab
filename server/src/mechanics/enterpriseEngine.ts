@@ -255,6 +255,131 @@ export function processEnterpriseProduction(params: {
   return delta;
 }
 
+// ── processWageAdjustment ────────────────────────────────────────────────────
+
+/**
+ * D-01 Hybrid Wage Adjustment Rule — applied once per iteration BEFORE intent phase.
+ *
+ * Order (non-negotiable per 12-CONTEXT.md D-01):
+ *   1. Base: ent.wage (current posted wage)
+ *   2. Linear labor-market nudge: k × surplus/shortage ratio (clamped ±50%)
+ *   3. Profit-share top-up: α × (P&L / workforce) when last-iter P&L > 0
+ *   4. MRP ceiling: wage ≤ (ammSpotPrice × productionPerWorker) − perWorkerInputCost
+ *      (skipped when spot price ≤ 0 or NaN — 12-RESEARCH §8 mitigation)
+ *   5. Minimum floor: wage ≥ economyConfig.minimumWage
+ *
+ * SFC invariant: this function ONLY mutates ent.wage — no fiat movement whatsoever.
+ */
+
+export interface WageAdjustmentInput {
+  enterprises: Array<{
+    id: string;
+    sector: EnterpriseSector;
+    wage: number;
+    lastApplicants: number;
+    lastVacancies: number;
+  }>;
+  config: EconomyConfig;
+  ammSpotPrices: Map<EnterpriseCommodity, number>;
+  previousLedgers: Map<string, { totalRevenue: number; totalWages: number; workerCount: number }>;
+}
+
+export interface WageAdjustmentResult {
+  trace: string[];
+  wageChanges: Array<{
+    enterpriseId: string;
+    before: number;
+    after: number;
+    nudgeFactor: number;
+    profitTopup: number;
+    mrpClampApplied: boolean;
+  }>;
+}
+
+/** Matches the hardcoded constant at simulationRunner.ts ~line 1905 */
+const PRODUCTION_PER_WORKER = 10;
+/** PLANNER DECISION (12-CONTEXT.md §Discretion): linear nudge, clamped ±50% per iteration */
+const NUDGE_RATIO_CLAMP = 0.5;
+
+export function processWageAdjustment(input: WageAdjustmentInput): WageAdjustmentResult {
+  const { enterprises, config, ammSpotPrices, previousLedgers } = input;
+  const k = config.laborWageNudgeK ?? 0.03;
+  const alpha = config.laborWageProfitShareAlpha ?? 0.15;
+  const perWorkerInputCost = config.defaultPerWorkerInputCost ?? 2;
+  const minWage = config.minimumWage ?? 5;
+
+  const trace: string[] = [];
+  const wageChanges: WageAdjustmentResult['wageChanges'] = [];
+
+  for (const ent of enterprises) {
+    const before = ent.wage;
+    let wage = before;
+
+    // Step 2: Linear labor-market nudge
+    const a = ent.lastApplicants;
+    const v = ent.lastVacancies;
+    let nudgeFactor = 1;
+    if (v > 0 && a > v) {
+      // Surplus: more applicants than vacancies → wage pressure downward
+      const surplusRatio = Math.min(NUDGE_RATIO_CLAMP, (a - v) / Math.max(v, 1));
+      nudgeFactor = 1 - k * surplusRatio;
+    } else if (v > 0 && a < v) {
+      // Shortage: more vacancies than applicants → wage pressure upward
+      const shortageRatio = Math.min(NUDGE_RATIO_CLAMP, (v - a) / Math.max(a, 1));
+      nudgeFactor = 1 + k * shortageRatio;
+    }
+    // If a === v or v === 0: no nudge (nudgeFactor remains 1)
+    wage *= nudgeFactor;
+
+    // Step 3: Profit-share top-up (only when last-iteration P&L > 0)
+    const prev = previousLedgers.get(ent.id);
+    let profitTopup = 0;
+    if (prev !== undefined) {
+      const pnl = prev.totalRevenue - prev.totalWages;
+      if (pnl > 0) {
+        const workforce = Math.max(1, prev.workerCount);
+        profitTopup = alpha * (pnl / workforce);
+        wage += profitTopup;
+      }
+    }
+
+    // Step 4: MRP ceiling (skip when spot price ≤ 0 or NaN — 12-RESEARCH §8 mitigation)
+    let mrpClampApplied = false;
+    const commodity = sectorToCommodity(ent.sector);
+    if (commodity !== 'none') {
+      const spot = ammSpotPrices.get(commodity) ?? 0;
+      if (spot > 0 && Number.isFinite(spot)) {
+        const mrp = spot * PRODUCTION_PER_WORKER - perWorkerInputCost;
+        if (mrp > 0 && wage > mrp) {
+          wage = mrp;
+          mrpClampApplied = true;
+        }
+      }
+    }
+
+    // Step 5: Minimum-wage floor (Phase 10 invariant preserved)
+    wage = Math.max(wage, minWage);
+
+    // Mutate the enterprise record in-place (SFC-safe: wage is a property, not fiat)
+    ent.wage = wage;
+
+    wageChanges.push({
+      enterpriseId: ent.id,
+      before,
+      after: wage,
+      nudgeFactor,
+      profitTopup,
+      mrpClampApplied,
+    });
+    trace.push(
+      `Enterprise ${ent.id}: wage ${before.toFixed(2)}→${wage.toFixed(2)} ` +
+      `(nudge×${nudgeFactor.toFixed(3)}, pnl+${profitTopup.toFixed(2)}, mrpCap=${mrpClampApplied})`,
+    );
+  }
+
+  return { trace, wageChanges };
+}
+
 // ── processEnterpriseCostPassThrough ─────────────────────────────────────────
 
 /**

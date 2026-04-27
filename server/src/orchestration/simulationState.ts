@@ -54,6 +54,13 @@ export const sessionAgentIdleCounter = new Map<string, Map<string, number>>();
 export const sessionPreviousWageCosts = new Map<string, Map<string, number>>();
 
 /**
+ * Per-enterprise ledger snapshot from the PREVIOUS iteration (totalRevenue, totalWages, workerCount).
+ * Populated end-of-iteration by simulationRunner; read start-of-next by processWageAdjustment.
+ * Phase 12 D-01 (profit-share input).
+ */
+export const sessionPreviousEnterpriseLedgers = new Map<string, Map<string, EnterpriseLedger>>();
+
+/**
  * Per-session agent reservation wage map, populated end-of-iteration after PRODUCE_AND_SELL
  * resolution and read start-of-next-iteration for matching pass + prompt context. Phase 12 D-12.
  */
@@ -171,6 +178,7 @@ export function cleanupSessionState(sessionId: string): void {
   sessionEnterpriseInsolvency.delete(sessionId);
   sessionAgentIdleCounter.delete(sessionId);
   sessionPreviousWageCosts.delete(sessionId);
+  sessionPreviousEnterpriseLedgers.delete(sessionId);
   sessionReservationWages.delete(sessionId);
   sessionQuitLastIteration.delete(sessionId);
 }

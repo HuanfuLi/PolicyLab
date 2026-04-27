@@ -209,3 +209,64 @@ describe('processEnterpriseCostPassThrough', () => {
     expect(result.costPassThroughMarkup.get('ent1')).toBeCloseTo(1.0);
   });
 });
+
+// ── Phase 12: processWageAdjustment tests ─────────────────────────────────────
+
+import { processWageAdjustment } from '../enterpriseEngine.js';
+import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
+
+describe('Phase 12: processWageAdjustment (D-01 hybrid wage rule)', () => {
+  const baseEnt = {
+    id: 'e1',
+    sector: 'agriculture' as const,
+    wage: 50,
+    lastApplicants: 0,
+    lastVacancies: 0,
+  };
+
+  it('Baseline: no applicants, no vacancies, no P&L → wage unchanged (only min-floor)', () => {
+    const ent = { ...baseEnt, wage: 50, lastApplicants: 0, lastVacancies: 0 };
+    processWageAdjustment({
+      enterprises: [ent],
+      config: { ...DEFAULT_ECONOMY_CONFIG, laborWageNudgeK: 0.03, minimumWage: 5 },
+      ammSpotPrices: new Map(),
+      previousLedgers: new Map(),
+    });
+    // No nudge (no vacancies), no profit-share (no ledger), no MRP (no price), min floor irrelevant at 50
+    expect(ent.wage).toBeCloseTo(50, 2);
+  });
+
+  it('Shortage (vacancies > applicants) → wage rises by k × shortage_ratio', () => {
+    const ent = { ...baseEnt, wage: 100, lastApplicants: 0, lastVacancies: 5 };
+    processWageAdjustment({
+      enterprises: [ent],
+      config: { ...DEFAULT_ECONOMY_CONFIG, laborWageNudgeK: 0.03, minimumWage: 5 },
+      ammSpotPrices: new Map(),
+      previousLedgers: new Map(),
+    });
+    // shortage_ratio = min(0.5, (5-0)/max(0,1)) = min(0.5, 5) = 0.5
+    // wage = 100 × (1 + 0.03 × 0.5) = 100 × 1.015 = 101.5
+    expect(ent.wage).toBeCloseTo(101.5, 2);
+  });
+
+  it('Integration: all five steps compose correctly — shortage nudge, profit topup, MRP clamp, min floor', () => {
+    // applicants=0, vacancies=5 → shortage nudge up
+    // previousLedger: pnl=100-30=70, workerCount=3 → profitTopup = 0.15×(70/3) ≈ 3.5
+    // spot=20, productionPerWorker=10, perWorkerInputCost=2 → mrp=20×10-2=198 (no clamp at low wages)
+    // min floor = 5 (no effect at high wages)
+    const ent = { ...baseEnt, sector: 'agriculture' as const, wage: 50, lastApplicants: 0, lastVacancies: 5 };
+    const result = processWageAdjustment({
+      enterprises: [ent],
+      config: { ...DEFAULT_ECONOMY_CONFIG, laborWageNudgeK: 0.03, laborWageProfitShareAlpha: 0.15, defaultPerWorkerInputCost: 2, minimumWage: 5 },
+      ammSpotPrices: new Map([['food', 20]]),
+      previousLedgers: new Map([['e1', { totalRevenue: 100, totalWages: 30, workerCount: 3 }]]),
+    });
+    // shortage_ratio = min(0.5, (5-0)/max(0,1)) = 0.5
+    // after nudge: 50 × (1 + 0.03 × 0.5) = 50 × 1.015 = 50.75
+    // after profitTopup: 50.75 + 0.15 × (70/3) = 50.75 + 3.5 = 54.25
+    // mrp = 20×10−2 = 198, wage=54.25 < 198 → no clamp
+    // min floor = 5, 54.25 > 5 → unchanged
+    expect(ent.wage).toBeCloseTo(54.25, 1);
+    expect(result.wageChanges[0].mrpClampApplied).toBe(false);
+  });
+});
