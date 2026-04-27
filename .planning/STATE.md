@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-status: Ready to verify
-stopped_at: Completed 11-10-PLAN.md
-last_updated: "2026-04-14T03:54:00.000Z"
+milestone_name: "**Status:** REMOVED — descoped from the v1.0 milestone on 2026-04-26. Live multi-scenario comparison"
+status: Executing Phase 12
+stopped_at: Completed 12-01-PLAN.md
+last_updated: "2026-04-27T00:19:19.414Z"
 progress:
-  total_phases: 11
-  completed_phases: 6
-  total_plans: 67
-  completed_plans: 62
+  total_phases: 13
+  completed_phases: 8
+  total_plans: 74
+  completed_plans: 65
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** The deterministic economic engine must be realistic enough that simulation outcomes are meaningful for understanding real-world policy trade-offs.
-**Current focus:** Phase 11 complete — verification artifacts restored and ready for verifier / milestone closeout
+**Current focus:** Phase 12 — labor-market-realism
 
 ## Current Position
 
-Phase: 11 (simulation-realism-organic-stress-pressure-fiscal-balance-and-sfc-leak-closure) — COMPLETE
-Plan: 15 of 15
+Phase: 12 (labor-market-realism) — EXECUTING
+Plan: 2 of 7
 
 ## Performance Metrics
 
@@ -102,6 +102,7 @@ Plan: 15 of 15
 | Phase 11 PGC1 | 3 | 2 tasks | 5 files |
 | Phase 11 PGC2 | 3m28s | 2 tasks | 3 files |
 | Phase 11 PGC5 | 15 | 3 tasks | 3 files |
+| Phase 12 P01 | 5 min | 4 tasks | 11 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -263,6 +264,9 @@ Recent decisions affecting current work:
 - [Phase 11]: GC2: 8KB hard cap at prompt boundary for buildGroupResolutionMessages and buildResolutionPrompt — both physicsLog embeds now sliced, matching law/previousSummary/allIntentsBrief convention
 - [Phase 11]: GC2: Fix C (drop [TAX] appendTrace sites) intentionally NOT applied — tax-log visibility needed for G1 live debugging
 - [Phase 11]: D-13 dual attribution: 11-05 owns prompt schema + validator; 11-GC3 owns heuristic recalibration + locationProfile bootstrap invariant
+- [Phase 12]: capacity field required (not optional) on EnterpriseRecord; bootstrap defaults to max(employees+1, 20) when blueprint.capacity absent
+- [Phase 12]: sessionReservationWages and sessionQuitLastIteration use Map<sessionId, Map/Set<agentId>> pattern matching sessionPreviousWageCosts — avoids per-iteration DB reads
+- [Phase 12]: getEnterprises returns capacity in EnterpriseBlueprint so simulationRunner load path gets persisted value; legacy-zero coercion adds console.warn for observability
 
 ### Roadmap Evolution
 
@@ -287,6 +291,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-14T03:32:32.436Z
-Stopped at: Completed 11-GC5-PLAN.md
+Last session: 2026-04-27T00:19:19.412Z
+Stopped at: Completed 12-01-PLAN.md
 Resume file: None
