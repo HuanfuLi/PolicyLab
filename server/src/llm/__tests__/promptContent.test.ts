@@ -204,3 +204,9 @@ describe('Prompt content (Plan 03 scaffolding)', () => {
     expect(text).toContain('5-8 sentence');
   });
 });
+
+describe('Phase 12: Action-dictionary per-agent wage interpolation', () => {
+  it.todo('D-17: WORK_AT_ENTERPRISE description contains the agent\'s actual wage');
+  it.todo('D-18: PRODUCE_AND_SELL description reframed to subsistence wording');
+  it.todo('D-19: employment board shows reservation_wage + vacancies + workforce/capacity');
+});

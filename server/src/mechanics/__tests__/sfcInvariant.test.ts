@@ -331,3 +331,9 @@ describe('distributeProRata — exact integer distribution', () => {
     expect(shares).toEqual([0, 0, 0]);
   });
 });
+
+describe('Phase 12: Labor market SFC invariants', () => {
+  it.todo('wage adjustment does not move fiat — only changes enterprise.wage property');
+  it.todo('matching pass is net-zero fiat (employer+employee delta sum = 0)');
+  it.todo('10-iter run with wage discovery: totalFiatSupply deviation < 0.1');
+});
