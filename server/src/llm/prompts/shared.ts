@@ -24,7 +24,7 @@ export const ACTION_SCHEMAS: Partial<Record<ActionCode, ActionSchema>> = {
     params: '{}',
   },
   PRODUCE_AND_SELL: {
-    description: 'Farm your land and sell the harvest directly to the market (PRODUCE_AND_SELL). You produce about 20 units -- enough to feed yourself for 3-4 weeks and pocket the profits.',
+    description: 'Farm your land for subsistence (PRODUCE_AND_SELL). You produce ~4 units of food -- enough for this week\'s survival, little or nothing left to sell. Use this when you can\'t find paid work.',
     params: '{ "itemType": "food" | "raw_materials" | "luxury_goods", "quantity": number, "price": number }',
   },
   POST_BUY_ORDER: {

@@ -207,6 +207,20 @@ describe('Prompt content (Plan 03 scaffolding)', () => {
 
 describe('Phase 12: Action-dictionary per-agent wage interpolation', () => {
   it.todo('D-17: WORK_AT_ENTERPRISE description contains the agent\'s actual wage');
-  it.todo('D-18: PRODUCE_AND_SELL description reframed to subsistence wording');
+
+  it('D-18: PRODUCE_AND_SELL description reframed to subsistence wording', () => {
+    const dict = buildActionDictionary(['PRODUCE_AND_SELL']);
+    // Must contain subsistence framing per D-18
+    expect(dict).toMatch(/subsistence/i);
+    // Must reference ~4 units (actual physics yield, not the old misleading "about 20")
+    expect(dict).toMatch(/~4 units/);
+    // Old misleading copy must be gone
+    expect(dict).not.toMatch(/about 20 units/);
+    // Must not frame PAS as entrepreneurship
+    expect(dict.toLowerCase()).not.toMatch(/entrepreneur/);
+    // Must include the "can't find work" / survival framing
+    expect(dict).toMatch(/can.t find (paid )?work|can.t find work/i);
+  });
+
   it.todo('D-19: employment board shows reservation_wage + vacancies + workforce/capacity');
 });
