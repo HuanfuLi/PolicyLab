@@ -160,6 +160,16 @@ export class SimulationLifecycle {
    *
    * Stops the flusher but does NOT delete session state Maps — those must survive
    * so that a resume can continue from the last committed iteration.
+   *
+   * In-memory status is set to `idle` (via finish), NOT `paused`. The reason: by
+   * the time this runs the runner async function is unwinding and about to return,
+   * so there is no polling loop waiting for a resume signal. If status stayed at
+   * `paused`, the resume route would take the "just flip the flag" branch and
+   * never spawn a new runner — leaving the simulation stuck with no LLM calls.
+   * Letting status fall to `idle` routes resume through the DB-stage check
+   * (`simulation-paused`), which correctly re-spawns runSimulation. State Maps
+   * still survive across the restart because `disposed = true` short-circuits
+   * the finally block's dispose().
    */
   async handlePause(_err: unknown): Promise<void> {
     asyncLogFlusher.stop();
@@ -173,8 +183,7 @@ export class SimulationLifecycle {
     }
     const message = _err instanceof Error ? _err.message : 'Simulation paused.';
     try { simulationManager.broadcast(this.sessionId, { type: 'error', message }); } catch { /* best-effort */ }
-    // C1 fix: call setPaused, NOT finish — so resume() can detect status === 'paused'
-    simulationManager.setPaused(this.sessionId);
+    simulationManager.finish(this.sessionId);
   }
 
   /**
