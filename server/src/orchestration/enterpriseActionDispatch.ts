@@ -3,7 +3,7 @@ import type { QueuedActionInstruction } from '../llm/prompts/index.js';
 import type { AutomatedMarketMaker, MultiAMMItemType } from '../mechanics/automatedMarketMaker.js';
 import { getOrderBook } from '../mechanics/orderBook.js';
 import { getActionMultiplier, getSkillMultiplier } from '../mechanics/skillSystem.js';
-import { sessionStateTreasury } from './simulationState.js';
+import { sessionStateTreasury, sessionQuitLastIteration } from './simulationState.js';
 import type { EnterpriseRecord, EmploymentRecord, EnterpriseLedger } from './simulationState.js';
 import { normalizeItemType, industryToItemType, getAgentPeakSkill } from './helpers/physicsUtils.js';
 import type { AgentWeekState } from './helpers/weekState.js';
@@ -111,6 +111,9 @@ export function applyEnterpriseAction(params: {
       }
       break;
     }
+    // Phase 12: HIRE_EMPLOYEE is now vestigial — matching pass supersedes it.
+    // The action code is kept to avoid breaking role-restricted action lists.
+    // The automated matching pass in simulationRunner.ts handles all placements.
     case 'HIRE_EMPLOYEE': {
       const targetAgentId = String(action.parameters.agent_id ?? '');
       const enterprise = [...enterpriseRegistry.values()].find(entry => entry.ownerId === agent.id);
@@ -156,6 +159,12 @@ export function applyEnterpriseAction(params: {
         state.quitEnterpriseId = enterpriseId;
         state.employer_id = null;
         state.events.push(`Quit job at ${enterpriseId}`);
+
+        // ── Phase 12 D-14: mark for auto-reapply in next iteration's matching pass ──
+        const sessionId = params.sessionId;
+        let quitSet = sessionQuitLastIteration.get(sessionId);
+        if (!quitSet) { quitSet = new Set(); sessionQuitLastIteration.set(sessionId, quitSet); }
+        quitSet.add(agent.id);
       }
       break;
     }

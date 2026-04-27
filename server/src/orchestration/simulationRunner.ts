@@ -129,6 +129,7 @@ import {
 import { buildMarketBoardEntries, buildEmploymentBoardEntries, buildPersonalStatus, updatePriceHistory } from './helpers/marketBoard.js';
 import { type AgentWeekState, createAgentWeekState, clampStat, clampWealth } from './helpers/weekState.js';
 import { applyStructuralPressures } from './helpers/structuralPressures.js';
+import { runApplyForJobMatching } from './helpers/matchingPass.js';
 import { normalizeItemType, industryToItemType, getAgentPeakSkill, distributeProRata } from './helpers/physicsUtils.js';
 import { getInflationBasketPrices, buildInflationContext, applyInflationFeedback } from './helpers/inflationUtils.js';
 import { applyMETMetabolism } from './helpers/metabolismRunner.js';
@@ -1340,6 +1341,46 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         const state = weekStateMap.get(agent.id)!;
         state.employer_id = employmentRegistry.get(agent.id)?.enterpriseId ?? null;
       }
+
+      // ── Phase 12 D-13: APPLY_FOR_JOB automated matching pass ───────────────
+      // Runs AFTER weekStateMap.employer_id is populated (so we have current employment state)
+      // and BEFORE the orderBook is accessed (no dependency on employment state).
+      // SFC invariant: zero fiat movement — only employmentRegistry, enterprise.employees,
+      // enterprise.applicants, enterprise.lastApplicants/lastVacancies, weekStateMap.employer_id.
+      {
+        // Build applicant pool: APPLY_FOR_JOB this iteration + agents who QUIT last iteration
+        const applicantIds = new Set<string>();
+        for (const intent of intents) {
+          if (intent.actions?.some((a: { actionCode: string }) => a.actionCode === 'APPLY_FOR_JOB')) {
+            applicantIds.add(intent.agentId);
+          }
+        }
+        // D-14: consume QUIT pool and clear for next iteration
+        const quitSet = sessionQuitLastIteration.get(sessionId) ?? new Set<string>();
+        for (const agentId of quitSet) applicantIds.add(agentId);
+        sessionQuitLastIteration.set(sessionId, new Set());
+
+        const matchResult = runApplyForJobMatching({
+          enterpriseRegistry,
+          employmentRegistry,
+          applicantIds,
+          reservationWages: sessionReservationWages.get(sessionId) ?? new Map<string, number>(),
+          minimumWage: iterEconomyConfig.minimumWage ?? 5,
+          iterationNumber: iterNum,
+          weekStateEmployerIdSetter: (agentId, entId) => {
+            const s = weekStateMap.get(agentId);
+            if (s) s.employer_id = entId;
+          },
+        });
+
+        appendTrace(
+          sessionId,
+          `[MATCH] iter ${iterNum}: ${applicantIds.size} applicants, ` +
+          `${matchResult.placementsThisIter} placed, ` +
+          `${[...enterpriseRegistry.values()].reduce((sum, e) => sum + e.lastVacancies, 0)} vacancies remaining`,
+        );
+      }
+
       const orderBook = getOrderBook(sessionId);
 
       const statUpdates: Array<{ id: string; wealth: number; health: number; happiness: number; cortisol: number }> = [];
