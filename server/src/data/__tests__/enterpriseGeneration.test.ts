@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { LocationProfile } from '@policylab/shared';
 import type { AgentBlueprint } from '../dataBootstrapPipeline.js';
+import { generateEnterprisesFromCentralAgent } from '../creativeEnterpriseGeneration.js';
 
 // ── Local fixture helpers ─────────────────────────────────────────────────────
 
@@ -306,8 +307,141 @@ describe('Phase 12: Demographic-aligned enterprise generation', () => {
     expect(totalCapacity).toBeGreaterThanOrEqual(Math.ceil(12 * 1.05));
   });
 
-  // ── D-06: Owned by 12-03 creative-mode plan ───────────────────────────────
-  // D-06 retry and abort owned by 12-03 creative-mode plan
-  it.todo('D-06: creative-mode generator retries via retryWithHealing on invariant failure (max N=3)');
-  it.todo('D-06: creative-mode abort path emits SSE error when retries exhausted');
+  // ── D-06: Owned by 12-03 creative-mode plan — see describe block below ────
+  it.todo('D-06: creative-mode generator retries via retryWithHealing on invariant failure (max N=3) — see Phase 12 creative-mode describe');
+  it.todo('D-06: creative-mode abort path emits SSE error when retries exhausted — see Phase 12 creative-mode describe');
+});
+
+// ── Phase 12: Creative-mode enterprise generation (D-06, D-15) ───────────────
+
+describe('Phase 12: Creative-mode enterprise generation (D-06, D-15)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Builds a roster of 20 employable agents spread across 4 sectors (5 each),
+   * so every sector is at ≥5% of the workforce.
+   */
+  function buildTestRoster(): AgentBlueprint[] {
+    const sectors: Array<AgentBlueprint['sector']> = [
+      'agriculture', 'industry', 'services', 'government',
+    ];
+    const roster: AgentBlueprint[] = [];
+    for (const sector of sectors) {
+      for (let i = 0; i < 5; i++) {
+        roster.push({
+          name: `Agent-${sector.slice(0, 3).toUpperCase()}${i}`,
+          role: sector === 'agriculture' ? 'farmer'
+            : sector === 'industry' ? 'factory_worker'
+            : sector === 'services' ? 'merchant'
+            : 'teacher',
+          background: 'Test background',
+          initialWealth: 100,
+          sector,
+        });
+      }
+    }
+    return roster;
+  }
+
+  /**
+   * Builds a valid JSON response that satisfies all D-05 invariants for 20
+   * employable agents across 4 equal sectors.
+   * sum(capacity) = 4 × 6 = 24 ≥ ceil(20 × 1.10) = 22.
+   */
+  function buildValidRosterJson(): string {
+    return JSON.stringify([
+      { sector: 'agriculture', ownerRole: 'farm_owner', initialWorkforceSize: 5, capacity: 6, wageAnchor: 10 },
+      { sector: 'industry', ownerRole: 'factory_owner', initialWorkforceSize: 5, capacity: 6, wageAnchor: 10 },
+      { sector: 'services', ownerRole: 'shop_owner', initialWorkforceSize: 5, capacity: 6, wageAnchor: 10 },
+      { sector: 'government', ownerRole: 'administrator', initialWorkforceSize: 5, capacity: 6, wageAnchor: 10 },
+    ]);
+  }
+
+  /**
+   * Builds an invalid JSON response: only agriculture covered, capacity too low.
+   * Fails both D-05 invariants.
+   */
+  function buildBadRosterJson(): string {
+    return JSON.stringify([
+      { sector: 'agriculture', ownerRole: 'farm_owner', initialWorkforceSize: 1, capacity: 2, wageAnchor: 5 },
+    ]);
+  }
+
+  const baseFiat = 1000;
+  const minimumWage = 5;
+
+  it('D-06: rejects with [Phase 12 L-03 creative-mode] error after 3 failed attempts', async () => {
+    const agentRoster = buildTestRoster();
+    const badJson = buildBadRosterJson();
+    const calls: string[] = [];
+
+    const llm = {
+      chat: vi.fn().mockImplementation(async (_msgs: unknown[]) => {
+        calls.push('called');
+        return badJson;
+      }),
+      chatStream: vi.fn(),
+      testConnection: vi.fn(),
+    };
+
+    await expect(
+      generateEnterprisesFromCentralAgent({ overview: 'Test society', agentRoster, baseFiat, minimumWage, llm }),
+    ).rejects.toThrow(/\[Phase 12 L-03 creative-mode\].*after 3 attempts/);
+
+    expect(calls.length).toBe(3);
+  });
+
+  it('D-06: returns blueprints directly on first successful attempt (no retry)', async () => {
+    const agentRoster = buildTestRoster();
+    const validJson = buildValidRosterJson();
+
+    const llm = {
+      chat: vi.fn().mockResolvedValue(validJson),
+      chatStream: vi.fn(),
+      testConnection: vi.fn(),
+    };
+
+    const out = await generateEnterprisesFromCentralAgent({
+      overview: 'Test society',
+      agentRoster,
+      baseFiat,
+      minimumWage,
+      llm,
+    });
+
+    expect(out.length).toBeGreaterThan(0);
+    expect(llm.chat).toHaveBeenCalledTimes(1);
+  });
+
+  it('D-06: retries once with healing feedback injected then resolves on second attempt', async () => {
+    const agentRoster = buildTestRoster();
+    const badJson = buildBadRosterJson();
+    const validJson = buildValidRosterJson();
+
+    const llm = {
+      chat: vi.fn()
+        .mockResolvedValueOnce(badJson)
+        .mockResolvedValueOnce(validJson),
+      chatStream: vi.fn(),
+      testConnection: vi.fn(),
+    };
+
+    const out = await generateEnterprisesFromCentralAgent({
+      overview: 'Test society',
+      agentRoster,
+      baseFiat,
+      minimumWage,
+      llm,
+    });
+
+    expect(out.length).toBeGreaterThan(0);
+    expect(llm.chat).toHaveBeenCalledTimes(2);
+
+    // Second call's user message must include the healing feedback prefix
+    const secondCallMessages = (llm.chat.mock.calls[1][0] as Array<{ role: string; content: string }>);
+    const userMsg = secondCallMessages.find(m => m.role === 'user')?.content ?? '';
+    expect(userMsg).toMatch(/PREVIOUS ATTEMPT FAILED VALIDATION/);
+  });
 });
