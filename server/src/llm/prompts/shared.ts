@@ -8,7 +8,7 @@ import type { ActionCode } from '../../mechanics/actionCodes.js';
  * required JSON parameters — eliminating "action space blindness".
  * NOTE: EAT and CONSUME are intentionally excluded — survival metabolism is automatic.
  */
-interface ActionSchema {
+export interface ActionSchema {
   description: string;
   /** Example params object shown verbatim in the prompt. */
   params: string;
@@ -146,8 +146,15 @@ export const ACTION_SCHEMAS: Partial<Record<ActionCode, ActionSchema>> = {
 /**
  * Build the action dictionary block injected into citizen prompts.
  * Filters to the role-allowed action set when provided.
+ *
+ * @param allowedActions - Optional list of action codes to include. Defaults to all.
+ * @param overrides - Optional per-code schema overrides. Used by D-17 to interpolate
+ *   the agent's actual posted wage into WORK_AT_ENTERPRISE at prompt build time.
  */
-export function buildActionDictionary(allowedActions?: readonly ActionCode[]): string {
+export function buildActionDictionary(
+  allowedActions?: readonly ActionCode[],
+  overrides?: Partial<Record<ActionCode, ActionSchema>>,
+): string {
   const codes = allowedActions ?? (Object.keys(ACTION_SCHEMAS) as ActionCode[]);
   const lines = [
     'What you can do this week:',
@@ -157,7 +164,7 @@ export function buildActionDictionary(allowedActions?: readonly ActionCode[]): s
   ];
   let idx = 1;
   for (const code of codes) {
-    const schema = ACTION_SCHEMAS[code];
+    const schema = overrides?.[code] ?? ACTION_SCHEMAS[code];
     if (!schema) continue;
     lines.push(`${idx}. ${schema.description}`);
     lines.push(`   Params: ${schema.params}`);
@@ -191,12 +198,20 @@ export interface EmploymentBoardEntry {
   wage: number;
   min_skill: number;
   owner_name?: string;
+  /** Phase 12 D-19: open vacancies (capacity - workforce) at this enterprise. */
+  vacancies?: number;
+  /** Phase 12 D-19: current employee count. */
+  workforce?: number;
+  /** Phase 12 D-19: maximum employee capacity. */
+  capacity?: number;
 }
 
 export interface PersonalStatusBoard {
   employed: boolean;
   enterprise_id: string | null;
   enterprise_role?: 'owner' | 'employee' | null;
+  /** Phase 12 D-17: posted wage at the agent's employer (used for action-dict interpolation). */
+  employerWage?: number;
   /** Current agent wealth — used for entrepreneurial opportunity alert. */
   agentWealth?: number;
 }
@@ -376,16 +391,45 @@ export function buildMarketBoardSection(entries?: readonly MarketBoardEntry[]): 
   return lines.join('\n');
 }
 
-export function buildEmploymentBoardSection(entries?: readonly EmploymentBoardEntry[]): string {
-  if (!entries || entries.length === 0) {
-    return '[Employment Board]\n- No active job offers this week.';
+/**
+ * Build the employment board block injected into citizen prompts.
+ *
+ * @param entries - Optional list of available vacancies.
+ * @param reservationWage - Phase 12 D-19: when provided, prepends the agent's
+ *   reservation wage (self-production break-even) so agents can compare it
+ *   against posted wages directly in the prompt.
+ */
+export function buildEmploymentBoardSection(
+  entries?: readonly EmploymentBoardEntry[],
+  reservationWage?: number,
+): string {
+  const lines = ['[Employment Board]'];
+
+  // D-19: reservation wage line at the top for direct comparison
+  if (reservationWage !== undefined) {
+    lines.push(`Your reservation wage (self-production break-even): ${reservationWage.toFixed(1)} fiat`);
+    lines.push('');
   }
-  return [
-    '[Employment Board]',
-    ...entries.map(entry =>
-      `- ${entry.enterprise_id} (${entry.industry}) wage ${entry.wage}, min_skill ${entry.min_skill}${entry.owner_name ? `, owner ${entry.owner_name}` : ''}`
-    ),
-  ].join('\n');
+
+  if (!entries || entries.length === 0) {
+    lines.push('- No active job offers this week.');
+    return lines.join('\n');
+  }
+
+  for (const entry of entries) {
+    let line = `- ${entry.enterprise_id} (${entry.industry}) wage ${entry.wage}, min_skill ${entry.min_skill}`;
+    if (entry.owner_name) line += `, owner ${entry.owner_name}`;
+    // D-19: show workforce/capacity and vacancy count when available
+    if (entry.workforce !== undefined && entry.capacity !== undefined) {
+      line += `, workforce ${entry.workforce}/${entry.capacity}`;
+    }
+    if (entry.vacancies !== undefined) {
+      line += `, ${entry.vacancies} vacanc${entry.vacancies === 1 ? 'y' : 'ies'}`;
+    }
+    lines.push(line);
+  }
+
+  return lines.join('\n');
 }
 
 export function buildPersonalStatusSection(status?: PersonalStatusBoard): string {

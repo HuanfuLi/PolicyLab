@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildNaturalIntentPrompt,
   buildActionDictionary,
+  buildEmploymentBoardSection,
   buildResolutionPrompt,
   buildAgentRosterMessages,
 } from '../prompts/index.js';
@@ -206,7 +207,16 @@ describe('Prompt content (Plan 03 scaffolding)', () => {
 });
 
 describe('Phase 12: Action-dictionary per-agent wage interpolation', () => {
-  it.todo('D-17: WORK_AT_ENTERPRISE description contains the agent\'s actual wage');
+  it('D-17: WORK_AT_ENTERPRISE description contains the agent\'s actual wage via override', () => {
+    const out = buildActionDictionary(['WORK_AT_ENTERPRISE'], {
+      WORK_AT_ENTERPRISE: {
+        description: `Show up at AcmeFarm for this week's 12.5 fiat wage (WORK_AT_ENTERPRISE). Guaranteed -- no market risk. Paid directly to your wealth, withholding taxes automatic.`,
+        params: '{ "enterprise_id": string }',
+      },
+    } as any);
+    expect(out).toMatch(/AcmeFarm/);
+    expect(out).toMatch(/12\.5 fiat wage/);
+  });
 
   it('D-18: PRODUCE_AND_SELL description reframed to subsistence wording', () => {
     const dict = buildActionDictionary(['PRODUCE_AND_SELL']);
@@ -222,5 +232,13 @@ describe('Phase 12: Action-dictionary per-agent wage interpolation', () => {
     expect(dict).toMatch(/can.t find (paid )?work|can.t find work/i);
   });
 
-  it.todo('D-19: employment board shows reservation_wage + vacancies + workforce/capacity');
+  it('D-19: employment board shows reservation_wage + vacancies + workforce/capacity', () => {
+    const section = buildEmploymentBoardSection(
+      [{ enterprise_id: 'e1', industry: 'agriculture', wage: 15, min_skill: 0, owner_name: 'farmer', vacancies: 2, workforce: 3, capacity: 5 }],
+      8.2, /* reservationWage */
+    );
+    expect(section).toMatch(/reservation wage.*8\.2/i);
+    expect(section).toMatch(/3\/5/i);
+    expect(section).toMatch(/2 vacanc/i);
+  });
 });

@@ -23,6 +23,7 @@ import type {
   CitizenCapitalMarketContext,
   CitizenFiscalContext,
   CentralBankContext,
+  ActionSchema,
 } from './shared.js';
 
 // ── Phase 3 prompts ─────────────────────────────────────────────────────────
@@ -210,6 +211,9 @@ export function buildNaturalIntentPrompt(
   },
   /** Phase 10: Enterprise employment context (D-23). */
   enterpriseContext?: string,
+  /** Phase 12 D-19: agent's reservation wage (self-production break-even). When provided,
+   *  prepended at the top of the employment board so agents can compare it against vacancies. */
+  reservationWage?: number,
 ): LLMMessage[] {
   // Static prefix: identical across all agent calls in an iteration → cacheable
   const staticPrefix = `You live in a society built on the idea: "${session.idea}"
@@ -393,7 +397,8 @@ Next step: ${cognitiveContext.currentPlanStep}`;
     : '';
 
   const marketBoardBlock = buildMarketBoardSection(marketBoard);
-  const employmentBoardBlock = buildEmploymentBoardSection(employmentBoard);
+  // Phase 12 D-19: pass reservationWage so unemployed agents see their break-even
+  const employmentBoardBlock = buildEmploymentBoardSection(employmentBoard, reservationWage);
   const personalStatusBlock = buildPersonalStatusSection(personalStatus);
 
   // Action-Result Feedback (D-07 -- remove [Previous Action Results] tag)
@@ -409,8 +414,22 @@ Next step: ${cognitiveContext.currentPlanStep}`;
       })()
     : '';
 
-  // Build role-specific action dictionary
-  const actionDictionary = buildActionDictionary(allowedActions);
+  // Phase 12 D-17: per-agent wage interpolation in action dictionary.
+  // When the agent has an employment record with a wage (populated by buildPersonalStatus
+  // from the enterprise registry), override the generic WORK_AT_ENTERPRISE description
+  // with the agent's actual posted wage so the LLM sees accurate compensation information.
+  const actionSchemaOverrides: Partial<Record<ActionCode, ActionSchema>> | undefined =
+    (personalStatus?.employed && personalStatus.enterprise_id && typeof personalStatus.employerWage === 'number')
+      ? {
+          WORK_AT_ENTERPRISE: {
+            description: `Show up at ${personalStatus.enterprise_id} for this week's ${personalStatus.employerWage.toFixed(1)} fiat wage (WORK_AT_ENTERPRISE). Guaranteed -- no market risk. Paid directly to your wealth, withholding taxes automatic.`,
+            params: '{ "enterprise_id": string }',
+          },
+        }
+      : undefined;
+
+  // Build role-specific action dictionary (with optional D-17 wage override)
+  const actionDictionary = buildActionDictionary(allowedActions, actionSchemaOverrides);
 
   // Banking Foundation: build banking context blocks
   const citizenBankingBlock = buildCitizenBankingSection(citizenBankingContext);

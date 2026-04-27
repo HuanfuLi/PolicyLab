@@ -38,13 +38,25 @@ export function buildEmploymentBoardEntries(sessionId: string): EmploymentBoardE
       wage: enterprise.wage,
       min_skill: enterprise.minSkill,
       owner_name: enterprise.ownerName,
+      // Phase 12 D-19: vacancy/workforce/capacity for employment board context
+      vacancies: Math.max(0, (enterprise.capacity ?? 0) - enterprise.employees.size),
+      workforce: enterprise.employees.size,
+      capacity: enterprise.capacity ?? 0,
     }));
 }
 
 export function buildPersonalStatus(sessionId: string, agentId: string, enterpriseOwnerId?: string, agentWealth?: number): PersonalStatusBoard {
   const employment = getEmploymentRegistry(sessionId).get(agentId);
   if (employment) {
-    return { employed: true, enterprise_id: employment.enterpriseId, enterprise_role: 'employee', agentWealth };
+    // Phase 12 D-17: look up posted wage from enterprise registry for action-dict interpolation
+    const enterprise = getEnterpriseRegistry(sessionId).get(employment.enterpriseId);
+    return {
+      employed: true,
+      enterprise_id: employment.enterpriseId,
+      enterprise_role: 'employee',
+      agentWealth,
+      employerWage: enterprise?.wage,
+    };
   }
   if (enterpriseOwnerId) {
     return { employed: false, enterprise_id: enterpriseOwnerId, enterprise_role: 'owner', agentWealth };

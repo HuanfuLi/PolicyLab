@@ -942,6 +942,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           // Single-pass: one LLM call returns structured JSON with narrative + actionCode.
           // Phase 3: pass role-restricted action set so elite agents see privileged actions.
           const lastActionResults = sessionLastActionResults.get(sessionId)?.get(agent.id);
+          // Phase 12 D-17/D-19: compute per-agent reservation wage for action-dict + board
+          const rwMap = sessionReservationWages.get(sessionId);
+          const reservationWageForAgent = rwMap?.get(agent.id)
+            ?? Math.max((iterEconomyConfig.minimumWage ?? 5) * 0.5, 1);
+
           const messages = buildNaturalIntentPrompt(
             agent, session, previousSummary, iterNum,
             economyContext, cognitiveContext, isFirstIteration, aliveAgentNames,
@@ -958,6 +963,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             citizenFiscalContext,
             inflationContext,
             centralBankContext,
+            undefined, // ammMarketData
+            undefined, // enterpriseContext
+            reservationWageForAgent, // Phase 12 D-17/D-19
           );
 
           // throwOnExhaustion: true — after all retries, throw instead of silently defaulting to REST.
