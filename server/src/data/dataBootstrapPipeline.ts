@@ -23,6 +23,7 @@ import type {
 import { distributeWealth } from './giniDistribution.js';
 import { getRoleTier } from '../mechanics/actionCodes.js';
 import { validateTaxPolicy } from '../mechanics/economyConfigUtils.js';
+import { isEmployableAgent } from '../orchestration/helpers/isEmployableAgent.js';
 
 /** Iterations per year — all annual rates are divided by this. */
 const ITERATIONS_PER_YEAR = 12;
@@ -428,6 +429,12 @@ function sectorToNamePrefix(sector: EnterpriseSector): string {
 /**
  * Generate enterprise blueprints from agent roster and optional WB data.
  *
+ * Phase 12 extensions (D-04, D-05, D-07):
+ * - Each blueprint carries a `capacity` field set to 110% of sector workforce
+ * - D-05 post-generation invariant: total capacity ≥ 1.05 × employable agents
+ *   AND every sector with ≥5% of workforce has ≥1 enterprise
+ * - Auto-inflation loop corrects shortfalls, logs corrections via console.info
+ *
  * Creates 1-3 enterprises per sector based on WB enterprise density data
  * or a fallback heuristic (ceil(sectorAgents / 5)). Elite/specialist agents
  * are assigned as owners; laborers become employees.
@@ -445,7 +452,16 @@ export function generateEnterprises(
   /** Optional: when provided, resolve agent names to UUIDs in ownerId and employees */
   agentNameToId?: Map<string, string>,
 ): EnterpriseBlueprint[] {
-  // Group agents by sector
+  // Phase 12 D-07: separate employable agents from all agents for capacity math
+  const employableAgents = agents.filter(isEmployableAgent);
+  const employableCount = employableAgents.length;
+
+  // Phase 12 D-04/D-05 constants
+  const SECTOR_MIN_SHARE = 0.05;      // sectors below this share are exempt from coverage check
+  const SYSTEM_VACANCY_FLOOR = 1.05;  // D-05: hard floor on total capacity / employable
+  const SYSTEM_VACANCY_TARGET = 1.10; // D-04: target ratio
+
+  // Group ALL agents by sector for ownership/employee assignment (preserves existing behavior)
   const sectorGroups = new Map<EnterpriseSector, AgentBlueprint[]>();
   for (const agent of agents) {
     const sector = agent.sector ?? roleToSector(agent.role);
@@ -454,10 +470,86 @@ export function generateEnterprises(
     sectorGroups.set(sector, list);
   }
 
+  // Build a parallel map of EMPLOYABLE agents per sector for capacity math
+  const employableSectorGroups = new Map<EnterpriseSector, AgentBlueprint[]>();
+  for (const agent of employableAgents) {
+    const sector = agent.sector ?? roleToSector(agent.role);
+    const list = employableSectorGroups.get(sector) ?? [];
+    list.push(agent);
+    employableSectorGroups.set(sector, list);
+  }
+
   const gdpPerCapita = profile?.economics?.gdpPerCapita?.value ?? 10000;
   const initialCapital = Math.round(gdpPerCapita * 0.3);
   const wage = Math.max(minimumWage, baseFiat * 0.05);
   const enterprises: EnterpriseBlueprint[] = [];
+
+  /** Helper: create a single enterprise blueprint for a sector/owner combo. */
+  function buildBlueprint(
+    sector: EnterpriseSector,
+    owners: AgentBlueprint[],
+    employees: AgentBlueprint[],
+    ownerIndex: number,
+    capacityPerEnt: number,
+  ): EnterpriseBlueprint {
+    const isGov = sector === 'government';
+    const commodity = sectorToCommodity(sector);
+
+    let initialInventory: Record<string, number> = {};
+    switch (sector) {
+      case 'agriculture':
+        initialInventory = { food: Math.round(initialCapital * 0.3) };
+        break;
+      case 'industry':
+        initialInventory = {
+          tools: Math.round(initialCapital * 0.2),
+          raw_materials: Math.round(initialCapital * 0.1),
+        };
+        break;
+      case 'services':
+        initialInventory = { luxury_goods: Math.round(initialCapital * 0.15) };
+        break;
+      case 'government':
+        initialInventory = {};
+        break;
+    }
+
+    // Distribute employees round-robin across enterprises in this sector
+    const entEmployees: string[] = [];
+    for (let j = 0; j < employees.length; j++) {
+      if (j % owners.length === ownerIndex) {
+        const agentName = employees[j].name;
+        const resolvedId = agentNameToId?.get(agentName) ?? agentName;
+        if (agentNameToId && !agentNameToId.has(agentName)) {
+          console.warn(`[Enterprise] Employee "${agentName}" not found in agent name→UUID map`);
+        }
+        entEmployees.push(resolvedId);
+      }
+    }
+
+    const ownerIdResolved = agentNameToId?.get(owners[ownerIndex].name) ?? owners[ownerIndex].name;
+    if (agentNameToId && !agentNameToId.has(owners[ownerIndex].name)) {
+      console.warn(`[Enterprise] Owner "${owners[ownerIndex].name}" not found in agent name→UUID map — using name as ownerId (may cause employment wiring failures)`);
+    }
+
+    // Count existing enterprises in this sector to compute unique index
+    const sectorCount = enterprises.filter(e => e.sector === sector).length;
+
+    return {
+      id: `ent_${sector.slice(0, 4)}_${sectorCount + 1}`,
+      name: `${sectorToNamePrefix(sector)} ${sectorCount + 1}`,
+      ownerId: ownerIdResolved,
+      sector,
+      industry: sectorToIndustry(sector, ownerIndex),
+      commodityOutput: commodity,
+      initialCapital,
+      initialInventory,
+      employees: entEmployees,
+      wage,
+      isServiceEnterprise: isGov,
+      capacity: capacityPerEnt,
+    };
+  }
 
   for (const [sector, sectorAgents] of sectorGroups) {
     // Determine enterprise count for this sector
@@ -465,11 +557,16 @@ export function generateEnterprises(
     if (profile?.economics?.enterpriseDensity?.value != null) {
       const density = profile.economics.enterpriseDensity.value;
       entCount = Math.max(1, Math.min(3, Math.round(density * sectorAgents.length / 1000)));
-      // Density-based calc may round to 0 for small populations, enforce minimum 1
       if (entCount < 1) entCount = 1;
     } else {
       entCount = Math.max(1, Math.min(3, Math.ceil(sectorAgents.length / 5)));
     }
+
+    // Phase 12 D-04: compute capacity per enterprise for this sector
+    // capacity_per_ent = max(2, ceil(sectorEmployableCount * SYSTEM_VACANCY_TARGET / entCount))
+    const sectorEmployableCount = employableSectorGroups.get(sector)?.length ?? 0;
+    const sectorTargetVacancies = Math.ceil(sectorEmployableCount * SYSTEM_VACANCY_TARGET);
+    const capacityPerEnt = Math.max(2, Math.ceil(sectorTargetVacancies / entCount));
 
     // Select owners: elite/specialist first, fallback to highest-wealth agent
     const eligible = sectorAgents.filter(a => getRoleTier(a.role) !== 'laborer');
@@ -489,63 +586,91 @@ export function generateEnterprises(
 
     // Create enterprises
     for (let i = 0; i < owners.length; i++) {
-      const isGov = sector === 'government';
-      const commodity = sectorToCommodity(sector);
+      enterprises.push(buildBlueprint(sector, owners, employees, i, capacityPerEnt));
+    }
+  }
 
-      // Seed initial inventory by sector
-      let initialInventory: Record<string, number> = {};
-      switch (sector) {
-        case 'agriculture':
-          initialInventory = { food: Math.round(initialCapital * 0.3) };
-          break;
-        case 'industry':
-          initialInventory = {
-            tools: Math.round(initialCapital * 0.2),
-            raw_materials: Math.round(initialCapital * 0.1),
-          };
-          break;
-        case 'services':
-          initialInventory = { luxury_goods: Math.round(initialCapital * 0.15) };
-          break;
-        case 'government':
-          initialInventory = {};
-          break;
-      }
+  // ── Phase 12 D-05: Post-generation invariant check with auto-inflation ──────
 
-      // Distribute employees round-robin across enterprises in this sector
-      const entEmployees: string[] = [];
-      for (let j = 0; j < employees.length; j++) {
-        if (j % owners.length === i) {
-          const agentName = employees[j].name;
-          // Prefer UUID if name-to-ID map provided; fall back to name for backward compat
-          const resolvedId = agentNameToId?.get(agentName) ?? agentName;
-          if (agentNameToId && !agentNameToId.has(agentName)) {
-            console.warn(`[Enterprise] Employee "${agentName}" not found in agent name→UUID map`);
-          }
-          entEmployees.push(resolvedId);
+  /** Compute invariant state: total capacity and which sectors are deficient. */
+  const runInvariantCheck = (): {
+    systemOk: boolean;
+    sectorDeficits: EnterpriseSector[];
+    totalCapacity: number;
+  } => {
+    const totalCapacity = enterprises.reduce((s, e) => s + (e.capacity ?? 0), 0);
+    const systemOk = employableCount === 0 || totalCapacity >= employableCount * SYSTEM_VACANCY_FLOOR;
+    const sectorDeficits: EnterpriseSector[] = [];
+    for (const [sector, sectorEmps] of employableSectorGroups) {
+      if (sectorEmps.length / Math.max(employableCount, 1) >= SECTOR_MIN_SHARE) {
+        const sectorEnts = enterprises.filter(e => e.sector === sector);
+        if (sectorEnts.length === 0) {
+          sectorDeficits.push(sector);
         }
       }
+    }
+    return { systemOk, sectorDeficits, totalCapacity };
+  };
 
-      // Resolve ownerId to UUID if map is provided
-      const ownerIdResolved = agentNameToId?.get(owners[i].name) ?? owners[i].name;
-      if (agentNameToId && !agentNameToId.has(owners[i].name)) {
-        console.warn(`[Enterprise] Owner "${owners[i].name}" not found in agent name→UUID map — using name as ownerId (may cause employment wiring failures)`);
-      }
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const { systemOk, sectorDeficits, totalCapacity } = runInvariantCheck();
+    if (systemOk && sectorDeficits.length === 0) break;
 
+    // Fix sector gaps first: add 1 enterprise per deficient sector
+    for (const sector of sectorDeficits) {
+      const sectorAgents = sectorGroups.get(sector) ?? [];
+      if (sectorAgents.length === 0) continue;
+
+      const sectorEmployableCount = employableSectorGroups.get(sector)?.length ?? 0;
+      const fallbackCapacity = Math.max(2, Math.ceil(sectorEmployableCount * SYSTEM_VACANCY_TARGET));
+
+      // Pick an owner from the sector (preferably elite/specialist, else any)
+      const eligible = sectorAgents.filter(a => getRoleTier(a.role) !== 'laborer');
+      const owner = eligible[0] ?? sectorAgents[0];
+      if (!owner) continue;
+
+      const ownerIdResolved = agentNameToId?.get(owner.name) ?? owner.name;
+      const sectorCount = enterprises.filter(e => e.sector === sector).length;
+
+      console.info(`[Phase 12 L-03] Vacancy invariant: auto-inflate — adding enterprise to sector "${sector}" (attempt ${attempt + 1})`);
       enterprises.push({
-        id: `ent_${sector.slice(0, 4)}_${i + 1}`,
-        name: `${sectorToNamePrefix(sector)} ${i + 1}`,
+        id: `ent_${sector.slice(0, 4)}_${sectorCount + 1}`,
+        name: `${sectorToNamePrefix(sector)} ${sectorCount + 1}`,
         ownerId: ownerIdResolved,
         sector,
-        industry: sectorToIndustry(sector, i),
-        commodityOutput: commodity,
+        industry: sectorToIndustry(sector, sectorCount),
+        commodityOutput: sectorToCommodity(sector),
         initialCapital,
-        initialInventory,
-        employees: entEmployees,
+        initialInventory: {},
+        employees: [],
         wage,
-        isServiceEnterprise: isGov,
+        isServiceEnterprise: sector === 'government',
+        capacity: fallbackCapacity,
       });
     }
+
+    // Fix system-level shortfall by bumping capacity on existing enterprises
+    if (!systemOk) {
+      const deficit = Math.ceil(employableCount * SYSTEM_VACANCY_FLOOR - totalCapacity);
+      console.info(`[Phase 12 L-03] Vacancy invariant: auto-inflate — bumping capacity by ${deficit} across ${enterprises.length} enterprises (attempt ${attempt + 1})`);
+      let remaining = deficit;
+      let idx = 0;
+      while (remaining > 0 && enterprises.length > 0) {
+        enterprises[idx % enterprises.length].capacity = (enterprises[idx % enterprises.length].capacity ?? 0) + 1;
+        idx++;
+        remaining--;
+      }
+    }
+  }
+
+  // Final check: throw if invariant still fails after auto-inflation
+  const final = runInvariantCheck();
+  if (!final.systemOk || final.sectorDeficits.length > 0) {
+    throw new Error(
+      `[Phase 12 L-03] Post-bootstrap vacancy invariant failed after auto-inflation: ` +
+      `totalCapacity=${final.totalCapacity}, employable=${employableCount}, ` +
+      `deficitSectors=[${final.sectorDeficits.join(',')}]`,
+    );
   }
 
   return enterprises;
