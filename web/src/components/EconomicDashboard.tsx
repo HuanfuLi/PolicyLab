@@ -365,6 +365,158 @@ function SfcDriftBanner({ data }: { data: TelemetryLog[] }) {
   );
 }
 
+// ── Panel 6: Average Posted Wage ─────────────────────────────────────────────
+// Phase 12 D-21: workforce-weighted average posted wage over iterations.
+
+function AvgWageChart({ data }: { data: TelemetryLog[] }) {
+  const filtered = data.filter(d => d.avgPostedWage != null);
+
+  if (filtered.length === 0) {
+    return (
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Labor Market — Average Posted Wage</div>
+        <div style={emptyStateStyle}>No wage data yet — wages appear after employment forms in the simulation</div>
+      </div>
+    );
+  }
+
+  const chartData = filtered.map(d => ({
+    iterationNumber: d.iterationNumber,
+    avgPostedWage: d.avgPostedWage ?? null,
+  }));
+
+  return (
+    <div style={sectionStyle}>
+      <div style={sectionTitleStyle}>Labor Market — Average Posted Wage</div>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
+          <XAxis dataKey="iterationNumber" label={{ value: 'Iteration', position: 'insideBottomRight', offset: -4, fill: 'var(--text-dim)', fontSize: 10 }} tick={{ fill: 'var(--text-dim)', fontSize: 10 }} />
+          <YAxis tickFormatter={v => v.toFixed(1)} tick={{ fill: 'var(--text-dim)', fontSize: 10 }} width={48} />
+          <Tooltip contentStyle={{ background: 'var(--bg-color)', border: '1px solid var(--primary)', borderRadius: 8, fontSize: '0.78rem', color: 'var(--text-main)' }} labelStyle={{ color: 'var(--text-muted)' }} />
+          <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} />
+          <Line type="monotone" dataKey="avgPostedWage" stroke={CHART_GREEN} strokeWidth={2} dot={false} name="Avg Posted Wage (fiat)" connectNulls />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ── Panel 7: Unemployment Rate ────────────────────────────────────────────────
+// Phase 12 D-21: fraction of employable agents without employer.
+
+function UnemploymentChart({ data }: { data: TelemetryLog[] }) {
+  const filtered = data.filter(d => d.unemploymentRate != null);
+
+  if (filtered.length === 0) {
+    return (
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Labor Market — Unemployment Rate</div>
+        <div style={emptyStateStyle}>No unemployment data yet — appears after first iteration with employable agents</div>
+      </div>
+    );
+  }
+
+  const chartData = filtered.map(d => ({
+    iterationNumber: d.iterationNumber,
+    unemploymentPct: d.unemploymentRate != null ? Math.round(d.unemploymentRate * 1000) / 10 : null,
+  }));
+
+  return (
+    <div style={sectionStyle}>
+      <div style={sectionTitleStyle}>Labor Market — Unemployment Rate</div>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
+          <XAxis dataKey="iterationNumber" label={{ value: 'Iteration', position: 'insideBottomRight', offset: -4, fill: 'var(--text-dim)', fontSize: 10 }} tick={{ fill: 'var(--text-dim)', fontSize: 10 }} />
+          <YAxis tickFormatter={v => `${v}%`} tick={{ fill: 'var(--text-dim)', fontSize: 10 }} width={48} />
+          <Tooltip contentStyle={{ background: 'var(--bg-color)', border: '1px solid var(--primary)', borderRadius: 8, fontSize: '0.78rem', color: 'var(--text-main)' }} labelStyle={{ color: 'var(--text-muted)' }} formatter={(v) => [`${Number(v).toFixed(1)}%`, 'Unemployment']} />
+          <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} />
+          <Line type="monotone" dataKey="unemploymentPct" stroke={CHART_ORANGE} strokeWidth={2} dot={false} name="Unemployment (%)" connectNulls />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ── Panel 8: Vacancies vs Applicants ─────────────────────────────────────────
+// Phase 12 D-21: two-line chart showing supply/demand in the labor market.
+
+function VacanciesApplicantsChart({ data }: { data: TelemetryLog[] }) {
+  const filtered = data.filter(d => d.vacanciesTotal != null || d.applicantsTotal != null);
+
+  if (filtered.length === 0) {
+    return (
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Labor Market — Vacancies vs Applicants</div>
+        <div style={emptyStateStyle}>No vacancy data yet — appears after first APPLY_FOR_JOB matching pass</div>
+      </div>
+    );
+  }
+
+  const chartData = filtered.map(d => ({
+    iterationNumber: d.iterationNumber,
+    vacanciesTotal: d.vacanciesTotal ?? null,
+    applicantsTotal: d.applicantsTotal ?? null,
+  }));
+
+  return (
+    <div style={sectionStyle}>
+      <div style={sectionTitleStyle}>Labor Market — Vacancies vs Applicants</div>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
+          <XAxis dataKey="iterationNumber" label={{ value: 'Iteration', position: 'insideBottomRight', offset: -4, fill: 'var(--text-dim)', fontSize: 10 }} tick={{ fill: 'var(--text-dim)', fontSize: 10 }} />
+          <YAxis tick={{ fill: 'var(--text-dim)', fontSize: 10 }} width={48} />
+          <Tooltip contentStyle={{ background: 'var(--bg-color)', border: '1px solid var(--primary)', borderRadius: 8, fontSize: '0.78rem', color: 'var(--text-main)' }} labelStyle={{ color: 'var(--text-muted)' }} />
+          <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} />
+          <Line type="monotone" dataKey="vacanciesTotal" stroke={CHART_BLUE} strokeWidth={2} dot={false} name="Vacancies" connectNulls />
+          <Line type="monotone" dataKey="applicantsTotal" stroke={CHART_VIOLET} strokeWidth={2} dot={false} name="Applicants" connectNulls />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ── Panel 9: Displaced Employees (Bankruptcy) ────────────────────────────────
+// Phase 12 D-21: workers displaced when enterprises go bankrupt each iteration.
+
+function DisplacedChart({ data }: { data: TelemetryLog[] }) {
+  const hasDisplacedData = data.some(d => d.displacedThisIteration != null);
+
+  if (!hasDisplacedData) {
+    return (
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Labor Market — Displaced Employees (Bankruptcy)</div>
+        <div style={emptyStateStyle}>No displacement data yet — spikes appear when an enterprise goes bankrupt</div>
+      </div>
+    );
+  }
+
+  const chartData = data
+    .filter(d => d.displacedThisIteration != null)
+    .map(d => ({
+      iterationNumber: d.iterationNumber,
+      displacedThisIteration: d.displacedThisIteration ?? 0,
+    }));
+
+  return (
+    <div style={sectionStyle}>
+      <div style={sectionTitleStyle}>Labor Market — Displaced Employees (Bankruptcy)</div>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" />
+          <XAxis dataKey="iterationNumber" label={{ value: 'Iteration', position: 'insideBottomRight', offset: -4, fill: 'var(--text-dim)', fontSize: 10 }} tick={{ fill: 'var(--text-dim)', fontSize: 10 }} />
+          <YAxis allowDecimals={false} tick={{ fill: 'var(--text-dim)', fontSize: 10 }} width={48} />
+          <Tooltip contentStyle={{ background: 'var(--bg-color)', border: '1px solid var(--primary)', borderRadius: 8, fontSize: '0.78rem', color: 'var(--text-main)' }} labelStyle={{ color: 'var(--text-muted)' }} />
+          <Legend wrapperStyle={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} />
+          <Line type="monotone" dataKey="displacedThisIteration" stroke={CHART_RED} strokeWidth={2} dot name="Displaced (bankruptcy)" connectNulls />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 // ── EconomicDashboard (default export) ───────────────────────────────────────
 
 export default function EconomicDashboard({ data }: EconomicDashboardProps) {
@@ -376,6 +528,11 @@ export default function EconomicDashboard({ data }: EconomicDashboardProps) {
       <FiscalChart data={data} />
       <BondYieldChart data={data} />
       <SfcDriftChart data={data} />
+      {/* Phase 12 D-21: Labor market panels */}
+      <AvgWageChart data={data} />
+      <UnemploymentChart data={data} />
+      <VacanciesApplicantsChart data={data} />
+      <DisplacedChart data={data} />
     </div>
   );
 }
