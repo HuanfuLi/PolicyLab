@@ -333,7 +333,28 @@ describe('distributeProRata — exact integer distribution', () => {
 });
 
 describe('Phase 12: Labor market SFC invariants', () => {
-  it.todo('wage adjustment does not move fiat — only changes enterprise.wage property');
+  it('Phase 12: processWageAdjustment moves no fiat — only changes ent.wage property', async () => {
+    const { processWageAdjustment } = await import('../enterpriseEngine.js');
+    const { DEFAULT_ECONOMY_CONFIG } = await import('@policylab/shared');
+
+    const ent = { id: 'e1', sector: 'agriculture' as const, wage: 50, lastApplicants: 3, lastVacancies: 5 };
+    const before = { ...ent };
+
+    processWageAdjustment({
+      enterprises: [ent],
+      config: DEFAULT_ECONOMY_CONFIG,
+      ammSpotPrices: new Map([['food' as const, 10]]),
+      previousLedgers: new Map([['e1', { totalRevenue: 100, totalWages: 30, workerCount: 3 }]]),
+    });
+
+    // wage MUST have changed (shortage nudge + profit-share active)
+    expect(ent.wage).not.toBeCloseTo(before.wage, 5);
+    // ALL other fields on ent must be identical to before (no fiat fields touched)
+    const { wage: _newWage, ...entWithoutWage } = ent;
+    const { wage: _beforeWage, ...beforeWithoutWage } = before;
+    expect(entWithoutWage).toEqual(beforeWithoutWage);
+  });
+
   it.todo('matching pass is net-zero fiat (employer+employee delta sum = 0)');
   it.todo('10-iter run with wage discovery: totalFiatSupply deviation < 0.1');
 });
