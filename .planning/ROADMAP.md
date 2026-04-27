@@ -288,7 +288,7 @@ Plans:
 **Gap closure:** Closes BANK-07 partial gap from `.planning/v1.0-MILESTONE-AUDIT.md` (2026-04-26)
 
 **Success Criteria** (what must be TRUE):
-  1. `iterTelemetry.centralBankRate` is populated every iteration from `persistedEconomyConfig.baseLoanInterestRate` (or the just-applied Taylor Rule output) at `simulationRunner.ts:~3504`
+  1. `iterTelemetry.centralBankRate` is populated every iteration from `persistedEconomyConfig.baseLoanInterestRate` (or the just-applied Taylor Rule output) at `simulationRunner.ts:~3658`
   2. The `EconomicDashboard` renders a Central Bank Rate panel (recharts LineChart) showing the rate timeseries; rate changes from `SET_BASE_RATE` actions or Taylor Rule are visually distinct between iterations
   3. REQUIREMENTS.md BANK-07 checkbox flips from `[ ]` to `[x]` and the partial-status note is removed
 
