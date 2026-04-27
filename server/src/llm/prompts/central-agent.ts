@@ -4,6 +4,7 @@ import type {
   ChatMessage,
   Session,
   BrainstormChecklist,
+  EnterpriseSector,
 } from '@policylab/shared';
 import type { AgentIntent } from './shared.js';
 
@@ -606,4 +607,88 @@ RULES FOR AGENT CHANGES:
 
   messages.push({ role: 'user', content: userMessage });
   return messages;
+}
+
+// ── Phase 12 D-06/D-15: Creative-mode enterprise blueprint prompt ─────────────
+
+export interface EnterpriseBlueprintPromptParams {
+  overview: string;
+  agentRoster: readonly { role?: string; sector?: EnterpriseSector | string; type?: string }[];
+  baseFiat: number;
+  minimumWage: number;
+  /** Optional healing feedback appended to the user message for retry attempts. */
+  healingFeedback?: string;
+}
+
+/**
+ * Builds the LLM messages asking the Central Agent to produce enterprise
+ * blueprints for a creative-mode society.
+ *
+ * Invariants spelled out in the prompt:
+ *   1. Every sector with ≥5% of employable agents MUST have ≥1 enterprise.
+ *   2. SUM of capacity across all enterprises MUST be ≥ 110% of employable count.
+ *   3. Each enterprise capacity ≥ 2 and ≥ initialWorkforceSize.
+ */
+export function buildEnterpriseBlueprintsPrompt(
+  params: EnterpriseBlueprintPromptParams,
+): LLMMessage[] {
+  const { overview, agentRoster, baseFiat, minimumWage, healingFeedback } = params;
+
+  // Compute employable-agent bucket counts (mirrors isEmployableAgent predicate)
+  const NON_EMPLOYEE_ROLES_LOCAL = new Set(['central_bank', 'central_agent', 'official']);
+  const employable = agentRoster.filter(a => {
+    const t = (a.type ?? '').toLowerCase();
+    if (t === 'bank') return false;
+    const r = (a.role ?? '').toLowerCase();
+    return !NON_EMPLOYEE_ROLES_LOCAL.has(r);
+  });
+
+  const sectorCounts: Record<string, number> = {};
+  for (const a of employable) {
+    const s = (a.sector ?? 'unspecified') as string;
+    sectorCounts[s] = (sectorCounts[s] ?? 0) + 1;
+  }
+  const employableCount = employable.length;
+  const targetVacancies = Math.ceil(employableCount * 1.10);
+  const wageAnchor = Math.max(minimumWage, baseFiat * 0.10);
+
+  const sectorBreakdown = Object.entries(sectorCounts)
+    .map(([s, n]) => `  - ${s}: ${n} employable citizens (${Math.round(100 * n / Math.max(employableCount, 1))}%)`)
+    .join('\n');
+
+  const schemaBlock = `Output JSON schema (array of enterprise objects):
+[
+  {
+    "sector": "agriculture" | "industry" | "services" | "government",
+    "ownerRole": string,           // e.g. "farm_owner", "factory_owner", "shop_owner", "administrator"
+    "initialWorkforceSize": number, // starting employee count at this enterprise
+    "capacity": number,            // max workforce (initialWorkforceSize + open vacancies); MUST be ≥ 2
+    "wageAnchor": number           // initial posted wage in fiat; suggested default ${wageAnchor.toFixed(2)}
+  }
+]`;
+
+  const invariants = `INVARIANTS (all must hold over the full enterprise list you produce):
+1. Every sector with ≥5% of the ${employableCount} employable citizens MUST have ≥1 enterprise.
+2. SUM of all capacity values MUST be ≥ ${targetVacancies} (= 110% × ${employableCount} employable citizens).
+3. Each enterprise capacity MUST be ≥ 2 AND ≥ its initialWorkforceSize.`;
+
+  const healingBlock = healingFeedback
+    ? `\n\nPREVIOUS ATTEMPT FAILED VALIDATION:\n${healingFeedback}\n\nRegenerate the list so all invariants hold.`
+    : '';
+
+  const systemContent = `You are generating the enterprise roster for a PolicyLab simulation society. ` +
+    `Output must be valid JSON matching the schema exactly — a top-level array. Nothing else.`;
+
+  const userContent =
+    `Society overview:\n${overview}\n\n` +
+    `Employable citizens by sector:\n${sectorBreakdown}\n` +
+    `\nTotal employable: ${employableCount}\n\n` +
+    `${schemaBlock}\n\n` +
+    `${invariants}` +
+    healingBlock;
+
+  return [
+    { role: 'system', content: systemContent },
+    { role: 'user', content: userContent },
+  ];
 }
