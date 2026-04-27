@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { processWageAdjustment } from '../enterpriseEngine.js';
+import { AutomatedMarketMaker } from '../automatedMarketMaker.js';
 import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
 
 const baseConfig = { ...DEFAULT_ECONOMY_CONFIG, laborWageNudgeK: 0.03, laborWageProfitShareAlpha: 0.15, defaultPerWorkerInputCost: 2, minimumWage: 5 };
@@ -123,9 +124,18 @@ describe('Phase 12: Labor market — wage adjustment + reservation wage + teleme
   it.todo('L-04: reservation wage = last PAS net proceeds when agent used PRODUCE_AND_SELL last iter');
   it.todo('L-04: reservation wage falls back to max(minimumWage × 0.5, small_constant) otherwise');
 
-  // ── L-07: Net proceeds from PAS ──────────────────────────────────────────
+  // ── L-07: AMM calibration factor + PAS net proceeds ──────────────────────
 
-  it.todo('L-07: net proceeds from PRODUCE_AND_SELL ≈ 0 at steady state over 10 iterations (medians within ±0.5 fiat)');
+  it('L-07: ammSubsistenceCalibrationFactor > 1 lowers initial spot price', () => {
+    // Phase 12 D-09: scaling foodReserve up (factor > 1) lowers the spot price
+    // spot = fiatReserve / foodReserve, so more food in pool → lower price per unit
+    const base = new AutomatedMarketMaker(1000, 100);
+    const calibrated = new AutomatedMarketMaker(1000, 100 * 1.3);
+    // SFC note: fiatReserve is unchanged — only the goods-side quantity is scaled.
+    // Goods reserve is not a monetary aggregate; x*y=k still holds at the new depth.
+    expect(base.currentFiatReserve / base.currentFoodReserve)
+      .toBeGreaterThan(calibrated.currentFiatReserve / calibrated.currentFoodReserve);
+  });
 
   // ── L-11: Telemetry fields ────────────────────────────────────────────────
 

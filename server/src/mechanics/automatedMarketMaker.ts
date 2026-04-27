@@ -598,15 +598,22 @@ export function computeDemurrageCycle(
  *   - Reserve depth: AMM holds fiat ≥ 4× total agent fiat (low price impact)
  *   - k = fiatReserve × foodReserve
  *
- * @param agentCount      Total living agents.
- * @param avgAgentWealth  Average starting wealth (default 50).
- * @param targetSpotPrice Desired initial food price (default 6.0 fiat/unit).
+ * @param agentCount               Total living agents.
+ * @param avgAgentWealth           Average starting wealth (default 50).
+ * @param targetSpotPrice          Desired initial food price (default 6.0 fiat/unit).
+ * @param currentTick              Global tick at initialisation.
+ * @param ammSubsistenceCalibrationFactor  Phase 12 D-09: scales the food pool's initial
+ *   depth. factor > 1 → more food in pool → lower baseline spot price → tighter
+ *   PRODUCE_AND_SELL margin. fiatReserve is intentionally unchanged so x*y=k holds at
+ *   the new depth. The goods reserve is NOT a monetary aggregate; scaling it preserves
+ *   SFC (no fiat created or destroyed). Default 1.0 = no change.
  */
 export function createAMMForSession(
   agentCount: number,
   avgAgentWealth = 50,
   targetSpotPrice = 6.0,
   currentTick = 0,
+  ammSubsistenceCalibrationFactor = 1.0,
 ): AutomatedMarketMaker {
   const totalAgentFiat = agentCount * avgAgentWealth;
 
@@ -614,7 +621,9 @@ export function createAMMForSession(
   const fiatReserve = totalAgentFiat * 4;
 
   // Food reserve derived from target spot price: P = x/y → y = x/P
-  const foodReserve = fiatReserve / targetSpotPrice;
+  // ammSubsistenceCalibrationFactor > 1 increases foodReserve, lowering spot price
+  // and compressing PRODUCE_AND_SELL sell margin (Phase 12 D-09).
+  const foodReserve = (fiatReserve / targetSpotPrice) * ammSubsistenceCalibrationFactor;
 
   return new AutomatedMarketMaker(fiatReserve, foodReserve, currentTick);
 }

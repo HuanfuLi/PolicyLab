@@ -529,7 +529,12 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         : 50;
 
       if (primaryMissing) {
-        const amm = createAMMForSession(Math.max(citizenAgents.length, 1), avgWealth, 6.0, startIter);
+        // Phase 12 D-09: pass ammSubsistenceCalibrationFactor so the food pool can be
+        // tuned to compress PRODUCE_AND_SELL sell margins. Default 1.0 = no change.
+        // Read-only at session init — changing mid-session has no effect (by design).
+        const startupCfg = getEconomyConfig(session.config as Record<string, unknown> | null);
+        const calibrationFactor = startupCfg.ammSubsistenceCalibrationFactor ?? 1.0;
+        const amm = createAMMForSession(Math.max(citizenAgents.length, 1), avgWealth, 6.0, startIter, calibrationFactor);
         if (savedAMM?.primary) amm.restore(savedAMM.primary);
         sessionAMMRegistry.set(sessionId, amm);
       }
