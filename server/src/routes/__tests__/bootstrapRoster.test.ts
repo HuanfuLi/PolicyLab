@@ -48,10 +48,39 @@ describe('parseAndValidateRosterBatch', () => {
   it('rejects undersized arrays', () => {
     expect(() =>
       parseAndValidateRosterBatch(
-        '{"agents":[{"name":"A","background":"One"}]}',
+        '{"agents":[{"name":"Anya Schmidt","background":"One"}]}',
         2,
         0,
       )).toThrow(/expected 2 agents, got 1/i);
+  });
+
+  it('rejects implausible names — long runs of dots and question marks (real local-LLM degenerate output)', () => {
+    expect(() =>
+      parseAndValidateRosterBatch(
+        '{"agents":[{"name":"Marlon Schwarz ... ..............?? ...???????..??.. ........","background":"non-empty"}]}',
+        1,
+        0,
+      )).toThrow(/implausible name/i);
+  });
+
+  it('rejects implausible names — punctuation-only', () => {
+    expect(() =>
+      parseAndValidateRosterBatch(
+        '{"agents":[{"name":"......","background":"non-empty"}]}',
+        1,
+        0,
+      )).toThrow(/implausible name/i);
+  });
+
+  it('accepts valid culturally-appropriate names', () => {
+    const out = parseAndValidateRosterBatch(
+      '{"agents":[{"name":"Marlene Fischer","background":"works at the local clinic"},{"name":"Li Xiaofeng","background":"fisher"}]}',
+      2,
+      0,
+    );
+    expect(out).toHaveLength(2);
+    expect(out[0]?.name).toBe('Marlene Fischer');
+    expect(out[1]?.name).toBe('Li Xiaofeng');
   });
 });
 

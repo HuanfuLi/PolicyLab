@@ -40,6 +40,21 @@ function isCountMismatch(err: unknown): boolean {
   return /expected \d+ agents, got \d+/i.test(msg);
 }
 
+/**
+ * Heuristic check that a string looks like a real human name rather than the
+ * degenerate output (long runs of `.` and `?`) some local LLMs produce when
+ * they exhaust their output budget mid-string. Fails:
+ *   - empty / too short / too long
+ *   - <40% letters (garbage of mostly punctuation)
+ *   - runs of >=5 consecutive `.` or `?`
+ */
+function isPlausibleName(name: string): boolean {
+  if (!name || name.length < 2 || name.length > 80) return false;
+  if (/[.?]{5,}/.test(name)) return false;
+  const letterCount = (name.match(/\p{L}/gu) ?? []).length;
+  return letterCount / name.length >= 0.4;
+}
+
 export function parseAndValidateRosterBatch(
   rosterRaw: string,
   expectedCount: number,
@@ -55,14 +70,18 @@ export function parseAndValidateRosterBatch(
   }
 
   return rosterData.agents.map((entry, index) => {
+    const name = (entry?.name ?? '').trim();
     const background = (entry?.background ?? '').trim();
     if (!background) {
       throw new Error(`batch ${batchStart}: agent index ${index} has empty background`);
     }
-    return {
-      name: (entry?.name ?? '').trim(),
-      background,
-    };
+    if (!isPlausibleName(name)) {
+      throw new Error(
+        `batch ${batchStart}: agent index ${index} has implausible name ${JSON.stringify(name.slice(0, 40))} ` +
+        `— must be 2-80 chars, mostly letters, no long runs of '.' or '?'. Re-emit with real culturally-appropriate names.`,
+      );
+    }
+    return { name, background };
   });
 }
 
