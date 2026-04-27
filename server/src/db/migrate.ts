@@ -414,5 +414,26 @@ export function runMigrations() {
     }
   }
 
+  // Phase 12 D-20: labor-market telemetry columns on macro_snapshots (PRAGMA guard, nullable)
+  {
+    const msCols = sqlite.prepare("PRAGMA table_info(macro_snapshots)").all() as Array<{ name: string }>;
+    const msColNames = new Set(msCols.map(c => c.name));
+    const newMsCols: Array<[string, string]> = [
+      ['avg_posted_wage', 'REAL'],
+      ['unemployment_rate', 'REAL'],
+      ['reservation_wage_p25', 'REAL'],
+      ['reservation_wage_p50', 'REAL'],
+      ['reservation_wage_p75', 'REAL'],
+      ['vacancies_total', 'INTEGER'],
+      ['applicants_total', 'INTEGER'],
+      ['displaced_this_iteration', 'INTEGER'],
+    ];
+    for (const [col, type] of newMsCols) {
+      if (!msColNames.has(col)) {
+        sqlite.exec(`ALTER TABLE macro_snapshots ADD COLUMN ${col} ${type}`);
+      }
+    }
+  }
+
   console.log('Database migrations applied.');
 }

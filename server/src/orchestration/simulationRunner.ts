@@ -127,6 +127,7 @@ import {
   type SfcBySubsystem,
 } from './helpers/sfcSubsystemAccounting.js';
 import { buildMarketBoardEntries, buildEmploymentBoardEntries, buildPersonalStatus, updatePriceHistory } from './helpers/marketBoard.js';
+import { isEmployableAgent } from './helpers/isEmployableAgent.js';
 import { type AgentWeekState, createAgentWeekState, clampStat, clampWealth } from './helpers/weekState.js';
 import { applyStructuralPressures } from './helpers/structuralPressures.js';
 import { runApplyForJobMatching } from './helpers/matchingPass.js';
@@ -1355,6 +1356,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         state.employer_id = employmentRegistry.get(agent.id)?.enterpriseId ?? null;
       }
 
+      // Phase 12 D-20: capture applicant count outside matching-pass block scope
+      let applicantsTotalThisIter = 0;
+
       // ── Phase 12 D-13: APPLY_FOR_JOB automated matching pass ───────────────
       // Runs AFTER weekStateMap.employer_id is populated (so we have current employment state)
       // and BEFORE the orderBook is accessed (no dependency on employment state).
@@ -1385,6 +1389,9 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             if (s) s.employer_id = entId;
           },
         });
+
+        // Capture applicant count for D-20 telemetry (outside block scope)
+        applicantsTotalThisIter = applicantIds.size;
 
         appendTrace(
           sessionId,
@@ -1866,6 +1873,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
       // Group employees by enterprise, check if the owner can cover all wages,
       // then either pay in full or declare bankruptcy with proportional liquidation.
       let bankruptciesThisIter = 0;
+      // Phase 12 D-16: count of employees displaced by enterprise bankruptcy this iteration
+      let displacedThisIteration = 0;
       {
         // Build per-enterprise wage obligation map: enterpriseId → [employmentRecords that worked]
         const enterpriseWorkers = new Map<string, EmploymentRecord[]>();
@@ -1981,6 +1990,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
               if (empWeekState) empWeekState.employer_id = null;
               employeeState.cortisolDelta += 20;
               employeeState.happinessDelta -= 15;
+              // Phase 12 D-16: count displaced workers from paid roster
+              displacedThisIteration++;
             }
 
             // Punish owner
@@ -1996,6 +2007,8 @@ export async function runSimulation(sessionId: string, totalIterations: number):
                 employmentRegistry.delete(empId);
                 const empState = weekStateMap.get(empId);
                 if (empState) empState.employer_id = null;
+                // Phase 12 D-16: count displaced workers from the full roster
+                displacedThisIteration++;
               }
             }
 
@@ -3333,6 +3346,27 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           inflationExpectations: inflationOutput.inflationExpectations,
           totalLoansOutstanding: bankingLoansOutstanding,
           treasuryBalance,
+          // Phase 12 D-20: labor-market telemetry (computed after bankruptcy/matching pass above)
+          // Note: these variables are in scope from the telemetry block which runs AFTER this call.
+          // We re-compute inline here using the same logic to avoid ordering issues.
+          avgPostedWage: (() => {
+            let num = 0, den = 0;
+            for (const ent of enterpriseRegistry.values()) {
+              if (ent.employees.size > 0) { num += ent.wage * ent.employees.size; den += ent.employees.size; }
+            }
+            return den > 0 ? Math.round((num / den) * 100) / 100 : undefined;
+          })(),
+          unemploymentRate: (() => {
+            const emp = aliveAgents.filter(a => isEmployableAgent(a));
+            const tot = emp.length;
+            const emped = emp.filter(a => employmentRegistry.has(a.id)).length;
+            return tot > 0 ? (tot - emped) / tot : undefined;
+          })(),
+          vacanciesTotal: [...enterpriseRegistry.values()].reduce(
+            (sum, ent) => sum + Math.max(0, (ent.capacity ?? 0) - ent.employees.size), 0
+          ),
+          applicantsTotal: applicantsTotalThisIter,
+          displacedThisIteration,
         });
 
         sessionInflationState.set(sessionId, {
@@ -3582,6 +3616,45 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           ? Math.round(statUpdates.reduce((s, u) => s + u.cortisol, 0) / statUpdates.length)
           : 0;
 
+        // ── Phase 12 D-20: labor-market telemetry ──────────────────────────
+        // Bank agents excluded from labor-market telemetry per isEmployableAgent predicate.
+        const employableAgents = aliveAgents.filter(a => isEmployableAgent(a));
+        const employableTotal = employableAgents.length;
+        const employedCount = employableAgents.filter(a => employmentRegistry.has(a.id)).length;
+        const laborUnemploymentRate = employableTotal > 0
+          ? (employableTotal - employedCount) / employableTotal
+          : undefined;
+
+        let laborAvgPostedWage: number | undefined;
+        {
+          let num = 0, den = 0;
+          for (const ent of enterpriseRegistry.values()) {
+            if (ent.employees.size > 0) {
+              num += ent.wage * ent.employees.size;
+              den += ent.employees.size;
+            }
+          }
+          laborAvgPostedWage = den > 0 ? Math.round((num / den) * 100) / 100 : undefined;
+        }
+
+        let laborVacanciesTotal = 0;
+        for (const ent of enterpriseRegistry.values()) {
+          laborVacanciesTotal += Math.max(0, (ent.capacity ?? 0) - ent.employees.size);
+        }
+
+        // Reservation wage quartiles over employable population
+        const rwMap12 = sessionReservationWages.get(sessionId) ?? new Map<string, number>();
+        const rwFloor = Math.max((iterEconomyConfig.minimumWage ?? 5) * 0.5, 1);
+        const rwValues = employableAgents
+          .map(a => rwMap12.get(a.id) ?? rwFloor)
+          .sort((a, b) => a - b);
+        const laborQ = (p: number) => rwValues.length > 0
+          ? rwValues[Math.min(rwValues.length - 1, Math.floor(p * rwValues.length))]
+          : undefined;
+        const laborRwP25 = laborQ(0.25);
+        const laborRwP50 = laborQ(0.50);
+        const laborRwP75 = laborQ(0.75);
+
         iterTelemetry = {
           iterationNumber: iterNum,
           totalFiatSupply: totalFiatSupply,  // Unrounded for SFC accuracy
@@ -3626,6 +3699,15 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           } : {}),
           // Bond yields telemetry (absent when capitalMarketsEnabled is false or no bonds issued)
           ...(phaseOut.telemetryBondYields ? { bondYields: phaseOut.telemetryBondYields } : {}),
+          // Phase 12 D-20: labor-market telemetry fields (L-11)
+          avgPostedWage: laborAvgPostedWage,
+          unemploymentRate: laborUnemploymentRate,
+          reservationWageP25: laborRwP25,
+          reservationWageP50: laborRwP50,
+          reservationWageP75: laborRwP75,
+          vacanciesTotal: laborVacanciesTotal,
+          applicantsTotal: applicantsTotalThisIter,
+          displacedThisIteration,
         };
         // Phase 11 D-20/D-21: per-iteration SFC drift telemetry. Top-level sfcDrift
         // is the total system-fiat delta vs the previous iteration; sfcDriftBySubsystem

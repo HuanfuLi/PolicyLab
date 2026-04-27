@@ -967,6 +967,15 @@ export interface MacroSnapshot {
   totalLoansOutstanding: number;
   treasuryBalance: number;
   timestamp: string;
+  // Phase 12 D-20: labor-market telemetry (nullable — existing rows not backfilled)
+  avgPostedWage?: number | null;
+  unemploymentRate?: number | null;
+  reservationWageP25?: number | null;
+  reservationWageP50?: number | null;
+  reservationWageP75?: number | null;
+  vacanciesTotal?: number | null;
+  applicantsTotal?: number | null;
+  displacedThisIteration?: number | null;
 }
 
 export interface InflationState {

@@ -238,6 +238,15 @@ export const macroSnapshots = sqliteTable('macro_snapshots', {
   totalLoansOutstanding: real('total_loans_outstanding').notNull(),
   treasuryBalance: real('treasury_balance').notNull(),
   timestamp: text('timestamp').notNull(),
+  // Phase 12 D-20: labor-market telemetry columns (nullable — existing rows not backfilled)
+  avgPostedWage: real('avg_posted_wage'),
+  unemploymentRate: real('unemployment_rate'),
+  reservationWageP25: real('reservation_wage_p25'),
+  reservationWageP50: real('reservation_wage_p50'),
+  reservationWageP75: real('reservation_wage_p75'),
+  vacanciesTotal: integer('vacancies_total'),
+  applicantsTotal: integer('applicants_total'),
+  displacedThisIteration: integer('displaced_this_iteration'),
 });
 
 // ── v1.0 Capital Markets Tables (Phase 2) ────────────────────────────────────

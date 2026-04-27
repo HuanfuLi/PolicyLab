@@ -22,6 +22,15 @@ function rowToMacroSnapshot(row: MacroSnapshotRow): MacroSnapshot {
     totalLoansOutstanding: row.totalLoansOutstanding,
     treasuryBalance: row.treasuryBalance,
     timestamp: row.timestamp,
+    // Phase 12 D-20: labor-market telemetry (nullable)
+    avgPostedWage: (row as any).avgPostedWage ?? null,
+    unemploymentRate: (row as any).unemploymentRate ?? null,
+    reservationWageP25: (row as any).reservationWageP25 ?? null,
+    reservationWageP50: (row as any).reservationWageP50 ?? null,
+    reservationWageP75: (row as any).reservationWageP75 ?? null,
+    vacanciesTotal: (row as any).vacanciesTotal ?? null,
+    applicantsTotal: (row as any).applicantsTotal ?? null,
+    displacedThisIteration: (row as any).displacedThisIteration ?? null,
   };
 }
 
@@ -41,7 +50,16 @@ export function insertMacroSnapshot(
     totalLoansOutstanding: snapshot.totalLoansOutstanding,
     treasuryBalance: snapshot.treasuryBalance,
     timestamp: new Date().toISOString(),
-  }).run();
+    // Phase 12 D-20: labor-market telemetry (nullable — optional on caller)
+    ...(snapshot.avgPostedWage !== undefined ? { avgPostedWage: snapshot.avgPostedWage } : {}),
+    ...(snapshot.unemploymentRate !== undefined ? { unemploymentRate: snapshot.unemploymentRate } : {}),
+    ...(snapshot.reservationWageP25 !== undefined ? { reservationWageP25: snapshot.reservationWageP25 } : {}),
+    ...(snapshot.reservationWageP50 !== undefined ? { reservationWageP50: snapshot.reservationWageP50 } : {}),
+    ...(snapshot.reservationWageP75 !== undefined ? { reservationWageP75: snapshot.reservationWageP75 } : {}),
+    ...(snapshot.vacanciesTotal !== undefined ? { vacanciesTotal: snapshot.vacanciesTotal } : {}),
+    ...(snapshot.applicantsTotal !== undefined ? { applicantsTotal: snapshot.applicantsTotal } : {}),
+    ...(snapshot.displacedThisIteration !== undefined ? { displacedThisIteration: snapshot.displacedThisIteration } : {}),
+  } as MacroSnapshotInsert).run();
 }
 
 export function getLatestSnapshot(db: DbLike, sessionId: SessionScope): MacroSnapshot | null {
