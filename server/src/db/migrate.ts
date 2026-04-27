@@ -399,5 +399,20 @@ export function runMigrations() {
     CREATE INDEX IF NOT EXISTS idx_enterprises_session ON enterprises(session_id);
   `);
 
+  // Phase 12: Labor market enterprise columns (idempotent PRAGMA guard)
+  {
+    const entCols = sqlite.prepare("PRAGMA table_info(enterprises)").all() as Array<{ name: string }>;
+    const entColNames = new Set(entCols.map(c => c.name));
+    if (!entColNames.has('capacity')) {
+      sqlite.exec("ALTER TABLE enterprises ADD COLUMN capacity INTEGER NOT NULL DEFAULT 20");
+    }
+    if (!entColNames.has('last_applicants')) {
+      sqlite.exec("ALTER TABLE enterprises ADD COLUMN last_applicants INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!entColNames.has('last_vacancies')) {
+      sqlite.exec("ALTER TABLE enterprises ADD COLUMN last_vacancies INTEGER NOT NULL DEFAULT 0");
+    }
+  }
+
   console.log('Database migrations applied.');
 }

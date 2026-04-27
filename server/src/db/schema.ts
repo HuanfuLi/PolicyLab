@@ -300,6 +300,12 @@ export const enterprises = sqliteTable('enterprises', {
   isBankrupt: integer('is_bankrupt', { mode: 'boolean' }).notNull().default(false),
   /** JSON array of agent IDs (UUIDs) for employees assigned to this enterprise. */
   employees: text('employees').notNull().default('[]'),
+  /** Max workforce (employees + open vacancies). Phase 12 D-04. Default 20 for legacy rows. */
+  capacity: integer('capacity').notNull().default(20),
+  /** Applicant count measured at end of previous iteration's matching pass. Phase 12 D-03. */
+  lastApplicants: integer('last_applicants').notNull().default(0),
+  /** Open vacancies measured at end of previous iteration's matching pass. Phase 12 D-03. */
+  lastVacancies: integer('last_vacancies').notNull().default(0),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
 });
 
