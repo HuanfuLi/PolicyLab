@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: "**Status:** REMOVED — descoped from the v1.0 milestone on 2026-04-26. Live multi-scenario comparison"
 status: Executing Phase 12
-stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-04-27T00:27:24.151Z"
+stopped_at: Completed 12-04-PLAN.md
+last_updated: "2026-04-27T00:28:03.906Z"
 progress:
   total_phases: 13
   completed_phases: 8
   total_plans: 74
-  completed_plans: 66
+  completed_plans: 67
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 12 (labor-market-realism) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 
 ## Performance Metrics
 
@@ -104,6 +104,7 @@ Plan: 3 of 7
 | Phase 11 PGC5 | 15 | 3 tasks | 3 files |
 | Phase 12 P01 | 5 min | 4 tasks | 11 files |
 | Phase 12-labor-market-realism P02 | 4 minutes | 3 tasks | 4 files |
+| Phase 12 P04 | 5 min | 3 tasks | 6 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -271,6 +272,9 @@ Recent decisions affecting current work:
 - [Phase 12-labor-market-realism]: isEmployableAgent accepts minimal {type?, role?} interface — works with AgentBlueprint and Agent shapes without coupling to one type
 - [Phase 12-labor-market-realism]: generateEnterprises uses parallel employableSectorGroups for capacity math while preserving sectorGroups over all agents for owner/employee assignment — backward compatible
 - [Phase 12-labor-market-realism]: D-05 auto-inflation loop is defensive infrastructure (10-attempt cap); normal WB inputs always satisfy the invariant via the capacity formula math
+- [Phase 12]: processWageAdjustment is a pure function returning WageAdjustmentResult — only mutates ent.wage, no fiat movement, no DB writes
+- [Phase 12]: Linear nudge chosen over sigmoid (12-CONTEXT.md discretion); NUDGE_RATIO_CLAMP=0.5 prevents pathological per-iteration swings
+- [Phase 12]: sessionPreviousEnterpriseLedgers snapshot written before telemetry block so next-iteration profit-share gets accurate P&L
 
 ### Roadmap Evolution
 
@@ -295,6 +299,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-27T00:27:24.147Z
-Stopped at: Completed 12-02-PLAN.md
+Last session: 2026-04-27T00:28:03.903Z
+Stopped at: Completed 12-04-PLAN.md
 Resume file: None
