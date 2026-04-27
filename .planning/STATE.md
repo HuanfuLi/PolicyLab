@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: "**Status:** REMOVED — descoped from the v1.0 milestone on 2026-04-26. Live multi-scenario comparison"
 status: Executing Phase 12
-stopped_at: Completed 12-06-PLAN.md
-last_updated: "2026-04-27T00:53:17.758Z"
+stopped_at: Completed 12-07-PLAN.md
+last_updated: "2026-04-27T01:10:50.124Z"
 progress:
   total_phases: 13
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 74
-  completed_plans: 70
+  completed_plans: 71
 ---
 
 # Project State
@@ -108,6 +108,7 @@ Plan: 7 of 7
 | Phase 12 P03 | 4 min | 3 tasks | 3 files |
 | Phase 12 P05 | 4 min | 3 tasks | 5 files |
 | Phase 12 P06 | 7 min | 3 tasks | 6 files |
+| Phase Phase 12 P07 P12-07 | 13 min | 5 tasks | 11 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -284,6 +285,8 @@ Recent decisions affecting current work:
 - [Phase 12]: runApplyForJobMatching extracted to helpers/matchingPass.ts for unit testability per structuralPressures.ts pattern
 - [Phase 12]: createAMMForSession gains optional calibrationFactor param (last param, default 1.0) — scales only foodReserve, fiatReserve unchanged, SFC preserved; DEFAULT_ECONOMY_CONFIG.ammSubsistenceCalibrationFactor stays 1.0 (policy knob, not forced default)
 - [Phase 12]: D-18 PRODUCE_AND_SELL description rewritten from 'about 20 units / pocket the profits' to '~4 units food / enough for survival / Use when can't find paid work' — removes entrepreneurship framing, fixes misleading quantity (real yield=4 not 20)
+- [Phase Phase 12]: D-17 wage interpolation passes employer's enterpriseId (not name) in WORK_AT_ENTERPRISE override — available via PersonalStatusBoard.enterprise_id without extra lookup
+- [Phase Phase 12]: insertMacroSnapshot uses inline IIFE lambdas for labor metrics to avoid ordering dependency with telemetry block
 
 ### Roadmap Evolution
 
@@ -308,6 +311,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-27T00:53:17.755Z
-Stopped at: Completed 12-06-PLAN.md
+Last session: 2026-04-27T01:10:50.122Z
+Stopped at: Completed 12-07-PLAN.md
 Resume file: None
