@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: "**Status:** REMOVED — descoped from the v1.0 milestone on 2026-04-26. Live multi-scenario comparison"
 status: Executing Phase 12
-stopped_at: Completed 12-05-PLAN.md
-last_updated: "2026-04-27T00:43:11.559Z"
+stopped_at: Completed 12-06-PLAN.md
+last_updated: "2026-04-27T00:53:17.758Z"
 progress:
   total_phases: 13
   completed_phases: 8
   total_plans: 74
-  completed_plans: 69
+  completed_plans: 70
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 12 (labor-market-realism) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 
 ## Performance Metrics
 
@@ -107,6 +107,7 @@ Plan: 6 of 7
 | Phase 12 P04 | 5 min | 3 tasks | 6 files |
 | Phase 12 P03 | 4 min | 3 tasks | 3 files |
 | Phase 12 P05 | 4 min | 3 tasks | 5 files |
+| Phase 12 P06 | 7 min | 3 tasks | 6 files |
 
 ## Post-Milestone Work (2026-04-05)
 
@@ -281,6 +282,8 @@ Recent decisions affecting current work:
 - [Phase 12]: validateEnterpriseRosterResponse exported from creativeEnterpriseGeneration.ts for direct test access and future reuse
 - [Phase 12]: Reservation wage uses actual PAS wealthDelta (not point-estimate) — simpler, deterministic, same semantic
 - [Phase 12]: runApplyForJobMatching extracted to helpers/matchingPass.ts for unit testability per structuralPressures.ts pattern
+- [Phase 12]: createAMMForSession gains optional calibrationFactor param (last param, default 1.0) — scales only foodReserve, fiatReserve unchanged, SFC preserved; DEFAULT_ECONOMY_CONFIG.ammSubsistenceCalibrationFactor stays 1.0 (policy knob, not forced default)
+- [Phase 12]: D-18 PRODUCE_AND_SELL description rewritten from 'about 20 units / pocket the profits' to '~4 units food / enough for survival / Use when can't find paid work' — removes entrepreneurship framing, fixes misleading quantity (real yield=4 not 20)
 
 ### Roadmap Evolution
 
@@ -305,6 +308,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-27T00:43:11.556Z
-Stopped at: Completed 12-05-PLAN.md
+Last session: 2026-04-27T00:53:17.755Z
+Stopped at: Completed 12-06-PLAN.md
 Resume file: None

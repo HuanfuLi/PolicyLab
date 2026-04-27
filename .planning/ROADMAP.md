@@ -137,7 +137,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 9. Redesign Prompts for All | 5/5 | Complete | 2026-04-07 |
 | 10. Fix Simulation Realism | 14/14 | Complete | 2026-04-08 |
 | 11. Simulation Realism — Stress + Fiscal + SFC | 15/15 | Complete | 2026-04-13 |
-| 12. Labor Market Realism | 5/7 | In Progress|  |
+| 12. Labor Market Realism | 6/7 | In Progress|  |
 | 13. Central Bank Rate Telemetry Close-out | 0/1 | Planned (gap closure) | — |
 | 14. v1.0 Housekeeping | 0/1 | Planned (gap closure) | — |
 
@@ -268,7 +268,7 @@ Plans:
 
 **SFC invariant:** No monetary injection. All wage flows are transfers inside the perimeter (enterprise treasury ↔ worker wealth). Reservation-wage computation is read-only. Enterprise insolvency (Phase 10) handles enterprises that cannot pay.
 
-**Plans:** 5/7 plans executed
+**Plans:** 6/7 plans executed
 
 Plans:
 - [x] 12-01-PLAN.md — Wave 0: types, DB schema, EconomyConfig + TelemetryLog + EnterpriseRecord extensions, 4 test scaffolds, session Maps
@@ -276,7 +276,7 @@ Plans:
 - [x] 12-03-PLAN.md — Wave 1: creative-mode Central Agent enterprise generation with retryWithHealing validator (N=3, same invariant)
 - [x] 12-04-PLAN.md — Wave 1: wage-adjustment engine (linear nudge + profit-share + MRP ceiling + min floor) wired at per-iteration preamble
 - [x] 12-05-PLAN.md — Wave 2: reservation wage populator + APPLY_FOR_JOB matching pass at line ~1296 + QUIT_JOB auto-reapply
-- [ ] 12-06-PLAN.md — Wave 2: PRODUCE_AND_SELL recalibration (ammSubsistenceCalibrationFactor + D-18 subsistence prompt copy)
+- [x] 12-06-PLAN.md — Wave 2: PRODUCE_AND_SELL recalibration (ammSubsistenceCalibrationFactor + D-18 subsistence prompt copy)
 - [ ] 12-07-PLAN.md — Wave 3: D-17 wage interpolation + D-19 employment board + D-20/21 telemetry & dashboard + D-16 displacement + 20-iter live smoke
 
 ### Phase 13: Central Bank Rate Telemetry Close-out
