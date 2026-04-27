@@ -77,6 +77,16 @@ export async function fetchLocationData(
   ];
   const demoResults = await fetchIndicatorBatch(countryCode, demographicCodes);
 
+  // If demographics failed entirely (all indicators timed out / returned null), throw
+  // to trigger the bootstrap.ts createFallbackProfile + LLM-estimate path instead of
+  // continuing with a profile full of undefined fields.
+  if (demoResults.length === 0) {
+    throw new Error(
+      `World Bank API returned no demographic data for ${countryCode} ` +
+      `(all ${demographicCodes.length} indicators failed). Likely upstream outage or rate limit.`,
+    );
+  }
+
   // Step 2: Economics + Banking rates
   progress?.onStep('economics', 2, TOTAL_STEPS);
   const econCodes = [

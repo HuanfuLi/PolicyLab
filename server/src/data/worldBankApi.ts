@@ -32,26 +32,39 @@ function assessConfidence(dataYear: number): ConfidenceLevel {
   return 'low';
 }
 
+/** Per-request timeout for World Bank API calls (8s). Without this, a slow or
+ * unreachable WB API hangs the bootstrap UI on "Fetching demographics" forever
+ * because there is no error path for upstream timeouts. On abort the catch
+ * below returns null and the caller falls through to LLM-estimate path. */
+const FETCH_TIMEOUT_MS = 8000;
+
 /**
  * Fetch a single indicator value for a country (most recent value).
  *
  * @param countryCode - ISO 2-letter country code (e.g., 'US', 'BR')
  * @param indicatorCode - World Bank indicator code (e.g., 'SP.POP.TOTL')
  * @param dateRange - Optional date range (e.g., '2020:2024'). Uses mrv=1 by default.
- * @returns IndicatorResult or null if no data available
+ * @returns IndicatorResult or null if no data available, request times out, or upstream fails
  */
 export async function fetchIndicator(
   countryCode: string,
   indicatorCode: string,
   dateRange?: string,
 ): Promise<IndicatorResult | null> {
-  try {
-    let url = `${BASE_URL}/country/${countryCode}/indicator/${indicatorCode}?format=json&per_page=10&mrv=1`;
-    if (dateRange) {
-      url += `&date=${dateRange}`;
-    }
+  let url = `${BASE_URL}/country/${countryCode}/indicator/${indicatorCode}?format=json&per_page=10&mrv=1`;
+  if (dateRange) {
+    url += `&date=${dateRange}`;
+  }
 
-    const res = await fetch(url);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      console.warn(`[worldBankApi] HTTP ${res.status} for ${indicatorCode} (${countryCode})`);
+      return null;
+    }
     const json = await res.json();
 
     // World Bank API v2 returns [metadata, data[]] tuple
@@ -68,8 +81,14 @@ export async function fetchIndicator(
       confidence: assessConfidence(parseInt(entry.date, 10)),
     };
   } catch (err) {
-    console.warn(`[worldBankApi] Failed to fetch ${indicatorCode} for ${countryCode}:`, err);
+    const isAbort = err instanceof Error && err.name === 'AbortError';
+    console.warn(
+      `[worldBankApi] ${isAbort ? `Timeout (${FETCH_TIMEOUT_MS}ms)` : 'Failed'} for ${indicatorCode} (${countryCode}):`,
+      isAbort ? '' : err,
+    );
     return null;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
