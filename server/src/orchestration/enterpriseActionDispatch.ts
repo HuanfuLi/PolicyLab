@@ -65,6 +65,15 @@ export function applyEnterpriseAction(params: {
         return 'industry'; // default: manufacturing
       };
       if (!enterpriseRegistry.has(enterpriseId)) {
+        // Phase 12 fix: a new enterprise founded mid-simulation must enter the labor
+        // market at a competitive wage, not at 0. Initial wage=0 caused processWageAdjustment
+        // (which floors at minimumWage=5) to pin every new enterprise at the floor, dragging
+        // avgPostedWage and the entire labor market down. Anchor instead to the market median
+        // of existing enterprises (1 standard deviation below sub-MRP entrants is fine; 0 is not).
+        const existingWages = [...enterpriseRegistry.values()].map(e => e.wage).filter(w => w > 0);
+        const initialWage = existingWages.length > 0
+          ? existingWages.reduce((s, w) => s + w, 0) / existingWages.length
+          : 25; // bootstrap-equivalent default when no other enterprises exist
         enterpriseRegistry.set(enterpriseId, {
           id: enterpriseId,
           ownerId: agent.id,
@@ -73,7 +82,7 @@ export function applyEnterpriseAction(params: {
           sector: sectorFromIndustry(industry),
           employees: new Set(),
           applicants: new Set(),
-          wage: 0,
+          wage: initialWage,
           minSkill: 0,
           capacity: 20, // Phase 12 default — downstream plan 12-02 populates
           lastApplicants: 0, // Phase 12 D-03 — populated by matching pass
