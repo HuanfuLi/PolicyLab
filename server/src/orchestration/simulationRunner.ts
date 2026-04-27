@@ -65,11 +65,14 @@ import * as bankingRepo from '../db/repos/bankingRepo.js';
 import * as enterpriseRepo from '../db/repos/enterpriseRepo.js';
 import * as orderBookRepo from '../db/repos/orderBookRepo.js';
 // Enterprise engine (Phase 10) — production, idle fallback, cost pass-through
+// Phase 12 D-01: wage adjustment (pure function — no fiat movement)
 import {
   processEnterpriseProduction,
   processIdleFallback,
   processEnterpriseCostPassThrough,
+  processWageAdjustment,
   type ProductionInput,
+  type WageAdjustmentInput,
 } from '../mechanics/enterpriseEngine.js';
 import { getEconomyConfig } from '../mechanics/economyConfigUtils.js';
 // Capital Markets imports (Phase 2: Capital Markets)
@@ -86,7 +89,7 @@ import * as macroSnapshotRepo from '../db/repos/macroSnapshotRepo.js';
 import { getOrderBook, restoreOrderBook, isOrderBookWarm } from '../mechanics/orderBook.js';
 import { economyRepo, type AgentEconomyState } from '../db/repos/economyRepo.js';
 import { createScope, type SessionScope } from '../db/sessionScope.js';
-import type { Agent, Inventory, ItemType, SkillMatrix, TelemetryLog } from '@policylab/shared';
+import type { Agent, Inventory, ItemType, SkillMatrix, TelemetryLog, EnterpriseCommodity } from '@policylab/shared';
 import { DEFAULT_ECONOMY_CONFIG } from '@policylab/shared';
 import { processSkills } from '../mechanics/skillSystem.js';
 // Phase 3 Cognitive Engine imports
@@ -153,6 +156,7 @@ import {
   getEmploymentRegistry,
   getAgentIdleCounter,
   sessionPreviousWageCosts,
+  sessionPreviousEnterpriseLedgers,
   appendTrace,
 } from './simulationState.js';
 
@@ -674,6 +678,41 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         { model: settings.citizenAgentModel },
         settings.maxConcurrency,
       );
+      // ── Phase 12 D-01: Wage adjustment (linear nudge + profit-share + MRP cap) ──
+      // Must run BEFORE buildEmploymentBoardEntries so agents see updated posted wages.
+      // Pure property update — no fiat movement (SFC invariant preserved).
+      {
+        const wageAdjConfig = getEconomyConfig(session.config as Record<string, unknown> | null);
+
+        // Build AMM spot price lookup for MRP ceiling (Step 4 of D-01)
+        const ammSpotPrices = new Map<EnterpriseCommodity, number>();
+        const singleAmm = sessionAMMRegistry.get(sessionId);
+        if (singleAmm && singleAmm.currentFoodReserve > 0) {
+          ammSpotPrices.set('food', singleAmm.currentFiatReserve / singleAmm.currentFoodReserve);
+        }
+        const multiAmm = sessionMultiAMMRegistry.get(sessionId);
+        if (multiAmm) {
+          for (const [item, pool] of multiAmm) {
+            // MultiAMM pools use currentFoodReserve as the goods reserve (AMM abstraction)
+            if (pool && pool.currentFoodReserve > 0) {
+              ammSpotPrices.set(item as EnterpriseCommodity, pool.currentFiatReserve / pool.currentFoodReserve);
+            }
+          }
+        }
+
+        const prevLedgers = sessionPreviousEnterpriseLedgers.get(sessionId) ?? new Map<string, EnterpriseLedger>();
+        const wageAdjInput: WageAdjustmentInput = {
+          enterprises: [...enterpriseRegistry.values()],
+          config: wageAdjConfig,
+          ammSpotPrices,
+          previousLedgers: prevLedgers,
+        };
+        const wageResult = processWageAdjustment(wageAdjInput);
+        for (const line of wageResult.trace) {
+          appendTrace(sessionId, `[WAGE] ${line}`);
+        }
+      }
+
       const employmentBoard = buildEmploymentBoardEntries(sessionId);
 
       // C1: Build MarketIntelligence block once per iteration (all agents see same market)
@@ -3407,6 +3446,11 @@ export async function runSimulation(sessionId: string, totalIterations: number):
           }
         }
       }
+
+      // ── Phase 12 D-01: Snapshot per-enterprise ledger for next iteration's profit-share ──
+      // Must persist BEFORE telemetry is built so next-iteration processWageAdjustment
+      // receives accurate last-period revenue/wage/worker data. SFC invariant: read-only copy.
+      sessionPreviousEnterpriseLedgers.set(sessionId, new Map(enterpriseLedgerMap));
 
       // ── Telemetry: push per-iteration physics snapshot ────────────────────
       // Declared outside the block so it can be embedded in the statistics JSON below.
