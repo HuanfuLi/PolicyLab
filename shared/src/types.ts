@@ -330,6 +330,24 @@ export interface TelemetryLog {
     capmkt: number;
     fiscal: number;
   };
+
+  // ── Phase 12: Labor market telemetry (D-20, L-11) ────────────────────────
+  /** Workforce-weighted average posted wage across surviving enterprises. */
+  avgPostedWage?: number;
+  /** Fraction of employable agents without an employer at end of iteration. */
+  unemploymentRate?: number;
+  /** 50th percentile reservation wage across employable agents this iteration. */
+  reservationWageP50?: number;
+  /** 25th percentile reservation wage. */
+  reservationWageP25?: number;
+  /** 75th percentile reservation wage. */
+  reservationWageP75?: number;
+  /** Sum of open vacancies across surviving enterprises at end of iteration. */
+  vacanciesTotal?: number;
+  /** Sum of applicants this iteration (APPLY_FOR_JOB + quit-last auto-reapply). */
+  applicantsTotal?: number;
+  /** Employees released by enterprise bankruptcy this iteration. */
+  displacedThisIteration?: number;
 }
 
 /** Full-fidelity export envelope */
@@ -769,6 +787,16 @@ export interface EconomyConfig {
    * @see Phase 11 D-10, D-11
    */
   publicGoodsEscrow?: PublicGoodsEscrow;
+
+  // ── Phase 12: Labor market realism (D-02, D-09) ──────────────────────────
+  /** Hybrid wage-adjustment linear nudge coefficient. Per D-02 default 0.03. */
+  laborWageNudgeK?: number;
+  /** Profit-share top-up coefficient applied when P&L > 0. Per D-02 default 0.15. */
+  laborWageProfitShareAlpha?: number;
+  /** MRP ceiling fallback: per-worker input cost when sector heuristic is unavailable. Per 12-RESEARCH §2 default 2. */
+  defaultPerWorkerInputCost?: number;
+  /** Scales the AMM food pool's initial depth ratio to compress PRODUCE_AND_SELL margin. Per D-09 default 1.0. */
+  ammSubsistenceCalibrationFactor?: number;
 }
 
 export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
@@ -834,6 +862,11 @@ export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
   // publicGoodsEscrow intentionally omitted — it materializes when the fiscal tick runs.
   taxPolicy: { kind: 'flat', rates: { income: 0.15, vat: 0.10, capitalGains: 0.15 } },
   governanceEnabled: true,
+  // Phase 12: Labor market realism defaults (D-02, D-09)
+  laborWageNudgeK: 0.03,
+  laborWageProfitShareAlpha: 0.15,
+  defaultPerWorkerInputCost: 2,
+  ammSubsistenceCalibrationFactor: 1.0,
 };
 
 // ── Phase 10: Enterprise types ──────────────────────────────────────────────
@@ -853,6 +886,8 @@ export interface EnterpriseBlueprint {
   employees: string[];
   wage: number;
   isServiceEnterprise: boolean;
+  /** Max workforce (employees + open vacancies). Phase 12 D-04. */
+  capacity?: number;
 }
 
 export type LoanProductType = 'personal' | 'business';
