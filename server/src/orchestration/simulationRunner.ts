@@ -157,6 +157,8 @@ import {
   getAgentIdleCounter,
   sessionPreviousWageCosts,
   sessionPreviousEnterpriseLedgers,
+  sessionReservationWages,
+  sessionQuitLastIteration,
   appendTrace,
 } from './simulationState.js';
 
@@ -1444,6 +1446,17 @@ export async function runSimulation(sessionId: string, totalIterations: number):
             enterpriseLedger: enterpriseLedgerMap,
           });
 
+          // ── Phase 12 D-12: populate reservation wage at PRODUCE_AND_SELL resolution ──
+          // Point-estimate: netProceeds = economyDelta.wealthDelta from this PAS action.
+          // This is the actual fiat received (or 0 if AMM saturated and food went to inventory).
+          // Read-only w.r.t. agent state — only writes to sessionReservationWages.
+          if (action.actionCode === 'PRODUCE_AND_SELL') {
+            const pasNetProceeds = economyDelta.wealthDelta;
+            let rwMap = sessionReservationWages.get(sessionId);
+            if (!rwMap) { rwMap = new Map(); sessionReservationWages.set(sessionId, rwMap); }
+            rwMap.set(agent.id, pasNetProceeds);
+          }
+
           // SFC fix: For STEAL actions, patch the target's wealth in the allAgents
           // snapshot to reflect accumulated deltas, preventing stealCalc from using
           // stale start-of-iteration wealth and over-calculating the stolen amount.
@@ -2480,6 +2493,16 @@ export async function runSimulation(sessionId: string, totalIterations: number):
         };
         actionRows.push(actionRow);
         actionRowByAgentId.set(agent.id, actionRow);
+      }
+
+      // ── Phase 12 D-12: stale reservation-wage cleanup on agent death ──────
+      // Prevents dead agents' last-period PAS proceeds from persisting in the Map
+      // and accidentally becoming a reservation wage for a future revived agent with the same ID.
+      {
+        const rwMap = sessionReservationWages.get(sessionId);
+        if (rwMap) {
+          for (const d of deaths) rwMap.delete(d.id);
+        }
       }
 
       // ── Phase Sheriff C: redistribute seized wealth (SFC-safe) ────────────
