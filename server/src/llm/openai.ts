@@ -85,8 +85,20 @@ export class OpenAIProvider implements LLMProvider {
   }
 }
 
-/** Connection error patterns that warrant a client re-creation. */
-const CONN_ERROR_RE = /channel error|econnreset|econnrefused|socket hang up|network error|fetch failed|connection reset|etimedout|epipe/i;
+/** Connection error patterns that warrant a client re-creation.
+ *  "request timed out" matches the OpenAI SDK's APIConnectionTimeoutError thrown
+ *  when LOCAL_CHAT_TIMEOUT_MS elapses against a hung local provider. */
+const CONN_ERROR_RE = /channel error|econnreset|econnrefused|socket hang up|network error|fetch failed|connection reset|etimedout|epipe|request timed out|connection timeout/i;
+
+/**
+ * Per-request timeout for local LLM calls. Without this, the OpenAI SDK uses
+ * its 10-minute default — if LM Studio / Ollama dies mid-request the simulation
+ * runner is wedged for 10 minutes per attempt with no way to interrupt
+ * (provider.chat does not yet honor an AbortSignal). 180 s is generous enough
+ * for slow local models on long prompts but cuts off true hangs quickly enough
+ * that the SimulationPausedError → handlePause path can fire.
+ */
+const LOCAL_CHAT_TIMEOUT_MS = 180_000;
 
 /**
  * For local LM Studio, Ollama, and generic OpenAI-compatible APIs.
@@ -106,13 +118,13 @@ export class OpenAICompatibleProvider implements LLMProvider {
   constructor(baseURL: string, apiKey: string = 'not-needed', defaultModel: string = 'local-model') {
     this.baseURL = baseURL;
     this.apiKey = apiKey;
-    this.client = new OpenAI({ apiKey, baseURL });
+    this.client = new OpenAI({ apiKey, baseURL, timeout: LOCAL_CHAT_TIMEOUT_MS, maxRetries: 0 });
     this.defaultModel = defaultModel;
   }
 
   /** Create a fresh OpenAI client instance (resets the HTTP connection pool). */
   private resetClient(): void {
-    this.client = new OpenAI({ apiKey: this.apiKey, baseURL: this.baseURL });
+    this.client = new OpenAI({ apiKey: this.apiKey, baseURL: this.baseURL, timeout: LOCAL_CHAT_TIMEOUT_MS, maxRetries: 0 });
   }
 
   async chat(messages: LLMMessage[], options: LLMOptions = {}): Promise<string> {

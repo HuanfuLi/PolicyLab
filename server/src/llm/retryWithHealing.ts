@@ -36,8 +36,10 @@ interface RetryWithHealingOptions<T> {
   shouldAbort?: () => boolean;
 }
 
-/** Patterns that indicate a network/transport failure rather than a bad LLM response. */
-const CONNECTION_ERROR_RE = /channel error|econnreset|econnrefused|socket hang up|network error|fetch failed|connection reset|etimedout|epipe/i;
+/** Patterns that indicate a network/transport failure rather than a bad LLM response.
+ *  "request timed out" catches the OpenAI SDK's APIConnectionTimeoutError when the
+ *  per-request timeout fires (e.g. LM Studio hangs mid-generation). */
+const CONNECTION_ERROR_RE = /channel error|econnreset|econnrefused|socket hang up|network error|fetch failed|connection reset|etimedout|epipe|request timed out|connection timeout/i;
 
 /** Patterns that indicate the LLM response was truncated (hit token limit). */
 const TRUNCATION_RE = /truncated|hit max_tokens|hit max_completion_tokens|hit maxOutputTokens/i;

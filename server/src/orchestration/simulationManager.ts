@@ -107,6 +107,22 @@ class SimulationManager {
     }
   }
 
+  /**
+   * Clear a pending pause request without changing status. Used by the resume
+   * route when the user pauses then immediately resumes — typically because
+   * the runner is stuck inside an in-flight LLM call and never reached a
+   * checkpoint to honor the pause. Without this, resume returns 409 because
+   * status is still 'running', leaving the user with no way to recover.
+   */
+  cancelPendingPause(sessionId: string): boolean {
+    const state = this.sessions.get(sessionId);
+    if (state && state.pauseRequested) {
+      state.pauseRequested = false;
+      return true;
+    }
+    return false;
+  }
+
   abort(sessionId: string): void {
     const state = this.sessions.get(sessionId);
     if (state) {

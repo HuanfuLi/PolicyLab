@@ -146,6 +146,15 @@ router.post('/resume', async (req, res) => {
   const memStatus = simulationManager.getStatus(id);
 
   if (memStatus === 'running') {
+    // Edge case: pause was requested but the runner hasn't reached a checkpoint
+    // (typically blocked inside an in-flight LLM call). The frontend has already
+    // flipped to "paused" optimistically, so the user clicks Resume to continue.
+    // Cancel the pending pause and report success — the simulation just keeps
+    // running. Without this, the user is stuck with a 409 they can't escape
+    // until the hanging LLM call returns.
+    if (simulationManager.cancelPendingPause(id)) {
+      return res.json({ ok: true, cancelledPendingPause: true });
+    }
     return res.status(409).json({ error: 'Simulation is already running' });
   }
 
